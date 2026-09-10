@@ -339,6 +339,9 @@ export const dropEmptyRecords = (items: RecordItem[]): RecordItem[] =>
 // ⚠️ `province` ทำ 2 หน้าที่ในสคีมาของแอป: จังหวัดป้ายทะเบียน **และ** จังหวัดที่อยู่ผู้ขับขี่
 //    (เป็น parent ของ cascade อำเภอ) — สืบทอดมาจากฝั่งแอป ยังไม่ได้แยก
 const OPPONENT_FIELDS: FieldDef[] = [
+  // เจ้าของรถคู่กรณีขึ้นก่อนเป็นช่องแรก + ที่อยู่ต่อท้ายทันที (ลำดับเดียวกับบล็อกคู่กรณีบน EMCS) — user ขอ 10/09/69
+  { k: 'owner_name', label: 'เจ้าของรถคู่กรณี *' },
+  { k: 'owner_address', label: 'ที่อยู่เจ้าของรถ', wide: true },
   { k: 'car_type', label: 'ประเภทรถ *', optionsFrom: (r) => withCurrentOption(OPO_CAR_TYPES, r.car_type) },
   { k: 'plate', label: 'ทะเบียน *' },
   { k: 'province', label: 'จังหวัด *', options: PROVINCE_OPTIONS },
@@ -367,8 +370,6 @@ const OPPONENT_FIELDS: FieldDef[] = [
   { k: 'policy_type', label: 'ประเภทประกัน',
     optionsFrom: (r) => withCurrentOption(POLICY_TYPE_OPTIONS, r.policy_type) },
   { k: 'claim_no', label: 'เลขเคลมคู่กรณี' },
-  { k: 'owner_name', label: 'เจ้าของรถ *' },
-  { k: 'owner_address', label: 'ที่อยู่เจ้าของ', wide: true },
   { k: 'title', label: 'คำนำหน้า', optionsFrom: (r) => withCurrentOption(TITLES, r.title) },
   { k: 'first_name', label: 'ชื่อผู้ขับขี่' },
   { k: 'last_name', label: 'นามสกุล' },
