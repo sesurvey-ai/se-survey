@@ -478,7 +478,7 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('รายละเอียดงาน'),
+        title: const Text('หน้าการ์ด'),
       ),
       body: Consumer<CaseProvider>(
         builder: (context, caseProvider, _) {
@@ -505,7 +505,7 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                     ),
                   )
                 else if (_report != null)
-                  _buildVehicleCard()
+                  _buildVehicleCard(arrived: _arrivalConfirmed || caseModel.isFinished)
                 else if (_detailLoadFailed)
                   // เดิม: โหลดพลาด = จอว่างเงียบ ไม่มีทางรู้/ไม่มีทางลองใหม่
                   Container(
@@ -609,36 +609,7 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                         ),
                       ),
                   ] else ...[
-                    // ยืนยันแล้ว — แสดง preview รูป + ปุ่มเริ่มสำรวจ
-                    Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: Colors.green.shade50,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.green.shade200),
-                      ),
-                      child: Column(
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Row(
-                              children: [
-                                Icon(Icons.check_circle, color: Colors.green.shade600, size: 24),
-                                const SizedBox(width: 8),
-                                const Text('ยืนยันถึงที่เกิดเหตุแล้ว', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.green)),
-                              ],
-                            ),
-                          ),
-                          // โชว์รูป local เฉพาะตอนเพิ่งถ่ายใน session นี้ (server ไม่มีรูปจนกว่าจะส่งงาน)
-                          if (_arrivalPhotoPath != null)
-                            ClipRRect(
-                              borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(12), bottomRight: Radius.circular(12)),
-                              child: Image.file(File(_arrivalPhotoPath!), height: 180, width: double.infinity, fit: BoxFit.cover),
-                            ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
+                    // ยืนยันแล้ว — สถานะขึ้นเป็นแถบเขียวบนหัวการ์ดแล้ว (10/09/69) ตรงนี้เหลือแค่ปุ่มเริ่มสำรวจ
                     _surveyButton(caseModel, 'เริ่มสำรวจ', Icons.assignment),
                   ],
                 ],
@@ -709,7 +680,10 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
   }
 
   // การ์ด "หน้าการ์ด": โชว์รูปใบรับแจ้งเคลมที่ระบบ OCR อ่าน (แทนการแสดงรายละเอียดที่แยกฟิลด์)
-  Widget _buildVehicleCard() {
+  // 10/09/69 (user ขอ): ชื่อหน้าเป็น "หน้าการ์ด" แล้ว จึงตัดแถบน้ำเงินหัวการ์ดที่ซ้ำคำออก
+  //   หัวการ์ดใช้บอกสถานะแทน — ยืนยันถึงที่เกิดเหตุแล้ว = แถบเขียว (กล่องเขียวท้ายหน้าเดิมตัดออก)
+  //   ประเภทเคลมที่เคยเป็นป้ายบนแถบน้ำเงิน ย้ายลงมาเป็นแถวในเลขอ้างอิง
+  Widget _buildVehicleCard({required bool arrived}) {
     final images = (_report?['case_images'] as List?) ?? [];
     final ocrImages = images.where((img) => img['image_type'] == 'ocr').toList();
     return Card(
@@ -717,35 +691,26 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Blue header
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: const BoxDecoration(color: Color(0xFF2F6BD8)),
-            child: Row(
-              children: [
-                const Icon(Icons.credit_card, color: Colors.white, size: 20),
-                const SizedBox(width: 8),
-                const Text(
-                  'หน้าการ์ด',
-                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const Spacer(),
-                if (_val('claim_type') != '-')
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      _claimTypeLabel(_val('claim_type')),
-                      style: const TextStyle(color: Colors.white, fontSize: 12),
-                    ),
+          // แถบสถานะบนหัวการ์ด — ขึ้นเมื่อยืนยันถึงที่เกิดเหตุแล้ว (หรือเสร็จงานแล้ว) เท่านั้น
+          if (arrived)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                border: Border(bottom: BorderSide(color: Colors.green.shade200)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.green.shade600, size: 22),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'ยืนยันถึงที่เกิดเหตุแล้ว',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.green),
                   ),
-              ],
+                ],
+              ),
             ),
-          ),
 
           // เลขอ้างอิงเคลม (callcenter กรอก หรือได้จาก OCR) — แสดงเสมอ แม้งานนั้นไม่มีรูปหน้าการ์ด
           Padding(
@@ -755,6 +720,7 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                 _refRow('เลขรับแจ้ง', _val('claim_ref_no')),
                 _refRow('เลขเคลม', _val('claim_no')),
                 _refRow('เลขเซอร์เวย์', _val('survey_job_no')),
+                if (_val('claim_type') != '-') _refRow('ประเภทเคลม', _claimTypeLabel(_val('claim_type'))),
               ],
             ),
           ),
