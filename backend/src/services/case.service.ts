@@ -1825,6 +1825,24 @@ export const caseService = {
       const fd = g('acc_followup_date'), fh = g('acc_followup_hour'), fm = g('acc_followup_minute');
       if (fd && (fh || fm)) rd.acc_followup_date = `${fd}|${fh}:${fm}`;
     }
+    /**
+     * จังหวะ 6 "ส่งงาน" (cases.submitted_at, TIMESTAMPTZ) — หน้าเคสแก้ได้เหมือนจังหวะอื่น (user ขอ 10/09/69)
+     * ฟอร์มส่ง submitted_date_val (วว/ดด/ปปปป พ.ศ.) + submitted_hour/minute · เก็บเป็นเวลาไทย (+07:00)
+     *   ไม่ส่งช่องนี้มาเลย (มือถือ/หน้าอื่น) = ไม่แตะ · ส่งมาว่าง = ลบทิ้ง · รูปแบบผิด = 400 ไม่เดา
+     * (ค่าเดิมมาจากตอนช่างกดส่งบนแอป หรือ "ส่งรายงานเวลา" ของ ISURVEY — ปีที่พิมพ์เป็น ค.ศ. ก็รับ)
+     */
+    let submittedAt: string | null | undefined;
+    if ('submitted_date_val' in rd) {
+      const sd = g('submitted_date_val').trim();
+      if (!sd) submittedAt = null;
+      else {
+        const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(sd);
+        if (!m) throw new AppError(400, 'วันที่ส่งงานต้องเป็น วว/ดด/ปปปป (พ.ศ.)');
+        const y = Number(m[3]) > 2400 ? Number(m[3]) - 543 : Number(m[3]);
+        submittedAt = `${y}-${pad2(m[2])}-${pad2(m[1])}T${pad2(g('submitted_hour')) || '00'}:${pad2(g('submitted_minute')) || '00'}:00+07:00`;
+        if (!Number.isFinite(Date.parse(submittedAt))) throw new AppError(400, 'วันที่/เวลาส่งงานไม่ถูกต้อง');
+      }
+    }
 
     // === 2. Update survey_reports ===
     const colResult = await db.query(
@@ -1884,6 +1902,11 @@ export const caseService = {
         params.push(reportId);
         await client.query(`UPDATE survey_reports SET ${fields.join(', ')} WHERE id = $${idx}`, params);
         reportUpdated = fields.length - 1;   // ไม่นับ updated_by ที่ระบบเติมให้เอง
+      }
+      // จังหวะ 6 "ส่งงาน" อยู่บนตาราง cases ไม่ใช่ survey_reports — เขียนใน transaction เดียวกัน
+      if (submittedAt !== undefined) {
+        await client.query('UPDATE cases SET submitted_at = $1 WHERE id = $2', [submittedAt, caseId]);
+        reportUpdated += 1;
       }
 
       /**

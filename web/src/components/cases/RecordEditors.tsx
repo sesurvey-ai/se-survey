@@ -92,7 +92,16 @@ type FieldDef = {
   /** กว้างเต็มแถว (ที่อยู่/รายละเอียด) */
   wide?: boolean;
   placeholder?: string;
+  /** บังคับแบบมีเงื่อนไข — คืน true = ช่องนี้บังคับสำหรับระเบียนนี้ (ป้ายได้ดอกจัน กรอบแดงเมื่อว่าง นับเข้าประตูอนุมัติ) */
+  reqWhen?: (rec: LooseRecord) => boolean;
 };
+
+/** เลือกค่าจริงแล้วหรือยัง (ว่าง/ป้าย "-- ระบุ --" = ยังไม่เลือก) */
+const chosen = (v: unknown) => { const t = String(v ?? '').trim(); return t !== '' && !t.startsWith('--'); };
+
+/** ป้ายจริงของช่องสำหรับระเบียนนี้ — ช่องบังคับแบบมีเงื่อนไขได้ " *" ต่อท้ายเมื่อเงื่อนไขเป็นจริง */
+const labelFor = (def: FieldDef, rec: LooseRecord) =>
+  def.reqWhen && def.reqWhen(rec) && !/ \*$/.test(def.label.trim()) ? `${def.label.trim()} *` : def.label;
 
 /**
  * ช่องบังคับที่ยังว่าง = กรอบแดง + พื้นแดง (ชุดเดียวกับฟอร์มหลักในหน้าตรวจงาน)
@@ -356,7 +365,9 @@ const OPPONENT_FIELDS: FieldDef[] = [
   { k: 'car_type', label: 'ประเภทรถ *', optionsFrom: (r) => withCurrentOption(OPO_CAR_TYPES, r.car_type) },
   { k: 'plate', label: 'ทะเบียน *' },
   { k: 'province', label: 'จังหวัด *', options: PROVINCE_OPTIONS },
-  { k: 'car_brand', label: 'ยี่ห้อ', optionsFrom: (r) => carBrandOptions(String(r.car_type ?? ''), String(r.car_brand ?? '')) },
+  // เลือกประเภทรถแล้ว EMCS บังคับยี่ห้อด้วย (ddlCMFG cascade จากประเภทรถ) — user ขอ 10/09/69 · ยังไม่เลือกประเภท = ยังไม่บังคับ
+  { k: 'car_brand', label: 'ยี่ห้อ', optionsFrom: (r) => carBrandOptions(String(r.car_type ?? ''), String(r.car_brand ?? '')),
+    reqWhen: (r) => chosen(r.car_type) },
   { k: 'car_model', label: 'รุ่น' },
   // ค่าที่นำเข้าจาก ISURVEY มักสะกดไม่ตรงลิสต์ (เคส #255 สีรถ "บอน") — เดิม <select> ไม่มี option ตรง value
   // → โชว์ "-- ระบุ --" ทั้งที่มีค่าอยู่ แล้วบอทกรอก EMCS ด้วยค่าจริง (fuzzy → "บรอน") หัวหน้าเลยงงว่า EMCS รู้ได้ไง
@@ -420,6 +431,15 @@ export const OPPONENT_REQUIRED = [
 ];
 
 /**
+ * ช่องบังคับของคู่กรณีคันนี้ที่ยังว่าง — รวมช่องบังคับแบบมีเงื่อนไข (ยี่ห้อ เมื่อเลือกประเภทรถแล้ว)
+ * ⛔ การ์ดคู่กรณีและประตูอนุมัติในหน้าเคสต้องใช้ตัวนี้ตัวเดียวกัน ไม่งั้นการ์ดขึ้น "ยังขาด" แต่แถบบนเขียว
+ */
+export const opponentMissing = (rec: LooseRecord): string[] => [
+  ...OPPONENT_REQUIRED.filter((k) => !String(rec[k] ?? '').trim()),
+  ...OPPONENT_FIELDS.filter((f) => f.reqWhen && f.reqWhen(rec) && !chosen(rec[f.k])).map((f) => f.k),
+];
+
+/**
  * ช่องบังคับของผู้บาดเจ็บ/ทรัพย์สิน — ดึงจากดอกจันท้าย label ของ field def เดียวกับที่วาดฟอร์ม
  * ⛔ ต้อง export ให้หน้าตรวจเคสเอาไปนับเข้าประตูอนุมัติด้วย ไม่งั้นการ์ดขึ้น "ยังขาด N ช่อง"
  *    แต่แถบบนขึ้นเขียว "ครบแล้ว" แล้วอนุมัติผ่าน → บอทไปตายที่หน้าคู่กรณีของ EMCS
@@ -463,7 +483,7 @@ export function OpponentEditor({ items, onChange }: {
   return (
     <div className="space-y-4">
       {items.map((it, i) => {
-        const missing = OPPONENT_REQUIRED.filter((k) => !String(it[k] ?? '').trim());
+        const missing = opponentMissing(it);
         const dmg = Array.isArray(it.damage) ? it.damage.length : 0;
         return (
           <div key={i} className="border border-gray-200 rounded-none overflow-hidden">
@@ -492,7 +512,7 @@ export function OpponentEditor({ items, onChange }: {
               {OPPONENT_FIELDS.filter((f) => f.k !== OPPONENT_COST_FIELD.k).map((f) => (
                 <Field
                   key={f.k}
-                  def={f.optionsFrom ? { ...f, options: f.optionsFrom(it) } : f}
+                  def={{ ...f, options: f.optionsFrom ? f.optionsFrom(it) : f.options, label: labelFor(f, it) }}
                   value={String(it[f.k] ?? '')}
                   onChange={(v) => set(i, f.k, v)}
                 />

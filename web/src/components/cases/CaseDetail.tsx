@@ -10,7 +10,7 @@ import { setFormDirty } from '@/lib/dirtyGuard';
 import { useSocket } from '@/hooks/useSocket';
 import { DamageItem, DamageList, autoDamageDesc } from './DamageEditor';
 import DamageDialog from './DamageDialog';
-import { OPPONENT_REQUIRED, INJURED_REQUIRED, PROPERTY_REQUIRED, cidChecksum } from './RecordEditors';
+import { opponentMissing, INJURED_REQUIRED, PROPERTY_REQUIRED, cidChecksum } from './RecordEditors';
 import { InjuredEditor, PropertyEditor, OpponentEditor, dropEmptyRecords, dropEmptyOpponents, emcsBadChars, RecordItem, LooseRecord } from './RecordEditors';
 import PolicyInfoModal from './PolicyInfoModal';
 
@@ -458,6 +458,7 @@ const TL_LABEL: Record<string, string> = {
   acc_insurance_notify_date_val: 'บ.ประกันแจ้งสำรวจภัย',
   acc_survey_arrive_date_val: 'ถึงที่เกิดเหตุ',
   acc_survey_complete_date_val: 'สำรวจภัยเสร็จ',
+  submitted_date_val: 'ส่งงาน',
 };
 const EMCS_NAME_FIELDS = [
   'acc_reporter', 'acc_surveyor', 'acc_police_name',
@@ -1157,7 +1158,8 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
   const recordGaps = (() => {
     const cnt = (rows: Record<string, unknown>[], keys: string[]) =>
       rows.reduce((n, it) => n + keys.filter((k) => !String(it[k] ?? '').trim()).length, 0);
-    return cnt(opponents as Record<string, unknown>[], OPPONENT_REQUIRED)
+    // คู่กรณีมีช่องบังคับแบบมีเงื่อนไข (เลือกประเภทรถแล้วต้องมียี่ห้อ — EMCS ต้องการ, user ขอ 10/09/69) → ใช้ตัวนับเดียวกับการ์ด
+    return (opponents as Record<string, unknown>[]).reduce((n, it) => n + opponentMissing(it).length, 0)
          + cnt(injured as Record<string, unknown>[], INJURED_REQUIRED)
          + cnt(property as Record<string, unknown>[], PROPERTY_REQUIRED);
   })();
@@ -1188,9 +1190,10 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
    * ชื่อช่องต้องตรงกับที่ `updateReport` ฝั่ง backend ประกอบกลับเป็น "วันที่|ชม:นาที"
    * และตรงกับชื่อที่ตัวตรวจลำดับเวลา (stamp() ใน paint) อ่าน — แก้ที่นี่ต้องแก้ทั้ง 3 ที่
    */
+  // req=false = จังหวะที่ไม่ใช่ช่องบังคับของ EMCS (ไม่วาดดอกจัน → ตัวไล่ช่องว่างไม่นับ)
   const tl = (date: string, hour: string, min: string,
-              v: { date: string; hour: string; minute: string }) =>
-    ({ date, hour, min, label: TL_LABEL[date], v, keys: [date, hour, min] });
+              v: { date: string; hour: string; minute: string }, req = true) =>
+    ({ date, hour, min, label: TL_LABEL[date], v, keys: [date, hour, min], req });
   const accT = String(report?.acc_time ?? '').split(':');
   const TIMELINE = report ? [
     tl('acc_date', 'acc_time_hour', 'acc_time_minute',
@@ -1203,6 +1206,14 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
        parseDatetime(report.acc_survey_arrive_date)),
     tl('acc_survey_complete_date_val', 'acc_survey_complete_hour', 'acc_survey_complete_minute',
        parseDatetime(report.acc_survey_complete_date)),
+    /**
+     * จังหวะ 6 "ส่งงาน" — เวลาที่ช่างกด "ตรวจสอบ & ส่ง" บนแอป (cases.submitted_at, migration 059) หรือ
+     * "ส่งรายงานเวลา" ของงานจาก ISURVEY · เดิมเป็นกล่องเทาอ่านอย่างเดียว user ขอ 10/09/69 ให้เป็นช่องวันที่ + ชม:นาที
+     * แก้ได้เหมือนจังหวะอื่น (งาน XML/งานเก่าที่ขึ้น "-" หัวหน้าเติมเองได้) · ไม่ใช่ช่องบังคับของ EMCS จึงไม่มีดอกจัน
+     * และไม่เข้าตัวตรวจลำดับเวลา · ค่าจาก API เป็น "วว/ดด/ปปปป ชช:นน" (พ.ศ.) → แปลงเป็นรูป "วันที่|เวลา" ให้ parseDatetime
+     */
+    tl('submitted_date_val', 'submitted_hour', 'submitted_minute',
+       parseDatetime(String(caseData?.submitted_at_th ?? '').trim().replace(' ', '|') || null), false),
   ] : [];
 
   /**
@@ -2339,7 +2350,7 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
                           · ยังไม่กรอก = แดงเตือนเหมือนเดิม */}
                       <span className={`mt-[0.0625rem] w-[1.375rem] h-[1.375rem] shrink-0 text-[0.6875rem] font-extrabold flex items-center justify-center text-white ${
                         gap ? 'bg-[var(--md-accent)]' : ''}`} style={gap ? undefined : { background: '#1E3E82' }}>{i + 1}</span>
-                      <span className="text-xs font-semibold text-[var(--md-muted-2)] leading-tight min-w-0">{n.label} <Req of={n.keys.join(',')} /></span>
+                      <span className="text-xs font-semibold text-[var(--md-muted-2)] leading-tight min-w-0">{n.label} {n.req && <Req of={n.keys.join(',')} />}</span>
                       {/* เส้นบางลากต่อจากชื่อจังหวะ — ทำให้ 5 จังหวะอ่านเป็น "เส้นเวลา" ไม่ใช่ 5 กล่องแยกกัน
                           (จังหวะที่ 5 ก็มีเส้น — user เคาะ 03/09/69 ให้เท่ากันทุกจังหวะ) */}
                       <span className="hidden xl:block flex-1 h-0.5 mt-[0.6875rem] bg-[var(--md-line)]" />
@@ -2368,21 +2379,8 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
                   </div>
                 );
               })}
-              {/* ── จังหวะ 6 "ส่งงาน" ── อ่านอย่างเดียว (user เคาะ 10/09/69) — เวลาที่ช่างกด "ตรวจสอบ & ส่ง" บนแอป
-                  ระบบประทับเอง (cases.submitted_at, migration 059) หัวหน้าใช้เทียบกับ "สำรวจภัยเสร็จ" ตอนตัดสินเรท/หักส่งช้า
-                  ไม่มีช่องกรอกจึงไม่มีดอกจัน · งานจาก ISURVEY/XML ที่ไม่ได้ส่งผ่านแอปขึ้น "-"
+              {/* จังหวะ 6 "ส่งงาน" อยู่ใน TIMELINE แล้ว (ช่องกรอกเหมือนจังหวะอื่น — user ขอ 10/09/69) ·
                   ส่วน "ตรวจรายงาน" (เวลาอนุมัติ) user ให้ไปโชว์ในรายการงานตรวจสอบแทน ไม่ใส่ที่นี่ */}
-              <div className="relative min-w-0">
-                <div className="hidden xl:block absolute -left-[0.875rem] top-[0.6875rem] w-[0.875rem] border-t-2 border-[var(--md-line)]" />
-                <div className="flex items-start gap-2 mb-1.5">
-                  <span className="mt-[0.0625rem] w-[1.375rem] h-[1.375rem] shrink-0 text-[0.6875rem] font-extrabold flex items-center justify-center text-white" style={{ background: '#1E3E82' }}>6</span>
-                  <span className="text-xs font-semibold text-[var(--md-muted-2)] leading-tight min-w-0">ส่งงาน</span>
-                  <span className="hidden xl:block flex-1 h-0.5 mt-[0.6875rem] bg-[var(--md-line)]" />
-                </div>
-                <div className="h-9 flex items-center px-2.5 border border-gray-200 bg-gray-50 text-sm text-gray-800 whitespace-nowrap" title="ระบบประทับตอนช่างกด ตรวจสอบ & ส่ง บนแอป (แก้ไม่ได้)">
-                  {caseData?.submitted_at_th || <span className="text-gray-400">-</span>}
-                </div>
-              </div>
             </div>
           </div>
 
