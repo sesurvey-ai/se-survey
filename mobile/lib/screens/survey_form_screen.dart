@@ -4443,13 +4443,8 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
         contentPadding: EdgeInsets.zero,
         dense: true,
         controlAffinity: ListTileControlAffinity.leading,
+        // ไม่มีคำอธิบายใต้ป้าย (user ขอเอาออก 10/09/69) — ช่องที่จางลงบอกอยู่แล้วว่าถูกคัดลอกให้
         title: const Text('สถานที่เดียวกับที่เกิดเหตุ', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
-        subtitle: Text(
-          _survSameAsAcc
-              ? 'คัดลอกจากสถานที่เกิดเหตุให้แล้ว แก้สถานที่เกิดเหตุจะตามไปด้วย'
-              : 'ติ๊กถ้าออกตรวจสอบที่เดียวกับที่เกิดเหตุ ไม่ต้องกรอกซ้ำ',
-          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-        ),
         value: _survSameAsAcc,
         onChanged: (v) => setState(() { _survSameAsAcc = v ?? false; _syncSurveyFromAcc(); }),
       );
