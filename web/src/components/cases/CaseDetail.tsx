@@ -1189,6 +1189,12 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
        parseDatetime(report.acc_survey_complete_date)),
   ] : [];
 
+  /**
+   * สั่งทาสีใหม่จากนอก effect — ตัวเติมเรทแนะนำ (effect ด้านล่าง) เขียนค่าลง DOM ตรง ๆ ไม่มี event
+   * และวิ่ง**หลัง** paint ในรอบ render เดียวกัน → ช่องค่าบริการมีเลขแล้วแต่กรอบแดงยังค้าง (เจอ #267 10/09/69)
+   * ไม่ยิง input event แทน เพราะจะไปติดธง "ยังไม่บันทึก" ทั้งที่คนยังไม่ได้แตะอะไร
+   */
+  const repaintRef = useRef<() => void>(() => {});
   // ทาสีกรอบแดงให้ช่องบังคับที่ยังว่าง + นับจำนวน
   // ทำหลัง render เพราะช่องบังคับกระจายอยู่ ~49 จุด ผูกกับดอกจันที่มีอยู่แล้วดีกว่าไล่แก้ทีละช่อง
   useEffect(() => {
@@ -1439,6 +1445,7 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
      */
     let raf = 0;
     const schedule = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(paint); };
+    repaintRef.current = schedule;
     form.addEventListener('input', schedule);
     form.addEventListener('change', schedule);
     return () => {
@@ -1571,7 +1578,10 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
       }
       lastSuggestRef.current[nm] = typeof v === 'number' ? v : null;
     }
-    if (touched) recalcSums();
+    if (touched) {
+      recalcSums();
+      repaintRef.current();   // กรอบแดงของช่องที่เพิ่งเติมต้องหายทันที (paint วิ่งไปก่อนแล้วในรอบนี้)
+    }
   }, [pay?.suggest, previewing, recalcSums]);
 
   /**
