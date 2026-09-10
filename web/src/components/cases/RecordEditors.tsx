@@ -155,7 +155,7 @@ const cls = (def: FieldDef, value: string, warn: string) =>
  *    "กรุณาระบุเลขที่บัตรประชาชน ของ::คนที่ 1 ให้ถูกต้อง" (เจอจากการทดสอบสด 19/08/69)
  *    แอปมือถือกันไว้ตั้งแต่หน้ากรอกแล้ว เว็บเป็นทางเดียวที่ปล่อยเลขมั่วผ่านไปได้
  */
-const cidChecksum = (raw: string): boolean => {
+export const cidChecksum = (raw: string): boolean => {
   const d = raw.replace(/\D/g, '');
   if (d.length !== 13) return false;
   let sum = 0;

@@ -10,7 +10,7 @@ import { setFormDirty } from '@/lib/dirtyGuard';
 import { useSocket } from '@/hooks/useSocket';
 import { DamageItem, DamageList, autoDamageDesc } from './DamageEditor';
 import DamageDialog from './DamageDialog';
-import { OPPONENT_REQUIRED, INJURED_REQUIRED, PROPERTY_REQUIRED } from './RecordEditors';
+import { OPPONENT_REQUIRED, INJURED_REQUIRED, PROPERTY_REQUIRED, cidChecksum } from './RecordEditors';
 import { InjuredEditor, PropertyEditor, OpponentEditor, dropEmptyRecords, dropEmptyOpponents, emcsBadChars, RecordItem, LooseRecord } from './RecordEditors';
 import PolicyInfoModal from './PolicyInfoModal';
 
@@ -552,6 +552,22 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
   const [survProv, setSurvProv] = useState<string>(report.survey_province || '-- ระบุ --');
   const [survDist, setSurvDist] = useState<string>(report.survey_district || '-- เขต --');
   const [survTumbon, setSurvTumbon] = useState<string>(report.survey_subdistrict || '');
+
+  /**
+   * เลขบัตรผู้ขับขี่รถประกัน — เตือนสดเหมือนช่องคู่กรณี/ผู้บาดเจ็บ (RecordEditors)
+   * ช่อง DRI_CARDID ของ EMCS รับ 13 ตัว: ยาวกว่านั้นตัวนำเข้า XML **ปัดตกทั้งไฟล์ก่อนเปิดฟอร์ม**
+   * (เคส #241 10/09/69: 14 หลัก → "ข้อมูลนำเข้ามีขนาดเกิน") · แอปมือถือคุม 13 ตัวตั้งแต่พิมพ์ (kCidField)
+   * แต่ช่องนี้บนเว็บไม่เคยตรวจ · "-" = รอตรวจสอบ ปล่อยผ่านตามกติกาช่องข้อความบังคับ
+   */
+  const [drvCid, setDrvCid] = useState<string>(report.driver_id_card || '');
+  const [drvCidThai, setDrvCidThai] = useState<boolean>((report.driver_id_type || 'thai') !== 'foreign');
+  const drvCidWarn = (() => {
+    const v = drvCid.trim();
+    if (!v || v === '-') return '';
+    if (v.length > 13) return `ยาว ${v.length} ตัว — ช่อง EMCS รับ 13 ตัว นำเข้าไฟล์ไม่ผ่านทั้งไฟล์ (บัตรไทยมี 13 หลัก)`;
+    if (drvCidThai && !cidChecksum(v)) return 'เลขบัตรไทยไม่ถูกต้อง (ต้อง 13 หลักและผ่านหลักตรวจสอบ) — ตรวจกับบัตรอีกครั้ง';
+    return '';
+  })();
 
   /**
    * ── กล่องเขียนความเห็นแบบเต็มจอ ── (user ขอ 01/09/69)
@@ -2611,14 +2627,17 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
               </F>
               <F label="บัตรประชาชนเลขที่" req={<Req of="driver_id_card" />}>
                 <div className="flex items-center gap-1">
-                  <input type="text" disabled={d} name="driver_id_card" defaultValue={report.driver_id_card || ''} className={`flex-1 min-w-0 border border-gray-300 rounded-none h-9 px-2.5 text-gray-800 ${d ? 'bg-gray-100' : 'bg-white'} text-sm`} />
+                  {/* กรอบแดง + ข้อความใต้ช่องเมื่อยาวเกิน 13 ตัว หรือบัตรไทยไม่ผ่าน checksum (ดู drvCidWarn) */}
+                  <input type="text" disabled={d} name="driver_id_card" value={drvCid} onChange={(e) => setDrvCid(e.target.value)} title={drvCidWarn || undefined}
+                    className={`flex-1 min-w-0 border rounded-none h-9 px-2.5 text-gray-800 ${d ? 'bg-gray-100' : 'bg-white'} text-sm ${drvCidWarn ? 'border-red-500 ring-1 ring-red-300' : 'border-gray-300'}`} />
                   {/* คนไทยต้องผ่าน checksum 13 หลัก · ต่างชาติขอแค่ไม่ว่าง (บัตรต่างด้าว/พาสปอร์ต
                       ไม่มีสูตรตรวจ) — แอปเก็บค่านี้อยู่แล้ว แต่หน้านี้ไม่เคยมีให้เลือก */}
-                  <select disabled={d} name="driver_id_type" defaultValue={report.driver_id_type || 'thai'} className={`w-[5.25rem] shrink-0 border border-gray-300 rounded-none h-9 px-2.5 text-gray-800 ${d ? 'bg-gray-100' : 'bg-white'} text-sm`}>
+                  <select disabled={d} name="driver_id_type" value={drvCidThai ? 'thai' : 'foreign'} onChange={(e) => setDrvCidThai(e.target.value !== 'foreign')} className={`w-[5.25rem] shrink-0 border border-gray-300 rounded-none h-9 px-2.5 text-gray-800 ${d ? 'bg-gray-100' : 'bg-white'} text-sm`}>
                     <option value="thai">คนไทย</option>
                     <option value="foreign">ต่างชาติ</option>
                   </select>
                 </div>
+                {drvCidWarn && <div className="mt-1 text-[0.6875rem] leading-tight text-red-600">⚠ {drvCidWarn}</div>}
               </F>
 
               {/* ที่อยู่ + จังหวัด + เขต/อำเภอ บังคับทั้ง 3 ช่อง (เจอสดตอนเทส 2026-08-01) */}
