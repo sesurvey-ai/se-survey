@@ -938,9 +938,6 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
       }
       _accFault = data['acc_fault'] ?? _accFault;
       _accFollowup = data['acc_followup'] ?? _accFollowup;
-      // กู้ car_lost จาก report — เดิมไม่กู้ ทำให้ submit ทับค่า car_lost=true ที่ callcenter ตั้งไว้ ให้กลายเป็น false
-      final cl = data['car_lost'];
-      if (cl != null) _carLost = cl == true || cl == 'true' || cl == 1 || cl == 't';
     });
 
     final mapping = <TextEditingController, String>{
@@ -1114,7 +1111,6 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
   // === เคลม ===
   String _claimType = '';
   String _damageLevel = '';
-  bool _carLost = false;
   bool _hasPrb = false;    // สวิตช์ "มี พรบ." — เปิดแล้วโผล่ช่องเลข พรบ.
   bool _hasPolice = false; // สวิตช์ "มีการแจ้งความ/ลงประจำวัน" — เปิดแล้วโผล่ส่วนตำรวจ
   bool _driverHasLicense = false; // สวิตช์ "มีใบขับขี่" (s3) — ค่าเริ่มต้น=ปิด (=ไม่มีใบขับขี่); สแกนใบขับขี่ = เปิดอัตโนมัติ; ปิด = ซ่อน+เคลียร์+ไม่นับว่าขาด
@@ -2127,7 +2123,6 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
       'survey_company_phone': _surveyCompanyPhoneCtl.text.trim(),
       'claim_type': _claimType,
       'damage_level': _damageLevel,
-      'car_lost': _carLost,
       'insurance_company': _insuranceCompanyCtl.text.trim(),
       'insurance_branch': _insuranceBranchCtl.text.trim(),
       'survey_job_no': _surveyJobNoCtl.text.trim(),
@@ -3433,15 +3428,10 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
         // (ไม่กรอก = บอทกรอกให้ไม่ได้ หัวหน้าต้องมาเติมเองบน EMCS ทุกเคส)
         if (_faultIs('คู่กรณีผิด'))
           _numField(_accFaultOpponentNoCtl, 'คู่กรณีคันที่', req: true),
-        // EMCS มีช่องจริงทั้งคู่ (txtDri_Order / chkLost_Car) แต่เดิมแอปไม่มีให้กรอก
+        // EMCS มีช่องจริง (txtDri_Order) แต่เดิมแอปไม่มีให้กรอก
         _txt(_driverTicketCtl, 'ใบสั่ง (เลขที่ใบสั่งจราจร)'),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          dense: true,
-          title: const Text('รถหาย', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
-          value: _carLost,
-          onChanged: (v) => setState(() => _carLost = v),
-        ),
+        // ⛔ สวิตช์ "รถหาย" ถอดออก 10/09/69 (user ขอ) — ค่า car_lost เป็นของคอลเซ็นเตอร์/เว็บ แอปไม่ส่งคีย์นี้อีก
+        //    จึงไม่มีทางทับค่าที่ตั้งไว้ (เดิมต้องกู้จาก report ก่อน submit เพื่อกันทับ)
         _txt(_accReporterCtl, 'ผู้แจ้ง'),
         _txt(_accSurveyorCtl, 'ผู้สำรวจภัย', req: true),
         // ⛔ เอาช่อง "สาขา" ออก 2026-07-27: ddlSurv_Branch บน EMCS มี option เดียวคือ
