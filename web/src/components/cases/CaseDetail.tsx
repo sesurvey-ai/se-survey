@@ -3471,7 +3471,10 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
                             {pay.suggest && pay.suggest.service_fee == null && pay.suggest.snapshot?.rate_from === 'ไม่พบเรท' && (
                               <div className="mt-1 text-amber-700 bg-amber-50 border border-amber-200 rounded-none px-2 py-1">
                                 {pay.suggest.snapshot?.team_needed
-                                  ? `หาเรทฝั่งพนักงานไม่ได้: ${pay.area.district_name ?? 'พื้นที่นี้'} จ่ายแยกตามทีม (${(pay.suggest.snapshot.team_rates as string[] | undefined ?? []).join(' / ')}) แต่ผู้สำรวจ${pay.area.surveyor_code ? ` ${pay.area.surveyor_code}` : ''} ยังไม่ได้กำหนดทีม — แอดมินกำหนดที่ "เรทค่าตอบแทน › ทีมผู้สำรวจ" แล้วเปิดหน้านี้ใหม่ หรือกรอกค่าบริการเอง`
+                                  ? (pay.area.surveyor_code
+                                    ? `หาเรทฝั่งพนักงานไม่ได้: ${pay.area.district_name ?? 'พื้นที่นี้'} จ่ายแยกตามทีม (${(pay.suggest.snapshot.team_rates as string[] | undefined ?? []).join(' / ')}) แต่ผู้สำรวจ ${pay.area.surveyor_code} ยังไม่ได้กำหนดทีม — แอดมินกำหนดที่ "เรทค่าตอบแทน › ทีมผู้สำรวจ" แล้วเปิดหน้านี้ใหม่ หรือกรอกค่าบริการเอง`
+                                    // ช่างนอก/บริษัทนอก (ไม่มีรหัส SEC) ไม่มีทีมให้กำหนด — บอกตรง ๆ ว่าต้องกรอกเอง
+                                    : `หาเรทฝั่งพนักงานไม่ได้: ${pay.area.district_name ?? 'พื้นที่นี้'} จ่ายแยกตามทีม (${(pay.suggest.snapshot.team_rates as string[] | undefined ?? []).join(' / ')}) แต่ผู้สำรวจภัยของเคสนี้ไม่มีรหัส SEC (ช่างนอก/บริษัทนอก) — กรอกค่าบริการเอง`)
                                   : 'ไม่พบเรทฝั่งพนักงานของพื้นที่นี้ในตารางเรท — กรอกค่าบริการเอง หรือให้แอดมินเพิ่มเรทที่ "เรทค่าตอบแทน"'}
                               </div>
                             )}
