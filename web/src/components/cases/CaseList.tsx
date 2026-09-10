@@ -27,6 +27,9 @@ export interface Case {
   review_status?: string | null;
   approved_by?: string | null;
   approved_at?: string | null;
+  /** เวลาไทย พ.ศ. 'DD/MM/ปปปป HH:MM' (backend จัดรูปแบบให้) — คอลัมน์ "ส่งงาน / ตรวจรายงาน" (10/09/69) */
+  submitted_at_th?: string | null;
+  reviewed_at_th?: string | null;
   unlocked_count?: number | null;
   /** ตีกลับให้ผู้สำรวจ (migration 041) — status กลับเป็น 'assigned' แต่ยังอยู่ในลิสต์นี้ */
   sent_back_at?: string | null;
@@ -252,6 +255,8 @@ export default function CaseList({ cases, basePath = '/inspector' }: CaseListPro
             <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">เลขเคลม</th>
             <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">ที่มา</th>
             <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">ช่างสำรวจ</th>
+            {/* รอตรวจ = เวลาส่งงานจากแอป (งานไหนค้างนานสุด) · อนุมัติแล้ว/ส่งประกันแล้ว = เวลาที่หัวหน้ากดอนุมัติ (user เคาะ 10/09/69) */}
+            <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">ส่งงาน / ตรวจรายงาน</th>
             <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">ต้องเติมก่อนอนุมัติ</th>
             <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">EMCS</th>
           </tr>
@@ -280,6 +285,20 @@ export default function CaseList({ cases, basePath = '/inspector' }: CaseListPro
                 {c.surveyor_first_name
                   ? `${c.surveyor_code ? c.surveyor_code + ' ' : ''}${c.surveyor_first_name}`
                   : <span className="text-amber-600 text-xs">ยังไม่ได้มอบหมาย</span>}
+              </td>
+              <td className="px-5 py-4 text-xs whitespace-nowrap">
+                {approved ? (
+                  <>
+                    <div className="text-gray-400">ตรวจรายงาน</div>
+                    <div className="text-gray-800">{c.reviewed_at_th || '-'}</div>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-gray-400">ส่งงาน</div>
+                    {/* งานจาก ISURVEY/XML ไม่ได้ส่งผ่านแอป → ไม่มีเวลาส่งงาน */}
+                    <div className="text-gray-800">{c.submitted_at_th || '-'}</div>
+                  </>
+                )}
               </td>
               <td className="px-5 py-4">
                 {approved ? (

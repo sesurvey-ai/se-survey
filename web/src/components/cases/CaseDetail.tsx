@@ -2306,7 +2306,7 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
                 <span className="text-xs font-semibold border border-red-300 bg-red-50 text-red-700 rounded-none px-2 py-0.5">ผิดลำดับ {timeErrs.length} จุด</span>
               )}
             </div>
-            <div className="px-4 pt-3 pb-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-x-3 gap-y-4">
+            <div className="px-4 pt-3 pb-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-x-3 gap-y-4">
               {TIMELINE.map((n, i) => {
                 const gap = n.keys.some((k) => missing.includes(k));
                 const errs = timeErrs.filter((e) => e.at === n.date);
@@ -2352,6 +2352,21 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
                   </div>
                 );
               })}
+              {/* ── จังหวะ 6 "ส่งงาน" ── อ่านอย่างเดียว (user เคาะ 10/09/69) — เวลาที่ช่างกด "ตรวจสอบ & ส่ง" บนแอป
+                  ระบบประทับเอง (cases.submitted_at, migration 059) หัวหน้าใช้เทียบกับ "สำรวจภัยเสร็จ" ตอนตัดสินเรท/หักส่งช้า
+                  ไม่มีช่องกรอกจึงไม่มีดอกจัน · งานจาก ISURVEY/XML ที่ไม่ได้ส่งผ่านแอปขึ้น "-"
+                  ส่วน "ตรวจรายงาน" (เวลาอนุมัติ) user ให้ไปโชว์ในรายการงานตรวจสอบแทน ไม่ใส่ที่นี่ */}
+              <div className="relative min-w-0">
+                <div className="hidden xl:block absolute -left-[0.875rem] top-[0.6875rem] w-[0.875rem] border-t-2 border-[var(--md-line)]" />
+                <div className="flex items-start gap-2 mb-1.5">
+                  <span className="mt-[0.0625rem] w-[1.375rem] h-[1.375rem] shrink-0 text-[0.6875rem] font-extrabold flex items-center justify-center text-white" style={{ background: '#1E3E82' }}>6</span>
+                  <span className="text-xs font-semibold text-[var(--md-muted-2)] leading-tight min-w-0">ส่งงาน</span>
+                  <span className="hidden xl:block flex-1 h-0.5 mt-[0.6875rem] bg-[var(--md-line)]" />
+                </div>
+                <div className="h-9 flex items-center px-2.5 border border-gray-200 bg-gray-50 text-sm text-gray-800 whitespace-nowrap" title="ระบบประทับตอนช่างกด ตรวจสอบ & ส่ง บนแอป (แก้ไม่ได้)">
+                  {caseData?.submitted_at_th || <span className="text-gray-400">-</span>}
+                </div>
+              </div>
             </div>
           </div>
 

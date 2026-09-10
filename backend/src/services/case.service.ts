@@ -18,6 +18,17 @@ import { staffGroupService } from './staffGroup.service';
 
 // คอลัมน์ JSONB บน survey_reports (ข้อมูล 1:N) — node-pg ไม่ serialize array ให้เอง
 // ต้อง JSON.stringify ก่อน bind ไม่งั้นถูกตีความเป็น Postgres array literal แล้ว error
+/**
+ * timestamptz → 'DD/MM/พ.ศ. HH:MM' เวลาไทย — ใช้แสดง "ส่งงาน" / "ตรวจรายงาน" (10/09/69)
+ * ส่ง expression ที่เป็น timestamptz เข้ามา (คอลัมน์ timestamp ไม่มีโซน เช่น reviews.reviewed_at เก็บเป็น UTC
+ * ต้องห่อ `AT TIME ZONE 'UTC'` ก่อน) · null = ยังไม่มีเหตุการณ์นั้น
+ */
+const thStamp = (expr: string) =>
+  `CASE WHEN ${expr} IS NULL THEN NULL ELSE ` +
+  `to_char((${expr}) AT TIME ZONE 'Asia/Bangkok', 'DD/MM/') || ` +
+  `(EXTRACT(YEAR FROM (${expr}) AT TIME ZONE 'Asia/Bangkok')::int + 543) || ' ' || ` +
+  `to_char((${expr}) AT TIME ZONE 'Asia/Bangkok', 'HH24:MI') END`;
+
 const JSONB_FIELDS = new Set([
   'opposing_parties', 'injured_persons', 'damaged_property', 'insured_damage',
   'policy_info',   // ข้อมูลกรมธรรม์ทั้งชุดจาก ISURVEY แท็บ 7 (migration 053) — แสดงอย่างเดียว
@@ -1048,7 +1059,7 @@ export const caseService = {
 
       // guard status ใน UPDATE (idempotent) — ถ้าถูก submit คู่ขนานจน status เปลี่ยนไปแล้ว → 0 rows → rollback
       const st = await client.query(
-        `UPDATE cases SET status = 'surveyed' WHERE id = $1 AND status IN ('assigned','finished') RETURNING id`,
+        `UPDATE cases SET status = 'surveyed', submitted_at = NOW() WHERE id = $1 AND status IN ('assigned','finished') RETURNING id`,
         [caseId]
       );
       if (st.rowCount === 0) throw new ForbiddenError('Case is not in assigned status');
@@ -1132,6 +1143,9 @@ export const caseService = {
               sr.claim_no, sr.survey_job_no, sr.claim_ref_no, sr.license_plate,
               rv.status AS review_status, rv.unlocked_count,
               to_char(rv.reviewed_at, 'YYYY-MM-DD HH24:MI') AS approved_at,
+              -- คอลัมน์ "ส่งงาน / ตรวจรายงาน" ในรายการ (10/09/69) เวลาไทย พ.ศ. — รอตรวจโชว์ส่งงาน อนุมัติแล้วโชว์ตรวจรายงาน
+              ${thStamp("(rv.reviewed_at AT TIME ZONE 'UTC')")} AS reviewed_at_th,
+              ${thStamp('c.submitted_at')} AS submitted_at_th,
               COALESCE(NULLIF(rv.inspector_name, ''), ck.first_name || ' ' || ck.last_name) AS approved_by,
               (SELECT COUNT(*) FROM survey_photos sp WHERE sp.report_id = sr.id) AS photo_count,
               (SELECT sp2.total FROM survey_pay sp2 WHERE sp2.case_id = c.id) AS pay_total,
@@ -1175,7 +1189,8 @@ export const caseService = {
 
   async getDetail(caseId: number, user?: CaseUser) {
     const caseResult = await db.query(
-      `SELECT c.*, u.first_name AS surveyor_first_name, u.last_name AS surveyor_last_name
+      `SELECT c.*, u.first_name AS surveyor_first_name, u.last_name AS surveyor_last_name,
+              ${thStamp('c.submitted_at')} AS submitted_at_th
        FROM cases c
        LEFT JOIN users u ON c.assigned_to = u.id
        WHERE c.id = $1`,
