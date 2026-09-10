@@ -361,7 +361,7 @@ const xmlAge = (age: unknown, birthdate: unknown, noBirthFallback = ''): string 
   return a > 0 && a < 130 ? String(a) : '';
 };
 
-/** วันนี้ในรูปแบบไฟล์ (ค.ศ.) — ใช้แทนวันเกิดคู่กรณีที่หัวหน้าใส่ "-" (user เคาะ 10/09/69: วันเกิด = วันนี้ · อายุ = 0) */
+/** วันนี้ในรูปแบบไฟล์ (ค.ศ.) — ใช้แทนวันเกิดคู่กรณีที่หัวหน้าใส่ "-" (user เคาะ 10/09/69: วันเกิด = วันนี้ · อายุ = 1 เพราะ EMCS ไม่รับ 0) */
 const todayCE = (): string => {
   const t = new Date();
   const p2 = (n: number) => String(n).padStart(2, '0');
@@ -450,8 +450,8 @@ function buildCar(c: Row, type: number, insured: boolean): string {
     el('CCL_ID', lookup(COLOR, c.car_color)) +
     el('DRI_TITLE_ID', lookup(TITLE, insured ? c.driver_title : c.title)) +
     el('DRI_NAME', driName) +
-    // คู่กรณี: วันเกิด "-" → อายุ 0 (คู่กับ DRI_BIRTHDAY = วันนี้) · รถประกันไม่แตะ (แอปเลือกวันที่/ISURVEY ให้มา)
-    el('DRI_AGE', insured ? xmlAge(c.driver_age, c.driver_birthdate) : xmlAge(c.age, c.birthdate, '0')) +
+    // คู่กรณี: วันเกิด "-" → อายุ 1 (คู่กับ DRI_BIRTHDAY = วันนี้; EMCS ไม่รับ 0 — user เจอ #282 10/09/69) · รถประกันไม่แตะ
+    el('DRI_AGE', insured ? xmlAge(c.driver_age, c.driver_birthdate) : xmlAge(c.age, c.birthdate, '1')) +
     el('DRI_RELATION', lookup(RELATION, insured ? c.driver_relation : c.relation)) +
     el('DRI_ADDRESS', insured ? c.driver_address : c.address) +
     // คู่กรณีไม่มีช่องอำเภอในแอป (มีแต่ที่อยู่) → ปล่อยว่างเฉพาะคู่กรณี
