@@ -624,5 +624,14 @@ console.log('\n── เรทคิดจาก "สถานที่ออ�
   check('บรรทัดเรทบอกว่าคิดจากสถานที่ออกตรวจสอบหรือที่เกิดเหตุ', ui.includes("rate_location === 'survey'"));
 }
 
+console.log('\n── 0 บาท = ไม่มีเรท + บอกสาเหตุเมื่อหาเรทฝั่งพนักงานไม่ได้ (user เจอ #267 10/09/69) ──');
+{
+  const pay = read('src', 'services', 'pay.service.ts');
+  check('เรทฐาน 0 ทุกชั้นถือว่าไม่มีเรท (pos)', pay.includes('pos(num(province?.sur_invest))') && pay.includes('pos(num(amphur?.sur_invest))') && pay.includes('return pos(num(map[team]));'));
+  check('snapshot บอกว่าติดเพราะช่างไม่มีทีม + ทีมที่พื้นที่รู้จัก', pay.includes('team_needed: teamNeeded') && pay.includes('team_rates: teamRates'));
+  check('area ส่งรหัสช่าง (SEC) ให้หน้าเว็บ', pay.includes('surveyor_code:'));
+  check('หน้าเคสบอกสาเหตุ + ชี้ไปหน้ากำหนดทีม', ui.includes('ยังไม่ได้กำหนดทีม') && ui.includes('เรทค่าตอบแทน › ทีมผู้สำรวจ') && ui.includes("snapshot?.rate_from === 'ไม่พบเรท'"));
+}
+
 console.log(failed === 0 ? '\n✅ ผ่านทั้งหมด' : `\n❌ ไม่ผ่าน ${failed} ข้อ`);
 process.exit(failed === 0 ? 0 : 1);

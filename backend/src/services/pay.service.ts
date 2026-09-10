@@ -71,8 +71,15 @@ const num = (v: unknown): number | null => {
 /** เรทรายทีมเก็บเป็น JSON {"ชื่อทีม": เรท} — ไม่มีทีม/ทีมไม่อยู่ในนั้น = ใช้ค่า flat แทน */
 const byTeam = (map: Record<string, number> | null, team?: string | null): number | null => {
   if (!map || !team) return null;
-  return num(map[team]);
+  return pos(num(map[team]));
 };
+
+/**
+ * เรทฐานฝั่งพนักงาน **0 = ไม่มีเรท** ไม่ใช่ "ศูนย์บาท" — เรทสำรองระดับจังหวัด 21/25 ตั้งไว้ 0 (audit 01/09/69)
+ * เดิมระบบตอบ "แนะนำค่าบริการ 0 บาท" อย่างมั่นใจ แล้วช่องค่าบริการก็ว่างเงียบ ๆ (user เจอ #267 10/09/69:
+ * ศรีราชาจ่ายแยกตามทีม ช่างไม่มีทีม → ตกไปเรทจังหวัดชลบุรี = 0) · ตอนนี้ 0 = null ให้หน้าเว็บบอกสาเหตุแทน
+ */
+const pos = (v: number | null): number | null => (v !== null && v > 0 ? v : null);
 
 /** รหัสผู้สำรวจ → ทีม · รับได้ทั้ง "SEC125" และ "SEC125 นายสมภพ ปั้นเปรื่อง" */
 export async function teamOfSurveyor(codeOrName: string): Promise<string | null> {
@@ -123,12 +130,20 @@ export function computePay(rates: ResolvedRates, input: PayInput): PayResult {
   const team = input.team ?? null;
   const { amphur, tumbon, province } = rates;
 
-  // เรทฐานฝั่งพนักงาน — ไล่จากเจาะจงที่สุดไปกว้างที่สุด
+  // เรทฐานฝั่งพนักงาน — ไล่จากเจาะจงที่สุดไปกว้างที่สุด (0 ทุกชั้น = ไม่มีเรท ดู pos())
   const base =
     byTeam(tumbon?.sur_invest_by_team ?? null, team) ??
     byTeam(amphur?.sur_invest_by_team ?? null, team) ??
-    num(amphur?.sur_invest) ??
-    num(province?.sur_invest);
+    pos(num(amphur?.sur_invest)) ??
+    pos(num(province?.sur_invest));
+  /**
+   * พื้นที่นี้จ่ายพนักงาน "แยกตามทีม" แต่หาเรทไม่ได้ = ช่างคนนี้ไม่ได้อยู่ในทีมไหนเลย (ตาราง billing_surveyor_teams
+   * มีแค่ 13 รหัสจากช่าง SEC 150+ คน) — ส่งชื่อทีมที่พื้นที่นี้รู้จักไปให้หน้าเว็บบอกแอดมินว่าต้องไปกำหนดทีมที่
+   * "เรทค่าตอบแทน › ทีมผู้สำรวจ" ไม่ใช่ปล่อยช่องว่างเฉย ๆ ให้เดาสาเหตุ (user เจอ #267 10/09/69)
+   */
+  const teamMap = tumbon?.sur_invest_by_team ?? amphur?.sur_invest_by_team ?? null;
+  const teamRates = teamMap ? Object.keys(teamMap).filter((k) => pos(num(teamMap[k])) !== null) : [];
+  const teamNeeded = base === null && teamRates.length > 0;
 
   // ฝั่งเรียกเก็บประกัน — ตำบลพิเศษทับของอำเภอแม่ได้ทุกช่อง
   const src = tumbon ?? amphur;
@@ -163,8 +178,11 @@ export function computePay(rates: ResolvedRates, input: PayInput): PayResult {
       // ที่มาของเรทฐาน — ไว้อธิบายตอนถูกถามว่าทำไมได้ยอดนี้
       rate_from: byTeam(tumbon?.sur_invest_by_team ?? null, team) !== null ? 'tumbon_by_team'
         : byTeam(amphur?.sur_invest_by_team ?? null, team) !== null ? 'amphur_by_team'
-        : num(amphur?.sur_invest) !== null ? 'amphur_flat'
-        : num(province?.sur_invest) !== null ? 'province' : 'ไม่พบเรท',
+        : pos(num(amphur?.sur_invest)) !== null ? 'amphur_flat'
+        : pos(num(province?.sur_invest)) !== null ? 'province' : 'ไม่พบเรท',
+      // หาเรทไม่ได้เพราะช่างไม่มีทีม (พื้นที่จ่ายแยกทีม) — ทีมที่พื้นที่นี้รู้จัก ไว้บอกแอดมิน
+      team_needed: teamNeeded,
+      team_rates: teamRates,
     },
   };
 }
@@ -325,6 +343,8 @@ export async function getCasePay(caseId: number, override: PayLocationOverride =
       subdistrict_name: rateSubdistrict ?? null,
       // พื้นที่นี้มาจากไหน — 'survey' = สถานที่ออกตรวจสอบ · 'accident' = สถานที่เกิดเหตุ (เคสไม่มีสถานที่ออกตรวจสอบ)
       rate_location: rateLocation,
+      // รหัสช่างที่ใช้หาทีม (SEC…) — หน้าเว็บใช้บอกว่า "ช่างรหัสนี้ยังไม่ได้กำหนดทีม"
+      surveyor_code: /\b(SEC\d+)\b/i.exec(r.acc_surveyor ?? '')?.[1]?.toUpperCase() ?? null,
       // แปลงพื้นที่ไม่ได้ = หาเรทไม่เจอ → หน้าเว็บต้องบอกให้ไปแก้ชื่อจังหวัด/อำเภอก่อน
       resolved: Boolean(amphur || province),
       photo_count: Number(r.photo_count ?? 0),

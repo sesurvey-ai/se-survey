@@ -30,6 +30,8 @@ interface PayData {
     province_name: string | null; district_name: string | null; subdistrict_name?: string | null; tumbon_code?: string | null;
     /** พื้นที่ที่ใช้หาเรทมาจาก 'survey' = สถานที่ออกตรวจสอบ · 'accident' = สถานที่เกิดเหตุ (เคสไม่มีสถานที่ออกตรวจสอบ) */
     rate_location?: 'survey' | 'accident' | null;
+    /** รหัสช่าง (SEC…) ที่ใช้หาทีม — บอกในข้อความ "ยังไม่ได้กำหนดทีม" */
+    surveyor_code?: string | null;
     resolved: boolean; photo_count: number;
   } | null;
 }
@@ -3453,6 +3455,16 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
                             {pay.area.team ? ` · ทีม${pay.area.team}` : ''}
                             {pay.suggest?.service_fee != null ? ` · ระบบแนะนำค่าบริการ ${pay.suggest.service_fee} บาท` : ''}
                             {pay.saved?.total != null ? ` · รวมที่บันทึกไว้ ${pay.saved.total} บาท` : ''}
+                            {/* ── หาเรทฝั่งพนักงานไม่ได้ ต้องบอกสาเหตุ ── (user เจอ #267 10/09/69: ช่องค่าบริการว่างเงียบ ๆ)
+                                ศรีราชา/บ่อวิน จ่ายแยกตามทีม แต่ช่าง SEC481 ไม่มีทีมในตารางเรท → เดิมตอบ "0 บาท" แล้วไม่เติมช่อง
+                                ตอนนี้ backend ตอบ null + team_needed/team_rates ให้บอกว่าต้องไปกำหนดทีมที่หน้าแอดมิน */}
+                            {pay.suggest && pay.suggest.service_fee == null && pay.suggest.snapshot?.rate_from === 'ไม่พบเรท' && (
+                              <div className="mt-1 text-amber-700 bg-amber-50 border border-amber-200 rounded-none px-2 py-1">
+                                {pay.suggest.snapshot?.team_needed
+                                  ? `หาเรทฝั่งพนักงานไม่ได้: ${pay.area.district_name ?? 'พื้นที่นี้'} จ่ายแยกตามทีม (${(pay.suggest.snapshot.team_rates as string[] | undefined ?? []).join(' / ')}) แต่ผู้สำรวจ${pay.area.surveyor_code ? ` ${pay.area.surveyor_code}` : ''} ยังไม่ได้กำหนดทีม — แอดมินกำหนดที่ "เรทค่าตอบแทน › ทีมผู้สำรวจ" แล้วเปิดหน้านี้ใหม่ หรือกรอกค่าบริการเอง`
+                                  : 'ไม่พบเรทฝั่งพนักงานของพื้นที่นี้ในตารางเรท — กรอกค่าบริการเอง หรือให้แอดมินเพิ่มเรทที่ "เรทค่าตอบแทน"'}
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-none px-2 py-1">
