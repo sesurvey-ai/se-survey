@@ -2209,10 +2209,8 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
       'acc_surveyor': _accSurveyorCtl.text.trim(),
       'acc_surveyor_branch': _accSurveyorBranchCtl.text.trim(),
       'acc_surveyor_phone': _accSurveyorPhoneCtl.text.trim(),
-      'acc_customer_report_date': _combineDT(_accCustomerReportDateCtl, _accCustomerReportTimeCtl),
-      'acc_insurance_notify_date': _combineDT(_accInsNotifyDateCtl, _accInsNotifyTimeCtl),
-      'acc_survey_arrive_date': _combineDT(_accSurveyArriveDateCtl, _accSurveyArriveTimeCtl),
-      'acc_survey_complete_date': _combineDT(_accSurveyCompleteDateCtl, _accSurveyCompleteTimeCtl),
+      // ⛔ ไม่ส่ง acc_customer_report_date / acc_insurance_notify_date / acc_survey_arrive_date /
+      //    acc_survey_complete_date — server เป็นเจ้าของ 4 ค่านี้ (10/09/69) ส่งกลับ = เสี่ยงร่างเก่าทับค่าที่ระบบเพิ่งเติม
       'acc_claim_opponent': _opoClaims.join(','),
       'driver_ticket': _driverTicketCtl.text.trim(),
       'acc_police_name': _accPoliceNameCtl.text.trim(),
@@ -3451,10 +3449,9 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
         // ส่วน "โทรศัพท์สำรวจ" มีปลายทางจริง (txtAcc_Tel) — บอทส่งให้แล้วตั้งแต่ 2d78f0e
         // req: EMCS บังคับ txtAcc_Tel ใน vlidSurvey (เดิมไม่มีจุดแดง ปล่อยว่างแล้วส่งได้)
         _txt(_accSurveyorPhoneCtl, 'โทรศัพท์สำรวจ', req: true, keyboardType: TextInputType.phone, formatters: kPhoneFormatters),
-        _dateTime(_accCustomerReportDateCtl, _accCustomerReportTimeCtl, 'วันที่ลูกค้าแจ้ง บ.ประกัน'),
-        _dateTime(_accInsNotifyDateCtl, _accInsNotifyTimeCtl, 'วันที่ บ.ประกันแจ้งสำรวจ'),
-        _dateTime(_accSurveyArriveDateCtl, _accSurveyArriveTimeCtl, 'วันที่ถึงที่เกิดเหตุ'),
-        _dateTime(_accSurveyCompleteDateCtl, _accSurveyCompleteTimeCtl, 'วันที่สำรวจเสร็จ'),
+        // ⛔ 4 ช่องไทม์ไลน์ (ลูกค้าแจ้ง · แจ้งสำรวจ · ถึงที่เกิดเหตุ · สำรวจเสร็จ) ถอดออกจากฟอร์ม 10/09/69 (user ขอ)
+        //    ระบบสร้างให้เองทั้ง 4 (OCR หน้าการ์ด / กดมอบหมาย / ถ่ายรูปยืนยัน / กดเสร็จงาน-ส่งงาน) และโชว์อยู่ที่
+        //    "ไทม์ไลน์งาน" บนหัว Hub อยู่แล้ว ไม่ควรแก้มือ · controller ยังอยู่เพื่อโชว์ไทม์ไลน์ แต่**ไม่ส่งกลับ** ให้ server
         _opoClaimChecks(),
         _row2(_numField(_accClaimAmountCtl, 'รับเงินจำนวน (บาท)', decimal: true),
             _numField(_accClaimTotalAmountCtl, 'จากจำนวนเรียกร้องทั้งหมด (บาท)', decimal: true)),

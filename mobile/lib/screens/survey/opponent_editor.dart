@@ -115,7 +115,9 @@ class _OpponentEditorState extends State<OpponentEditor> {
         // "ไม่มีบริษัทประกันภัย" → ห้ามเก็บค่าประกันค้าง (ช่องแค่ถูกซ่อน controller ยังถือค่าเดิม
         // เคยทำ record "ไม่มีประกัน" พ่วงเลขกรมธรรม์เก่า + XML เพี้ยน)
         // แต่ "อื่นๆ" = มีประกันกับบริษัทนอกลิสต์ (backend นับ HAVE_INSURANCE=1) — คงค่าที่พิมพ์ไว้
-        'policy_no': _noInsurance ? '' : _ctl('policy_no').text.trim(),
+        // ไม่มีบริษัทประกันภัย → เลขกรมธรรม์ "-" (EMCS บังคับช่องนี้ทุกบริษัท · กติกาช่องบังคับไม่มีข้อมูล = "-")
+        // เว็บจะได้ไม่ขึ้นกรอบแดงให้หัวหน้ามาเติมขีดเองทุกเคส (user ขอ 10/09/69)
+        'policy_no': _noInsurance ? '-' : _ctl('policy_no').text.trim(),
         'claim_no': _noInsurance ? '' : _ctl('claim_no').text.trim(),
         'policy_type': _noInsurance ? '' : _policyType.trim(),
         'damage': _damage,
@@ -388,6 +390,8 @@ class _OpponentEditorState extends State<OpponentEditor> {
         KPickerField(label: 'มีประกันภัยที่', value: _insurer, options: kOpoInsurers, req: true, onSelected: (v) => setState(() {
               _insurer = v;
               _kfk = kKfkInsurers.contains(v);
+              // เคยเป็น "ไม่มีประกัน" (เลขกรมธรรม์ = "-") แล้วเปลี่ยนเป็นบริษัทจริง → ล้างขีดให้กรอกเลขจริง
+              if (v != 'ไม่มีบริษัทประกันภัย' && _ctl('policy_no').text.trim() == '-') _ctl('policy_no').clear();
             })),
         if (_hasInsurance) ...[
           kRow2(kText(_ctl('policy_no'), 'เลขกรมธรรม์', req: true), kText(_ctl('claim_no'), 'เลขเคลม', req: true)),
