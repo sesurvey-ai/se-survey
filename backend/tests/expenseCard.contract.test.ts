@@ -632,7 +632,7 @@ console.log('\n── 0 บาท = ไม่มีเรท + บอกสา�
   check('area ส่งรหัสช่าง (SEC) ให้หน้าเว็บ', pay.includes('surveyor_code:'));
   check('หน้าเคสบอกสาเหตุ + ชี้ไปหน้ากำหนดทีม', ui.includes('ยังไม่ได้กำหนดทีม') && ui.includes('เรทค่าตอบแทน › ทีมผู้สำรวจ') && ui.includes("snapshot?.rate_from === 'ไม่พบเรท'"));
   check('เติมเรทแนะนำแล้วสั่งทาสีกรอบแดงใหม่ (ไม่ยิง input event ให้ธงยังไม่บันทึกติด)',
-        ui.includes('repaintRef.current = schedule;') && ui.includes('repaintRef.current();'));
+        ui.includes('repaintRef.current = paint;') && ui.includes('repaintRef.current();'));
 }
 
 console.log(failed === 0 ? '\n✅ ผ่านทั้งหมด' : `\n❌ ไม่ผ่าน ${failed} ข้อ`);

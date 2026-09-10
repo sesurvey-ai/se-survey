@@ -1192,6 +1192,7 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
   /**
    * สั่งทาสีใหม่จากนอก effect — ตัวเติมเรทแนะนำ (effect ด้านล่าง) เขียนค่าลง DOM ตรง ๆ ไม่มี event
    * และวิ่ง**หลัง** paint ในรอบ render เดียวกัน → ช่องค่าบริการมีเลขแล้วแต่กรอบแดงยังค้าง (เจอ #267 10/09/69)
+   * (เทสในแท็บพื้นหลังแล้ว: ผ่าน rAF ไม่ทันเพราะเบราว์เซอร์หยุด rAF ของแท็บที่ไม่แสดง → ต้องเรียก paint ตรง)
    * ไม่ยิง input event แทน เพราะจะไปติดธง "ยังไม่บันทึก" ทั้งที่คนยังไม่ได้แตะอะไร
    */
   const repaintRef = useRef<() => void>(() => {});
@@ -1445,7 +1446,9 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
      */
     let raf = 0;
     const schedule = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(paint); };
-    repaintRef.current = schedule;
+    // ⛔ ให้ตัวเติมเรทเรียก paint ตรง ๆ ไม่ผ่าน rAF — แท็บที่ไม่ได้อยู่หน้าจอ (เปิดหลายเคสค้างไว้) เบราว์เซอร์หยุด rAF
+    //    กรอบแดงจะค้างจนกว่าจะสลับมาดู · เรียกจาก effect ไม่ใช่จาก event จึงไม่ต้องรอให้ event ไหลจบ
+    repaintRef.current = paint;
     form.addEventListener('input', schedule);
     form.addEventListener('change', schedule);
     return () => {
