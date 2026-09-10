@@ -339,7 +339,15 @@ console.log('\n── การ์ด: เงินฝั่งพนักง�
     return (o.match(/<DRI_AGE>(.*?)<\/DRI_AGE>/) || [])[1] ?? null;
   };
   check('อายุ "-" + วันเกิดจริง → คิดอายุจากวันเกิดเป็นตัวเลข', /^\d{1,3}$/.test(String(opp('-', '20/02/2527'))), `ได้ ${opp('-', '20/02/2527')}`);
-  check('อายุ "-" + วันเกิด "-" → ว่าง (ไม่ส่ง "-" ให้ EMCS ปัดตก)', String(opp('-', '-')).trim() === '', `ได้ ${JSON.stringify(opp('-', '-'))}`);
+  // user เคาะ 10/09/69: วันเกิด "-" → วันนี้ · อายุ → 0 (EMCS บังคับทั้งคู่ คู่กรณี "รอตรวจสอบ" ไม่มีข้อมูลจริง)
+  check('อายุ "-" + วันเกิด "-" → อายุ 0 (ไม่ส่ง "-" ให้ EMCS ปัดตก)', String(opp('-', '-')).trim() === '0', `ได้ ${JSON.stringify(opp('-', '-'))}`);
+  {
+    const x = generateSurveyXml({ ...row, opposing_parties: [{ ...(row.opposing_parties as any[])[0], age: '-', birthdate: '-' }] } as never);
+    const o = [...x.matchAll(/<TXN_SURV_CAR>([\s\S]*?)<\/TXN_SURV_CAR>/g)].map((m) => m[1]).find((c) => c.includes('<TYPE>20</TYPE>')) ?? '';
+    const bd = (o.match(/<DRI_BIRTHDAY>(.*?)<\/DRI_BIRTHDAY>/) || [])[1] ?? '';
+    const t = new Date(); const today = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')} 00:00:00`;
+    check('วันเกิด "-" → DRI_BIRTHDAY = วันนี้ (ค.ศ.)', bd === today, `ได้ ${bd}`);
+  }
   check('อายุตัวเลขปกติยังส่งตรง ๆ', opp(40, '') === '40');
 }
 

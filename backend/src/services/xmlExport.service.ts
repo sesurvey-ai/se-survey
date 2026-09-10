@@ -349,16 +349,23 @@ function parseSe(dateStr: unknown, timeStr?: unknown): { d: string; m: string; y
  * "TXN_SURV_CAR DRI_AGE รถคู่กรณีคันที่ 20" ซึ่ง 20 = รหัส TYPE ของรถคู่กรณี ไม่ใช่จำนวนคัน)
  * ไม่มีเลข → คิดจากวันเกิด (พ.ศ.) · ไม่มีทั้งคู่ → ว่าง ให้ไปติดด่านบล็อกคู่กรณีบน EMCS แทน (คนต้องเติมค่าจริง)
  */
-const xmlAge = (age: unknown, birthdate: unknown): string => {
+const xmlAge = (age: unknown, birthdate: unknown, noBirthFallback = ''): string => {
   const m = /\d{1,3}/.exec(String(age ?? ''));
   if (m) return m[0];
   const p = parseSe(birthdate);
-  if (!p) return '';
+  if (!p) return noBirthFallback;
   const now = new Date();
   let a = (now.getFullYear() + 543) - p.yBE;
   const mm = now.getMonth() + 1;
   if (mm < Number(p.m) || (mm === Number(p.m) && now.getDate() < Number(p.d))) a -= 1;
   return a > 0 && a < 130 ? String(a) : '';
+};
+
+/** วันนี้ในรูปแบบไฟล์ (ค.ศ.) — ใช้แทนวันเกิดคู่กรณีที่หัวหน้าใส่ "-" (user เคาะ 10/09/69: วันเกิด = วันนี้ · อายุ = 0) */
+const todayCE = (): string => {
+  const t = new Date();
+  const p2 = (n: number) => String(n).padStart(2, '0');
+  return `${t.getFullYear()}-${p2(t.getMonth() + 1)}-${p2(t.getDate())} 00:00:00`;
 };
 
 const toXmlCE = (dateStr: unknown, timeStr?: unknown): string => {
@@ -443,7 +450,8 @@ function buildCar(c: Row, type: number, insured: boolean): string {
     el('CCL_ID', lookup(COLOR, c.car_color)) +
     el('DRI_TITLE_ID', lookup(TITLE, insured ? c.driver_title : c.title)) +
     el('DRI_NAME', driName) +
-    el('DRI_AGE', xmlAge(insured ? c.driver_age : c.age, insured ? c.driver_birthdate : c.birthdate)) +
+    // คู่กรณี: วันเกิด "-" → อายุ 0 (คู่กับ DRI_BIRTHDAY = วันนี้) · รถประกันไม่แตะ (แอปเลือกวันที่/ISURVEY ให้มา)
+    el('DRI_AGE', insured ? xmlAge(c.driver_age, c.driver_birthdate) : xmlAge(c.age, c.birthdate, '0')) +
     el('DRI_RELATION', lookup(RELATION, insured ? c.driver_relation : c.relation)) +
     el('DRI_ADDRESS', insured ? c.driver_address : c.address) +
     // คู่กรณีไม่มีช่องอำเภอในแอป (มีแต่ที่อยู่) → ปล่อยว่างเฉพาะคู่กรณี
@@ -466,7 +474,7 @@ function buildCar(c: Row, type: number, insured: boolean): string {
     el('DRI_DRVDATE_START', toXmlCE(insured ? c.driver_license_start : c.license_start)) +
     el('DRI_DRVDATE_END', toXmlCE(insured ? c.driver_license_end : c.license_end)) +
     el('DRI_ORDER', '') +
-    el('DRI_BIRTHDAY', toXmlCE(insured ? c.driver_birthdate : c.birthdate)) +
+    el('DRI_BIRTHDAY', insured ? toXmlCE(c.driver_birthdate) : (toXmlCE(c.birthdate) || todayCE())) +
     el('DRI_GENDER', genderCode(g('driver_gender', 'gender'))) +
     // insurer เก็บเป็นข้อความไทย — "ไม่มีบริษัทประกันภัย" ต้องนับว่า "ไม่มีประกัน" ไม่ใช่ truthy = 1
     el('HAVE_INSURANCE', insured ? '' : (c.insurer && c.insurer !== 'ไม่มีบริษัทประกันภัย' ? '1' : '')) +
