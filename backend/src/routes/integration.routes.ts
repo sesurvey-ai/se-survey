@@ -161,6 +161,11 @@ router.post('/cases/import', integrationAuth, asyncHandler(async (req: Request, 
     caseFields: {
       customer_name: String(cf.customer_name ?? ''),
       incident_location: String(cf.incident_location ?? ''),
+      // "ส่งงาน" จาก ISURVEY (Dispatch.sendReportDate/Time) — รับเฉพาะที่ parse เป็นเวลาได้ (10/09/69)
+      submitted_at: (() => {
+        const v = String(cf.submitted_at ?? '').trim();
+        return v && Number.isFinite(Date.parse(v)) ? v : null;
+      })(),
     },
     report: report as Record<string, unknown>,
     expenses,

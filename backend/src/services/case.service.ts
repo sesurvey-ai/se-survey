@@ -1613,14 +1613,16 @@ export const caseService = {
         // BILLABLE_SOURCES (isurvey_xml + mobile + isurvey_live) — 'emcs_extract' ยังถูกกันไว้
         // เคสทดสอบจึงไม่ดันยอดเงินของประกันเองกลับเข้าระบบประกันโดยไม่ตั้งใจ
         `INSERT INTO cases (customer_name, incident_location, created_by, assigned_to, status, source,
-                            import_warnings)
-         VALUES ($1, $2, $3, $4, 'surveyed', $5, $6) RETURNING *`,
+                            import_warnings, submitted_at)
+         VALUES ($1, $2, $3, $4, 'surveyed', $5, $6, $7) RETURNING *`,
         [parsed.caseFields.customer_name || '(ไม่ระบุชื่อผู้เอาประกัน)',
          parsed.caseFields.incident_location || '(ไม่ระบุสถานที่)',
          opts.createdBy, assignedTo, parsed.source,
          // เก็บคำเตือนไว้กับเคส — เดิมส่งกลับให้หน้าจอที่กดนำเข้าครั้งเดียวแล้วหายไป
          // คนที่มาเปิดรายการงานทีหลังจึงไม่รู้เลยว่าเคสไหนข้อมูลไม่ครบ
-         parsed.warnings?.length ? JSON.stringify(parsed.warnings) : null]);
+         parsed.warnings?.length ? JSON.stringify(parsed.warnings) : null,
+         // "ส่งงาน" ของงานจาก ISURVEY = เวลาที่ช่างส่งรายงานบนระบบเดิม (จังหวะ 6 ของเส้นเวลา, 10/09/69) · ไฟล์ XML ไม่มี = null
+         parsed.caseFields.submitted_at ?? null]);
       const caseId = c.rows[0].id;
 
       // เขียนเฉพาะคอลัมน์ที่มีจริง (ใช้ allowlist ชุดเดียวกับ updateReport) — กัน SQL พัง

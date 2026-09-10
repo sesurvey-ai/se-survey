@@ -233,7 +233,9 @@ function cleanBrand(cmfg: string, ctypecode: string): string {
 // ───────────────────────── ผลลัพธ์ ─────────────────────────
 export interface XmlImportResult {
   /** ค่าที่ต้องลงตาราง cases */
-  caseFields: { customer_name: string; incident_location: string };
+  caseFields: { customer_name: string; incident_location: string;
+    /** เวลาส่งงาน (ISO) — งานที่ดึงสดจาก ISURVEY ส่ง "ส่งรายงานเวลา" มาให้ (10/09/69) · ไม่มี = null */
+    submitted_at?: string | null };
   /** ค่าที่ต้องลงตาราง survey_reports (คีย์ = ชื่อคอลัมน์) */
   report: Record<string, unknown>;
   /** ค่าที่ต้องลง survey_expenses (null = XML ไม่มียอดเงิน เช่นไฟล์ที่ se-survey ออกเอง) */
