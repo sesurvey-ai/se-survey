@@ -882,6 +882,10 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
           if (cr is String && cr.isNotEmpty) {
             setState(() => _slaStart = DateTime.tryParse(cr));
           }
+          // ไทม์ไลน์ 4 ค่า (ลูกค้าแจ้ง · แจ้งสำรวจ · ถึงที่เกิดเหตุ · สำรวจเสร็จ) — server เป็นเจ้าของและ
+          // ไม่อยู่ใน draft อีกแล้ว (10/09/69) → ต้องเติมจาก report เสมอ ไม่งั้น "ไทม์ไลน์งาน" บน Hub ว่างทั้งแถว
+          // (user เจอหลัง APK 1.0.107 ถอดช่องออกจากหมวด 5)
+          setState(() => _applyTimelineFromServer(report));
         }
       }
     } catch (_) {}
@@ -899,6 +903,22 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
         }
       }
     }
+  }
+
+  /// เติมไทม์ไลน์ 4 ค่าจาก report ของ server ("dd/mm/yyyy|HH:mm" → วันที่/เวลา) — ใช้ทั้งตอนไม่มี draft
+  /// (ผ่าน _populateForm) และตอนมี draft (server เป็นเจ้าของค่า draft ไม่มีคีย์เหล่านี้)
+  void _applyTimelineFromServer(Map<String, dynamic> data) {
+    void splitDT(String key, TextEditingController d, TextEditingController t) {
+      final v = (data[key] ?? '').toString();
+      if (v.isEmpty) return;
+      final parts = v.split('|');
+      d.text = parts[0];
+      if (parts.length > 1) t.text = parts[1];
+    }
+    splitDT('acc_customer_report_date', _accCustomerReportDateCtl, _accCustomerReportTimeCtl);
+    splitDT('acc_insurance_notify_date', _accInsNotifyDateCtl, _accInsNotifyTimeCtl);
+    splitDT('acc_survey_arrive_date', _accSurveyArriveDateCtl, _accSurveyArriveTimeCtl);
+    splitDT('acc_survey_complete_date', _accSurveyCompleteDateCtl, _accSurveyCompleteTimeCtl);
   }
 
   // fromDraft: การตีความ null ต่างกัน — draft เก็บ null = "ผู้ใช้ล้างค่า" (ต้องล้างตาม)
