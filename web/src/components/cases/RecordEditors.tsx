@@ -14,7 +14,7 @@
  *
  * รวมสองตัวไว้ไฟล์เดียวเพราะใช้ layout/primitive ชุดเดียวกัน (การ์ดต่อ 1 ระเบียน + ปุ่มลบ + ปุ่มเพิ่ม)
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { PROVINCE_OPTIONS, CAR_COLOR_OPTIONS, EV_TYPE_OPTIONS, POLICY_TYPE_OPTIONS, carBrandOptions } from './caseOptions';
 import { districtOptions } from './districtOptions';
 import { insurerOptions, isEmcsInsurer } from './insurerOptions';
@@ -267,7 +267,7 @@ function RecordList({
 //    ให้หัวหน้าไล่แก้เองทีละช่อง — เดิมหน้านี้ติดดาวไว้ช่องเดียว (ประเภทผู้บาดเจ็บ)
 const INJURED_FIELDS: FieldDef[] = [
   { k: 'person_type', label: 'ประเภทผู้บาดเจ็บ *', options: PERSON_TYPES },
-  { k: 'relation', label: 'ความสัมพันธ์', options: RELATIONS },
+  { k: 'relation', label: 'ความสัมพันธ์', optionsFrom: (r) => withCurrentOption(RELATIONS, r.relation) },
   { k: 'gender', label: 'เพศ *', options: GENDERS },
   { k: 'name', label: 'ชื่อ-นามสกุล *' },
   { k: 'age', label: 'อายุ' },
@@ -339,13 +339,16 @@ export const dropEmptyRecords = (items: RecordItem[]): RecordItem[] =>
 // ⚠️ `province` ทำ 2 หน้าที่ในสคีมาของแอป: จังหวัดป้ายทะเบียน **และ** จังหวัดที่อยู่ผู้ขับขี่
 //    (เป็น parent ของ cascade อำเภอ) — สืบทอดมาจากฝั่งแอป ยังไม่ได้แยก
 const OPPONENT_FIELDS: FieldDef[] = [
-  { k: 'car_type', label: 'ประเภทรถ *', options: OPO_CAR_TYPES },
+  { k: 'car_type', label: 'ประเภทรถ *', optionsFrom: (r) => withCurrentOption(OPO_CAR_TYPES, r.car_type) },
   { k: 'plate', label: 'ทะเบียน *' },
   { k: 'province', label: 'จังหวัด *', options: PROVINCE_OPTIONS },
   { k: 'car_brand', label: 'ยี่ห้อ', optionsFrom: (r) => carBrandOptions(String(r.car_type ?? ''), String(r.car_brand ?? '')) },
   { k: 'car_model', label: 'รุ่น' },
   { k: 'reg_year', label: 'ปีจดทะเบียน' },
-  { k: 'car_color', label: 'สีรถ', options: CAR_COLOR_OPTIONS },
+  // ค่าที่นำเข้าจาก ISURVEY มักสะกดไม่ตรงลิสต์ (เคส #255 สีรถ "บอน") — เดิม <select> ไม่มี option ตรง value
+  // → โชว์ "-- ระบุ --" ทั้งที่มีค่าอยู่ แล้วบอทกรอก EMCS ด้วยค่าจริง (fuzzy → "บรอน") หัวหน้าเลยงงว่า EMCS รู้ได้ไง
+  // คงค่าเดิมไว้เป็นตัวเลือกให้เห็นและแก้ได้ (user ถาม 10/09/69)
+  { k: 'car_color', label: 'สีรถ', optionsFrom: (r) => withCurrentOption(CAR_COLOR_OPTIONS, r.car_color) },
   { k: 'vin', label: 'เลขตัวถัง' },
   { k: 'mileage', label: 'เลขไมล์' },
   // ต้องเป็นตัวเลือก ไม่ใช่ช่องพิมพ์ — แอปเก็บ "รหัส" (BEV/HEV/…) และบอทเลือกด้วย
@@ -366,17 +369,17 @@ const OPPONENT_FIELDS: FieldDef[] = [
   { k: 'claim_no', label: 'เลขเคลมคู่กรณี' },
   { k: 'owner_name', label: 'เจ้าของรถ *' },
   { k: 'owner_address', label: 'ที่อยู่เจ้าของ', wide: true },
-  { k: 'title', label: 'คำนำหน้า', options: TITLES },
+  { k: 'title', label: 'คำนำหน้า', optionsFrom: (r) => withCurrentOption(TITLES, r.title) },
   { k: 'first_name', label: 'ชื่อผู้ขับขี่' },
   { k: 'last_name', label: 'นามสกุล' },
-  { k: 'gender', label: 'เพศ *(บางบริษัท)', options: GENDERS },
+  { k: 'gender', label: 'เพศ *(บางบริษัท)', optionsFrom: (r) => withCurrentOption(GENDERS, r.gender) },
   { k: 'birthdate', label: 'วันเกิด *', placeholder: 'วว/ดด/ปปปป (พ.ศ.)' },
   { k: 'age', label: 'อายุ *' },
-  { k: 'relation', label: 'ความสัมพันธ์', options: RELATIONS },
+  { k: 'relation', label: 'ความสัมพันธ์', optionsFrom: (r) => withCurrentOption(RELATIONS, r.relation) },
   { k: 'phone', label: 'โทรศัพท์' },
   { k: 'cid', label: 'เลขบัตรประชาชน' },
   { k: 'license_no', label: 'เลขใบขับขี่' },
-  { k: 'license_type', label: 'ประเภทใบขับขี่', options: LICENSE_TYPES },
+  { k: 'license_type', label: 'ประเภทใบขับขี่', optionsFrom: (r) => withCurrentOption(LICENSE_TYPES, r.license_type) },
   { k: 'license_start', label: 'ใบขับขี่ ออกให้', placeholder: 'วว/ดด/ปปปป (พ.ศ.)' },
   { k: 'license_end', label: 'ใบขับขี่ สิ้นสุด', placeholder: 'วว/ดด/ปปปป (พ.ศ.)' },
   // จังหวัดของ "ที่อยู่ผู้ขับขี่" แยกจากจังหวัดป้ายทะเบียน — แอปมือถือและ XML export ใช้ home_province อยู่แล้ว
@@ -393,6 +396,9 @@ const OPPONENT_FIELDS: FieldDef[] = [
 const OPPONENT_KEYS = OPPONENT_FIELDS.map((f) => f.k);
 /** ช่องยอดความเสียหาย — วาดแยกจากกริด ไว้เหนือปุ่ม "ข้อมูลความเสียหาย" (ยังอยู่ใน OPPONENT_FIELDS ให้ KEYS ครบ) */
 const OPPONENT_COST_FIELD: FieldDef = OPPONENT_FIELDS.find((f) => f.k === 'estimated_cost')!;
+
+/** ค่า "ไม่มีประกัน" ในช่องมีประกันภัยที่ — เลขกรมธรรม์ต้องเป็น "-" (ดู set() ใน OpponentEditor) */
+const NO_INSURER = 'ไม่มีบริษัทประกันภัย';
 
 /** 8 ช่องที่ `vlidOpoCar` บล็อกทุกบริษัท — ใช้นับป้าย "ยังขาด N ช่องบังคับ" */
 export const OPPONENT_REQUIRED = [
@@ -413,7 +419,25 @@ export function OpponentEditor({ items, onChange }: {
 }) {
   // spread ของเดิมไว้เสมอ → `damage` / `kfk` / คีย์ที่ยังไม่รู้จัก รอดไปกับการบันทึก
   const set = (i: number, k: string, v: string) =>
-    onChange(items.map((it, idx) => (idx === i ? { ...it, [k]: v } : it)));
+    onChange(items.map((it, idx) => {
+      if (idx !== i) return it;
+      const next: LooseRecord = { ...it, [k]: v };
+      // "ไม่มีบริษัทประกันภัย" → เลขกรมธรรม์ "-" ให้เอง (EMCS บังคับช่องนี้ทุกบริษัท · กติกาช่องบังคับไม่มีข้อมูล = "-")
+      // เปลี่ยนกลับเป็นบริษัทจริงแล้วยังเป็น "-" อยู่ → ล้างให้กรอกเลขจริง (user ขอ 10/09/69)
+      if (k === 'insurer') {
+        const pn = String(next.policy_no ?? '').trim();
+        if (v === NO_INSURER && !pn) next.policy_no = '-';
+        else if (v !== NO_INSURER && pn === '-') next.policy_no = '';
+      }
+      return next;
+    }));
+
+  // ระเบียนที่มีอยู่แล้ว (แอปเก่าส่ง policy_no ว่างมากับ "ไม่มีบริษัทประกันภัย") → เติม "-" ตอนเปิดหน้าให้ด้วย
+  useEffect(() => {
+    const fixed = items.map((it) =>
+      String(it.insurer ?? '') === NO_INSURER && !String(it.policy_no ?? '').trim() ? { ...it, policy_no: '-' } : it);
+    if (fixed.some((x, i) => x !== items[i])) onChange(fixed);
+  }, [items, onChange]);
 
   /** หน้าต่าง "ข้อมูลความเสียหาย" ของคู่กรณีคันที่เปิดอยู่ (null = ปิด)
    *  เดิมความเสียหายคู่กรณีแก้ได้เฉพาะในแอป หน้าตรวจเห็นแค่ตัวเลข → หัวหน้าตรวจไม่ได้
