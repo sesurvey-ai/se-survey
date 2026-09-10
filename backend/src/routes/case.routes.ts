@@ -185,6 +185,10 @@ const submitSurveySchema = z.object({
   acc_subdistrict: optStr,
   acc_province: optStr,
   acc_district: optStr,
+  // สถานที่ออกตรวจสอบ (มือถือ APK 1.0.105, 10/09/69) — z.object ตัดคีย์ที่ไม่ประกาศทิ้งเงียบ ๆ ต้องมีที่นี่
+  survey_place: optStr,
+  survey_province: optStr,
+  survey_district: optStr,
   acc_cause: optStr,
   acc_damage_type: optStr,
   acc_detail: optStr,

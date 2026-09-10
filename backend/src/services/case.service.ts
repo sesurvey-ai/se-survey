@@ -205,6 +205,7 @@ export const caseService = {
         'chassis_no','engine_no','car_reg_year',
         'driver_first_name','driver_last_name','driver_phone',
         'acc_date','acc_time','acc_place','acc_subdistrict','acc_province','acc_district',
+      'survey_place','survey_province','survey_district',   // สถานที่ออกตรวจสอบ (มือถือส่งตั้งแต่ APK 1.0.105, 10/09/69)
         'acc_cause','acc_damage_type','acc_detail','acc_fault',
         'acc_reporter','reporter_phone','acc_customer_report_date','acc_insurance_notify_date',
         'acc_insurance_notify_time','receiver_name','surveyor_name','surveyor_phone',
@@ -340,6 +341,7 @@ export const caseService = {
       'chassis_no', 'engine_no', 'car_reg_year',
       'driver_first_name', 'driver_last_name', 'driver_phone',
       'acc_date', 'acc_time', 'acc_place', 'acc_subdistrict', 'acc_province', 'acc_district',
+      'survey_place', 'survey_province', 'survey_district', 'survey_subdistrict',
       'acc_cause', 'acc_detail', 'acc_reporter', 'reporter_phone',
     ];
     const payload: Record<string, unknown> = {
@@ -656,6 +658,7 @@ export const caseService = {
       'driver_license_type','driver_license_place','driver_license_start','driver_license_end',
       'driver_relation','driver_ticket','damage_description','repair_shop','estimated_cost','insured_damage',
       'acc_date','acc_time','acc_place','acc_subdistrict','acc_province','acc_district',
+      'survey_place','survey_province','survey_district',   // สถานที่ออกตรวจสอบ (มือถือส่งตั้งแต่ APK 1.0.105, 10/09/69)
       'acc_cause','acc_damage_type','acc_detail','acc_fault','acc_fault_opponent_no',
       'acc_reporter','reporter_phone','acc_surveyor','acc_surveyor_branch','acc_surveyor_phone',
       'acc_customer_report_date','customer_reported_at','acc_insurance_notify_date',
@@ -913,6 +916,7 @@ export const caseService = {
         'driver_license_type','driver_license_place','driver_license_start','driver_license_end',
         'driver_relation','driver_ticket','damage_description','repair_shop','estimated_cost','insured_damage',
         'acc_date','acc_time','acc_place','acc_subdistrict','acc_province','acc_district',
+      'survey_place','survey_province','survey_district',   // สถานที่ออกตรวจสอบ (มือถือส่งตั้งแต่ APK 1.0.105, 10/09/69)
         'acc_cause','acc_damage_type','acc_detail','acc_fault','acc_fault_opponent_no',
         'acc_reporter','reporter_phone','acc_surveyor','acc_surveyor_branch','acc_surveyor_phone',
         'acc_customer_report_date','customer_reported_at','acc_insurance_notify_date',
