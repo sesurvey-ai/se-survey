@@ -339,27 +339,30 @@ export const dropEmptyRecords = (items: RecordItem[]): RecordItem[] =>
 // ⚠️ `province` ทำ 2 หน้าที่ในสคีมาของแอป: จังหวัดป้ายทะเบียน **และ** จังหวัดที่อยู่ผู้ขับขี่
 //    (เป็น parent ของ cascade อำเภอ) — สืบทอดมาจากฝั่งแอป ยังไม่ได้แยก
 const OPPONENT_FIELDS: FieldDef[] = [
-  // เจ้าของรถคู่กรณีขึ้นก่อนเป็นช่องแรก + ที่อยู่ต่อท้ายทันที (ลำดับเดียวกับบล็อกคู่กรณีบน EMCS) — user ขอ 10/09/69
+  // ลำดับ 5 แถวแรก user กำหนดเอง 10/09/69 (กริด 4 ช่องต่อแถวบนจอกว้าง):
+  //   แถว 1 เจ้าของรถคู่กรณี · ประเภทรถ · ทะเบียน · จังหวัด
+  //   แถว 2 ยี่ห้อ · รุ่น · สีรถ · ปีจดทะเบียน
+  //   แถว 3 เลขตัวถัง · เลขไมล์ · ประเภทรถไฟฟ้า · เลขเคลมคู่กรณี
+  //   แถว 4 มีประกันภัยที่ · เลขกรมธรรม์ · ประเภทประกัน (ช่องที่ 4 ว่าง)
+  //   แถว 5 ที่อยู่เจ้าของรถ เต็มแถว — ที่เหลือลำดับเดิม
+  // ⛔ user ตัดสินไม่เพิ่มช่องที่แอปมีแต่เว็บไม่มี (ชนิดบัตร · รายละเอียดความเสียหาย · รอตรวจสอบ) เพราะ EMCS ไม่มีช่องรับ
   { k: 'owner_name', label: 'เจ้าของรถคู่กรณี *' },
-  { k: 'owner_address', label: 'ที่อยู่เจ้าของรถ', wide: true },
   { k: 'car_type', label: 'ประเภทรถ *', optionsFrom: (r) => withCurrentOption(OPO_CAR_TYPES, r.car_type) },
   { k: 'plate', label: 'ทะเบียน *' },
   { k: 'province', label: 'จังหวัด *', options: PROVINCE_OPTIONS },
   { k: 'car_brand', label: 'ยี่ห้อ', optionsFrom: (r) => carBrandOptions(String(r.car_type ?? ''), String(r.car_brand ?? '')) },
   { k: 'car_model', label: 'รุ่น' },
-  { k: 'reg_year', label: 'ปีจดทะเบียน' },
   // ค่าที่นำเข้าจาก ISURVEY มักสะกดไม่ตรงลิสต์ (เคส #255 สีรถ "บอน") — เดิม <select> ไม่มี option ตรง value
   // → โชว์ "-- ระบุ --" ทั้งที่มีค่าอยู่ แล้วบอทกรอก EMCS ด้วยค่าจริง (fuzzy → "บรอน") หัวหน้าเลยงงว่า EMCS รู้ได้ไง
   // คงค่าเดิมไว้เป็นตัวเลือกให้เห็นและแก้ได้ (user ถาม 10/09/69)
   { k: 'car_color', label: 'สีรถ', optionsFrom: (r) => withCurrentOption(CAR_COLOR_OPTIONS, r.car_color) },
+  { k: 'reg_year', label: 'ปีจดทะเบียน' },
   { k: 'vin', label: 'เลขตัวถัง' },
   { k: 'mileage', label: 'เลขไมล์' },
   // ต้องเป็นตัวเลือก ไม่ใช่ช่องพิมพ์ — แอปเก็บ "รหัส" (BEV/HEV/…) และบอทเลือกด้วย
   // select_by_value แบบตรงตัว พิมพ์เองเพี้ยนนิดเดียว = บอทข้ามช่องนี้เงียบ ๆ
   { k: 'ev_type', label: 'ประเภทรถไฟฟ้า', options: EV_TYPE_OPTIONS.map((e) => e.value).filter(Boolean) },
-  // ชื่อเดียวกับช่องของรถประกันและ EMCS — user หาช่องนี้ไม่เจอตอนชื่อ "ค่าเสียหายประมาณ" (04/09/69)
-  // ยอด = Σ(ค่าแรง+ค่าอะไหล่) จากตารางความเสียหายของคู่กรณี (ตัวแปลง ISURVEY คำนวณให้เหมือนรถประกัน)
-  { k: 'estimated_cost', label: 'ความเสียหายประมาณ (บาท)' },
+  { k: 'claim_no', label: 'เลขเคลมคู่กรณี' },
   // dropdown ไม่ใช่ช่องพิมพ์ — บน EMCS ช่องนี้คือ ddlHave_Insurance และบอทเลือกด้วย
   // fuzzy_select · สะกดเองเพี้ยนนิดเดียว บอทข้ามช่องนี้เงียบ ๆ (ดู insurerOptions.ts)
   { k: 'insurer', label: 'มีประกันภัยที่ *', optionsFrom: (r) => insurerOptions(String(r.insurer ?? '')) },
@@ -369,7 +372,11 @@ const OPPONENT_FIELDS: FieldDef[] = [
   // (ตัว renderer เลือกตาม value ตรงตัว ค่าที่ไม่อยู่ในลิสต์จะกลายเป็นช่องว่างแล้วหายตอนบันทึก)
   { k: 'policy_type', label: 'ประเภทประกัน',
     optionsFrom: (r) => withCurrentOption(POLICY_TYPE_OPTIONS, r.policy_type) },
-  { k: 'claim_no', label: 'เลขเคลมคู่กรณี' },
+  { k: 'owner_address', label: 'ที่อยู่เจ้าของรถ', wide: true },
+  // ชื่อเดียวกับช่องของรถประกันและ EMCS — user หาช่องนี้ไม่เจอตอนชื่อ "ค่าเสียหายประมาณ" (04/09/69)
+  // ยอด = Σ(ค่าแรง+ค่าอะไหล่) จากตารางความเสียหายของคู่กรณี (ตัวแปลง ISURVEY คำนวณให้เหมือนรถประกัน)
+  // (วาดแยกเหนือปุ่ม "ข้อมูลความเสียหาย" ไม่อยู่ในกริด — ดู OPPONENT_COST_FIELD)
+  { k: 'estimated_cost', label: 'ความเสียหายประมาณ (บาท)' },
   { k: 'title', label: 'คำนำหน้า', optionsFrom: (r) => withCurrentOption(TITLES, r.title) },
   { k: 'first_name', label: 'ชื่อผู้ขับขี่' },
   { k: 'last_name', label: 'นามสกุล' },
