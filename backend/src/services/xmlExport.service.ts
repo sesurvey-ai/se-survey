@@ -343,6 +343,24 @@ function parseSe(dateStr: unknown, timeStr?: unknown): { d: string; m: string; y
            hh: tm ? tm[1].padStart(2, '0') : '00', mi: tm ? tm[2].padStart(2, '0') : '00' };
 }
 // วันที่ใน XML ทุก field : แปลงเป็น ค.ศ. (ลบ 543) — ยืนยันจาก export จริง (ดู header)
+/**
+ * อายุผู้ขับขี่ (DRI_AGE) ต้องเป็นตัวเลขล้วน — ตัวนำเข้า XML ของ EMCS ปัดตก**ทั้งไฟล์**เมื่อเป็นข้อความ
+ * (เจอจริงเคส #282 10/09/69: คู่กรณี "รอตรวจสอบ" ถูกกรอกอายุ "-" ตามกติกาช่องข้อความบังคับ → EMCS ฟ้อง
+ * "TXN_SURV_CAR DRI_AGE รถคู่กรณีคันที่ 20" ซึ่ง 20 = รหัส TYPE ของรถคู่กรณี ไม่ใช่จำนวนคัน)
+ * ไม่มีเลข → คิดจากวันเกิด (พ.ศ.) · ไม่มีทั้งคู่ → ว่าง ให้ไปติดด่านบล็อกคู่กรณีบน EMCS แทน (คนต้องเติมค่าจริง)
+ */
+const xmlAge = (age: unknown, birthdate: unknown): string => {
+  const m = /\d{1,3}/.exec(String(age ?? ''));
+  if (m) return m[0];
+  const p = parseSe(birthdate);
+  if (!p) return '';
+  const now = new Date();
+  let a = (now.getFullYear() + 543) - p.yBE;
+  const mm = now.getMonth() + 1;
+  if (mm < Number(p.m) || (mm === Number(p.m) && now.getDate() < Number(p.d))) a -= 1;
+  return a > 0 && a < 130 ? String(a) : '';
+};
+
 const toXmlCE = (dateStr: unknown, timeStr?: unknown): string => {
   const p = parseSe(dateStr, timeStr); if (!p) return '';
   return `${p.yBE - 543}-${p.m}-${p.d} ${p.hh}:${p.mi}:00`;
@@ -425,7 +443,7 @@ function buildCar(c: Row, type: number, insured: boolean): string {
     el('CCL_ID', lookup(COLOR, c.car_color)) +
     el('DRI_TITLE_ID', lookup(TITLE, insured ? c.driver_title : c.title)) +
     el('DRI_NAME', driName) +
-    el('DRI_AGE', insured ? c.driver_age : c.age) +
+    el('DRI_AGE', xmlAge(insured ? c.driver_age : c.age, insured ? c.driver_birthdate : c.birthdate)) +
     el('DRI_RELATION', lookup(RELATION, insured ? c.driver_relation : c.relation)) +
     el('DRI_ADDRESS', insured ? c.driver_address : c.address) +
     // คู่กรณีไม่มีช่องอำเภอในแอป (มีแต่ที่อยู่) → ปล่อยว่างเฉพาะคู่กรณี

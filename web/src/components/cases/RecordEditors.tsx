@@ -167,6 +167,10 @@ function Field({ def, value, onChange }: { def: FieldDef; value: string; onChang
   const v = String(value ?? '');
   const badChars = badNameChars(def.k, v);
   const badCid = def.k === 'cid' && v.trim() !== '' && !cidChecksum(v);
+  // อายุ/วันที่ต้องเป็นรูปแบบที่ระบบประกันรับ — "-" ในช่องอายุทำ EMCS ปัดตกทั้งไฟล์ XML (เคส #282 10/09/69)
+  const badAge = def.k === 'age' && v.trim() !== '' && !/^\d{1,3}$/.test(v.trim());
+  const badDate = ['birthdate', 'license_start', 'license_end'].includes(def.k)
+    && v.trim() !== '' && !/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(v.trim());
   /**
    * ชื่อบริษัทที่ไม่มีในลิสต์ของ EMCS — บอทเลือกไม่ได้
    * เกิดกับงานเก่าที่นำเข้ามาก่อนมีลิสต์นี้ และชื่อฝั่ง ISURVEY ที่แปลงอัตโนมัติไม่ได้
@@ -177,7 +181,9 @@ function Field({ def, value, onChange }: { def: FieldDef; value: string; onChang
   const warn = badChars ? `EMCS ไม่รับอักขระ ${badChars}`
     : offList ? 'ชื่อนี้ไม่มีใน EMCS — เลือกใหม่จากลิสต์'
       : badCid ? 'เลขบัตรไม่ถูกต้อง — EMCS จะไม่ยอมบันทึกทั้งบล็อก'
-        : '';
+        : badAge ? 'อายุต้องเป็นตัวเลข — ใส่ "-" แล้ว EMCS ปัดตกทั้งไฟล์ (ไม่รู้ = เว้นว่าง)'
+          : badDate ? 'ต้องเป็น วว/ดด/ปปปป (พ.ศ.) — ใส่ "-" ไม่ได้ (ไม่รู้ = เว้นว่าง)'
+            : '';
   const c = cls(def, v, warn);
   return (
     <div className={def.wide ? 'col-span-2 md:col-span-4' : ''}>

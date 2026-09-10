@@ -330,5 +330,18 @@ console.log('\n── การ์ด: เงินฝั่งพนักง�
         `มือถือ ${mobileList.length} / เว็บ ${list.length}`);
 }
 
+// ── DRI_AGE ต้องเป็นตัวเลขล้วน — "-" ทำ EMCS ปัดตกทั้งไฟล์ (เคส #282 10/09/69 "รถคู่กรณีคันที่ 20" = TYPE 20) ──
+{
+  const opp = (age: unknown, birthdate: unknown) => {
+    const x = generateSurveyXml({ ...row, opposing_parties: [{ ...(row.opposing_parties as any[])[0], age, birthdate }] } as never);
+    const cars = [...x.matchAll(/<TXN_SURV_CAR>([\s\S]*?)<\/TXN_SURV_CAR>/g)].map((m) => m[1]);
+    const o = cars.find((c) => c.includes('<TYPE>20</TYPE>')) ?? '';
+    return (o.match(/<DRI_AGE>(.*?)<\/DRI_AGE>/) || [])[1] ?? null;
+  };
+  check('อายุ "-" + วันเกิดจริง → คิดอายุจากวันเกิดเป็นตัวเลข', /^\d{1,3}$/.test(String(opp('-', '20/02/2527'))), `ได้ ${opp('-', '20/02/2527')}`);
+  check('อายุ "-" + วันเกิด "-" → ว่าง (ไม่ส่ง "-" ให้ EMCS ปัดตก)', String(opp('-', '-')).trim() === '', `ได้ ${JSON.stringify(opp('-', '-'))}`);
+  check('อายุตัวเลขปกติยังส่งตรง ๆ', opp(40, '') === '40');
+}
+
 console.log(`\n${failed === 0 ? '✅ ผ่านทั้งหมด' : `❌ ล้มเหลว ${failed} รายการ`}`);
 process.exit(failed === 0 ? 0 : 1);
