@@ -531,7 +531,7 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                     ]),
                   ),
 
-                const SizedBox(height: 24),
+                const SizedBox(height: 12),
 
                 // เสร็จงานหน้างานแล้ว (finished, 07/09/69) — ไม่ต้องยืนยันถึงที่เกิดเหตุอีก
                 // เหลือกรอกรายงานต่อ (ที่ไหนก็ได้) แล้วกดส่ง · รับงานถัดไปได้แล้ว
@@ -613,6 +613,12 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                     _surveyButton(caseModel, 'เริ่มสำรวจ', Icons.assignment),
                   ],
                 ],
+
+                // รูปหน้าการ์ดอยู่ใต้ปุ่ม (10/09/69) — ปุ่มถ่ายรูปยืนยัน/เริ่มสำรวจ ต้องกดได้โดยไม่ต้องเลื่อนหน้าจอ
+                if (_report != null) ...[
+                  const SizedBox(height: 16),
+                  _buildCardImageCard(),
+                ],
               ],
             ),
           );
@@ -684,8 +690,6 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
   //   หัวการ์ดใช้บอกสถานะแทน — ยืนยันถึงที่เกิดเหตุแล้ว = แถบเขียว (กล่องเขียวท้ายหน้าเดิมตัดออก)
   //   ประเภทเคลมที่เคยเป็นป้ายบนแถบน้ำเงิน ย้ายลงมาเป็นแถวในเลขอ้างอิง
   Widget _buildVehicleCard({required bool arrived}) {
-    final images = (_report?['case_images'] as List?) ?? [];
-    final ocrImages = images.where((img) => img['image_type'] == 'ocr').toList();
     return Card(
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -724,18 +728,27 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
               ],
             ),
           ),
-          const Divider(height: 1),
+        ],
+      ),
+    );
+  }
 
-          // รูปหน้าการ์ด (ที่ระบบ OCR อ่าน) เต็มการ์ด ไม่มี padding — แตะเพื่อดูเต็มจอ
-          if (ocrImages.isNotEmpty)
-            Column(
+  /// การ์ดรูปหน้าการ์ด (ที่ระบบ OCR อ่าน) — แยกออกจากการ์ดเลขอ้างอิง (10/09/69) เพื่อให้ปุ่ม
+  /// ถ่ายรูปยืนยัน/เริ่มสำรวจ อยู่ใต้เลขอ้างอิงทันที ไม่ต้องเลื่อนผ่านรูปการ์ดที่สูงเกือบเต็มจอ
+  /// และไม่ไปจมอยู่ท้ายหน้าให้แถบปุ่มเครื่องบัง (user ขอ) · แตะรูปเพื่อดูเต็มจอเหมือนเดิม
+  Widget _buildCardImageCard() {
+    final images = (_report?['case_images'] as List?) ?? [];
+    final ocrImages = images.where((img) => img['image_type'] == 'ocr').toList();
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: ocrImages.isNotEmpty
+          ? Column(
               children: [
                 for (int i = 0; i < ocrImages.length; i++)
                   _cardImage(ocrImages[i]['file_path']?.toString() ?? ''),
               ],
             )
-          else
-            Padding(
+          : Padding(
               padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
               child: Center(
                 child: Column(
@@ -747,8 +760,6 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                 ),
               ),
             ),
-        ],
-      ),
     );
   }
 
