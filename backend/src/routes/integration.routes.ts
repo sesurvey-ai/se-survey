@@ -269,7 +269,12 @@ router.get('/cases/:id', integrationAuth, asyncHandler(async (req: Request, res:
             to_char(c.emcs_imported_at, 'YYYY-MM-DD HH24:MI') AS emcs_imported_at, c.emcs_esurvey_no,
             (c.status = 'reviewed') AS approved,
             to_char(rv.reviewed_at, 'YYYY-MM-DD HH24:MI') AS approved_at,
-            COALESCE(NULLIF(rv.inspector_name, ''), ck.first_name || ' ' || ck.last_name) AS approved_by
+            COALESCE(NULLIF(rv.inspector_name, ''), ck.first_name || ' ' || ck.last_name) AS approved_by,
+            -- "ครั้งที่" (13/09/69): visit_no = เลขที่เก็บชัด (ตัวดึงงาน/งานครั้งถัดไป) · visit_count = นับจากลำดับสร้างของเคลม
+            -- บอทใช้ visit_no ตรวจลำดับครั้งกับ EMCS ก่อนกด 'งานต่อเนื่อง' (ไม่มี = ตรวจแค่ซ้ำ)
+            c.visit_no,
+            (SELECT COUNT(*)::int FROM cases c2 JOIN survey_reports s2 ON s2.case_id = c2.id
+              WHERE s2.claim_no = sr.claim_no AND c2.created_at <= c.created_at) AS visit_count
        FROM cases c
        LEFT JOIN survey_reports sr ON sr.case_id = c.id
        LEFT JOIN reviews rv ON rv.case_id = c.id

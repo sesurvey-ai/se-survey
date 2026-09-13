@@ -364,6 +364,18 @@ export const caseService = {
     for (const f of CARRY) if (row[f] !== null && row[f] !== undefined && row[f] !== '') payload[f] = row[f];
 
     const created = await this.create(payload as never, createdBy);
+    // "ครั้งที่" ของงานครั้งถัดไป = ครั้งล่าสุดของเคลมในเว็บ + 1 (13/09/69) เก็บชัดให้บอทตรวจลำดับกับ EMCS ได้
+    // (ดูทั้ง visit_no ที่ตัวดึงงานเก็บไว้และจำนวนเคสของเคลม เอาที่มากกว่า) · นับไม่ได้ = ปล่อยว่าง เว็บนับจากลำดับสร้างเหมือนเดิม
+    try {
+      await db.query(
+        `UPDATE cases SET visit_no = (
+           SELECT GREATEST(COALESCE(MAX(c2.visit_no), 0), COUNT(*))::int + 1
+             FROM cases c2 JOIN survey_reports s2 ON s2.case_id = c2.id
+            WHERE s2.claim_no = $2 AND c2.id <> $1)
+          WHERE id = $1`, [(created as { id: number }).id, claimNo]);
+    } catch (e) {
+      console.warn(`createFollowup: ตั้ง visit_no ไม่สำเร็จ (${(e as Error).message})`);
+    }
     return { ...created, from_case_id: caseId, claim_no: claimNo };
   },
 
