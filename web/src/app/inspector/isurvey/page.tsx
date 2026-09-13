@@ -36,6 +36,10 @@ type PullResult = {
 };
 
 const PENDING = 'รอตรวจข้อมูล';
+/** สถานะที่กดดึงเข้าได้ (user เคาะ 13/09/69): รอตรวจข้อมูล = งานใหม่เข้าคิวตรวจ · จบงาน = งานปิดแล้ว
+ *  สถานะอื่น (ยังทำงานอยู่บน ISURVEY / ตรวจสอบแล้ว / ยกเลิก / ไม่รับงาน) ซ่อนปุ่ม — ตัวดึงงานฝั่ง server กันซ้ำอีกชั้น */
+const PULLABLE = new Set([PENDING, 'จบงาน']);
+const pullable = (r: Row) => PULLABLE.has(String(r.status ?? '').trim());
 const NO_STATUS = '(ไม่ระบุ)';
 /**
  * จำรายการที่โหลดล่าสุดไว้ในแท็บนี้ (sessionStorage) — เปลี่ยนเมนู/เด้งไปหน้าเคสแล้วกลับมาไม่ต้องโหลดใหม่
@@ -214,7 +218,7 @@ export default function IsurveyPendingPage() {
   };
 
   const pullAll = async () => {
-    const todo = visible.filter((r) => !r.imported_case_id && r.claim_no);   // ไม่มีเลขเคลม = ดึงไม่ได้ ข้าม
+    const todo = visible.filter((r) => !r.imported_case_id && r.claim_no && pullable(r));   // ไม่มีเลขเคลม/สถานะดึงไม่ได้ = ข้าม
     if (todo.length === 0) return;
     const label = isAll ? 'ทุกสถานะ' : `สถานะ "${statuses.join('", "')}"`;
     if (!window.confirm(`ดึงงานที่ยังไม่มีในระบบ (${label}) ทั้งหมด ${todo.length} เรื่อง? (ทีละเรื่อง ใช้เวลาประมาณ ${todo.length * 15} วินาที)`)) return;
@@ -369,11 +373,15 @@ export default function IsurveyPendingPage() {
                       )}
                     </td>
                     <td className="px-2 py-2 text-right whitespace-nowrap">
-                      <button type="button" disabled={busy || bulk || !r.claim_no} onClick={() => { if (confirmPull(r)) void pullOne(r, { navigate: true }); }}
-                        className={`px-3 py-1 text-xs border ${r.imported_case_id ? 'border-gray-300 bg-white text-gray-700' : 'border-[var(--md-blue)] bg-[var(--md-blue)] text-white'} disabled:opacity-50 disabled:cursor-not-allowed`}
-                        title={!r.claim_no ? 'ISURVEY ยังไม่มีเลขเคลมของงานนี้ — ดึงเข้าไม่ได้' : r.imported_case_id ? 'ดึงซ้ำ = สร้างเคสใหม่อีกเคส (ระวังซ้ำ)' : 'สร้างเคส + ดึงรูป แล้วเปิดหน้าเคส'}>
-                        {busy ? 'กำลังดึง…' : r.imported_case_id ? 'ดึงซ้ำ' : 'ดึงเข้า'}
-                      </button>
+                      {pullable(r) ? (
+                        <button type="button" disabled={busy || bulk || !r.claim_no} onClick={() => { if (confirmPull(r)) void pullOne(r, { navigate: true }); }}
+                          className={`px-3 py-1 text-xs border ${r.imported_case_id ? 'border-gray-300 bg-white text-gray-700' : 'border-[var(--md-blue)] bg-[var(--md-blue)] text-white'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                          title={!r.claim_no ? 'ISURVEY ยังไม่มีเลขเคลมของงานนี้ — ดึงเข้าไม่ได้' : r.imported_case_id ? 'ดึงซ้ำ = สร้างเคสใหม่อีกเคส (ระวังซ้ำ)' : 'สร้างเคส + ดึงรูป แล้วเปิดหน้าเคส'}>
+                          {busy ? 'กำลังดึง…' : r.imported_case_id ? 'ดึงซ้ำ' : 'ดึงเข้า'}
+                        </button>
+                      ) : (
+                        <span className="text-xs text-gray-400" title={`ดึงได้เฉพาะสถานะ "รอตรวจข้อมูล" หรือ "จบงาน" — งานนี้สถานะ "${r.status || '-'}"`}>ยังดึงไม่ได้</span>
+                      )}
                     </td>
                   </tr>
                 );
