@@ -1151,7 +1151,8 @@ export const caseService = {
               (SELECT sp2.total FROM survey_pay sp2 WHERE sp2.case_id = c.id) AS pay_total,
               (SELECT se.service_fee_price IS NOT NULL
                  FROM survey_expenses se WHERE se.report_id = sr.id) AS has_insurer_bill,
-              ROW_NUMBER() OVER (PARTITION BY sr.claim_no ORDER BY c.created_at) AS visit_count,
+              -- ครั้งที่: ใช้เลขที่ตัวดึงงานเก็บไว้ (visit_no, migration 060) ก่อน ไม่มีค่อยนับจากลำดับสร้าง
+              COALESCE(c.visit_no, ROW_NUMBER() OVER (PARTITION BY sr.claim_no ORDER BY c.created_at))::int AS visit_count,
               -- คิวนำเข้า EMCS (สถานีนำเข้า, migration 052): งานล่าสุดของเคส + ลำดับถ้ายังรอ
               ej.id AS emcs_job_id, ej.status AS emcs_job_status, ej.dry_run AS emcs_job_dry_run,
               ej.station AS emcs_job_station, ej.error AS emcs_job_error, ej.screenshot_path AS emcs_job_screenshot,
@@ -1305,7 +1306,7 @@ export const caseService = {
       visits = (await db.query(
         `SELECT c.id, c.status, sr.survey_job_no,
                 to_char(c.created_at, 'YYYY-MM-DD') AS created_on,
-                ROW_NUMBER() OVER (ORDER BY c.created_at) AS visit_no,
+                COALESCE(c.visit_no, ROW_NUMBER() OVER (ORDER BY c.created_at))::int AS visit_no,
                 sr.survey_result, sr.review_comment, sr.surveyor_comment,
                 se.service_fee_count, se.service_fee_price,
                 se.travel_fee_count, se.travel_fee_price,
@@ -1613,8 +1614,8 @@ export const caseService = {
         // BILLABLE_SOURCES (isurvey_xml + mobile + isurvey_live) — 'emcs_extract' ยังถูกกันไว้
         // เคสทดสอบจึงไม่ดันยอดเงินของประกันเองกลับเข้าระบบประกันโดยไม่ตั้งใจ
         `INSERT INTO cases (customer_name, incident_location, created_by, assigned_to, status, source,
-                            import_warnings, submitted_at)
-         VALUES ($1, $2, $3, $4, 'surveyed', $5, $6, $7) RETURNING *`,
+                            import_warnings, submitted_at, visit_no)
+         VALUES ($1, $2, $3, $4, 'surveyed', $5, $6, $7, $8) RETURNING *`,
         [parsed.caseFields.customer_name || '(ไม่ระบุชื่อผู้เอาประกัน)',
          parsed.caseFields.incident_location || '(ไม่ระบุสถานที่)',
          opts.createdBy, assignedTo, parsed.source,
@@ -1622,7 +1623,9 @@ export const caseService = {
          // คนที่มาเปิดรายการงานทีหลังจึงไม่รู้เลยว่าเคสไหนข้อมูลไม่ครบ
          parsed.warnings?.length ? JSON.stringify(parsed.warnings) : null,
          // "ส่งงาน" ของงานจาก ISURVEY = เวลาที่ช่างส่งรายงานบนระบบเดิม (จังหวะ 6 ของเส้นเวลา, 10/09/69) · ไฟล์ XML ไม่มี = null
-         parsed.caseFields.submitted_at ?? null]);
+         parsed.caseFields.submitted_at ?? null,
+         // "ครั้งที่" ตามเลขเซอร์เวย์ (ตัวดึงงานคำนวณ, migration 060) · null = นับจากลำดับสร้างเหมือนเดิม
+         parsed.visitNo ?? null]);
       const caseId = c.rows[0].id;
 
       // เขียนเฉพาะคอลัมน์ที่มีจริง (ใช้ allowlist ชุดเดียวกับ updateReport) — กัน SQL พัง
@@ -1662,9 +1665,34 @@ export const caseService = {
           [rid.rows[0].id, ...ef.map((k) => exp[k])]);
       }
 
+      /**
+       * งานอ้างอิง (13/09/69): ครั้งก่อนหน้าของเคลมที่ปิดจบบน ISURVEY แล้ว ตัวดึงงานเอามาให้เห็นประวัติครบเหมือน EMCS
+       * ต้อง "ปิด" ตั้งแต่สร้าง: อนุมัติแล้ว (ล็อก อ่านอย่างเดียว ไม่เข้าคิวตรวจ) + ถือว่าเข้า EMCS แล้ว (ครั้งนั้นอยู่ในเรื่อง
+       * บน EMCS อยู่แล้ว บอทห้ามนำเข้าซ้ำ) + ปิด ISURVEY แล้ว (ไม่เขียนกลับ) · ตั้งใจไม่ผ่าน submitReview เพราะไม่ต้องส่ง
+       * se-billing/ไม่ต้องปิด ISURVEY · ใบอนุมัติลงชื่อ "อ้างอิง ISURVEY" ไม่ใช่ชื่อคนที่กดดึง (เขาไม่ได้ตรวจใบนี้)
+       * เวลาจาก ISURVEY เป็นเวลาไทย (+07:00) — คอลัมน์ TIMESTAMP ไม่มีโซนเก็บเป็น UTC ตามระบบ จึงแปลงก่อน
+       */
+      if (parsed.reference) {
+        const closedAt = parsed.reference.closedAt ?? null;
+        await client.query(
+          `UPDATE cases
+              SET status = 'reviewed',
+                  isurvey_closed_at = COALESCE($2::timestamptz, NOW()),
+                  emcs_imported_at = COALESCE(($2::timestamptz AT TIME ZONE 'UTC'), NOW()),
+                  emcs_status_text = 'อ้างอิง ISURVEY — ครั้งก่อนหน้าที่ปิดแล้ว (อยู่ในเรื่องบน EMCS แล้ว)'
+            WHERE id = $1`, [caseId, closedAt]);
+        await client.query(
+          `INSERT INTO reviews (case_id, checker_id, comment, status, reviewed_at, inspector_name)
+           VALUES ($1, $2, $3, 'approved', COALESCE(($4::timestamptz AT TIME ZONE 'UTC'), NOW()), 'อ้างอิง ISURVEY')`,
+          [caseId, opts.createdBy,
+           `เคสอ้างอิงจาก ISURVEY (ครั้งที่ ${parsed.reference.round ?? parsed.visitNo ?? '?'} ปิดจบแล้ว) — ` +
+           'ระบบดึงมาให้เห็นประวัติของเคลมตอนดึงงานครั้งถัดไป ไม่ต้องตรวจ ไม่ส่งเข้า EMCS/se-billing อีก',
+           closedAt]);
+      }
+
       await client.query('COMMIT');
       notifyCaseChanged(caseId, 'imported', null);
-      return { caseId, assignedTo, surveyorCode: parsed.surveyorCode };
+      return { caseId, assignedTo, surveyorCode: parsed.surveyorCode, reference: Boolean(parsed.reference) };
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;
@@ -2010,7 +2038,7 @@ export const caseService = {
       `SELECT c.*, u.first_name AS surveyor_first_name, u.last_name AS surveyor_last_name,
               d.first_name AS declined_first_name, d.last_name AS declined_last_name, d.code AS declined_code,
               sr.claim_no, sr.survey_job_no, sr.claim_ref_no,
-              ROW_NUMBER() OVER (PARTITION BY sr.claim_no ORDER BY c.created_at) AS visit_count
+              COALESCE(c.visit_no, ROW_NUMBER() OVER (PARTITION BY sr.claim_no ORDER BY c.created_at))::int AS visit_count
        FROM cases c LEFT JOIN users u ON c.assigned_to = u.id
        LEFT JOIN users d ON c.declined_by = d.id
        LEFT JOIN survey_reports sr ON sr.case_id = c.id
@@ -2046,7 +2074,7 @@ export const caseService = {
         `SELECT c.*, u.first_name AS surveyor_first_name, u.last_name AS surveyor_last_name,
                 d.first_name AS declined_first_name, d.last_name AS declined_last_name, d.code AS declined_code,
                 sr.claim_no, sr.survey_job_no, sr.claim_ref_no,
-                ROW_NUMBER() OVER (PARTITION BY sr.claim_no ORDER BY c.created_at) AS visit_count
+                COALESCE(c.visit_no, ROW_NUMBER() OVER (PARTITION BY sr.claim_no ORDER BY c.created_at))::int AS visit_count
          FROM cases c
          LEFT JOIN users u ON c.assigned_to = u.id
          LEFT JOIN users d ON c.declined_by = d.id

@@ -254,7 +254,11 @@ export interface XmlImportResult {
    *                  → **การตรวจและกรอกยอดเกิดขึ้นที่นี่** ยอดจึงแก้ได้ ต่างจาก isurvey_xml
    *                  ที่ปิดงานบน ISURVEY ไปแล้วและยอดอยู่ที่ se-billing (ดูอย่างเดียว)
    */
-  source: 'isurvey_xml' | 'emcs_extract' | 'isurvey_live';
+  source: 'isurvey_xml' | 'emcs_extract' | 'isurvey_live' | 'isurvey_reference';
+  /** "ครั้งที่" ของงานในเคลม ตามเลขเซอร์เวย์ (ตัวดึงงาน ISURVEY คำนวณ, migration 060) · null = นับจากลำดับสร้าง */
+  visitNo?: number | null;
+  /** งานอ้างอิง (13/09/69): ครั้งก่อนหน้าของเคลมที่ปิดจบบน ISURVEY แล้ว — สร้างเป็นเคสที่อนุมัติ/ปิดแล้วทันที */
+  reference?: { closedAt: string | null; round: number | null } | null;
 }
 
 /** ไฟล์ที่ emcs_dump.py สร้าง จะประทับตรานี้ไว้บรรทัดบนสุด */

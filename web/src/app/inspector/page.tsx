@@ -280,6 +280,7 @@ export default function InspectorDashboard() {
           <option value="mobile">แอปมือถือ</option>
           <option value="isurvey_live">ระบบเก่า (สด)</option>
           <option value="isurvey_xml">ไฟล์ XML</option>
+          <option value="isurvey_reference">อ้างอิง ISURVEY</option>
         </select>
         <select value={who} onChange={(e) => setWho(e.target.value)}
           className="flex-1 min-w-0 border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-800 bg-white">

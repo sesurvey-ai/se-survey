@@ -2022,6 +2022,7 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
   const SRC_BADGE: Record<string, { t: string; c: string }> = {
     mobile: { t: 'แอปมือถือ', c: 'border-emerald-600 text-emerald-800' },
     isurvey_live: { t: 'ระบบเก่า (สด)', c: 'border-sky-600 text-sky-800' },
+    isurvey_reference: { t: 'อ้างอิง ISURVEY', c: 'border-gray-500 text-gray-700' },
     isurvey_xml: { t: 'ไฟล์ XML', c: 'border-violet-600 text-violet-800' },
     emcs_extract: { t: 'ดึงจาก EMCS', c: 'border-slate-500 text-slate-700' },
   };
@@ -2112,6 +2113,15 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
       <div className="min-w-0 space-y-5">
       {report && (
         <>
+          {/* เคสอ้างอิง (13/09/69): ครั้งก่อนหน้าของเคลมที่ปิดจบบน ISURVEY แล้ว ระบบดึงมาให้เห็นประวัติตอนดึงงานครั้งถัดไป
+              อนุมัติ/ปิดแล้วตั้งแต่สร้าง — บอกให้ชัดว่าไม่ต้องตรวจ ไม่ต้องส่งอะไรต่อ */}
+          {String(caseData?.source ?? '') === 'isurvey_reference' && (
+            <div className="border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+              <span className="font-semibold">เคสอ้างอิงจาก ISURVEY</span>
+              {Number(caseData?.visit_count ?? 0) > 0 ? <> — ครั้งที่ {caseData.visit_count} ของเคลมนี้ (ปิดจบบนระบบเก่าแล้ว)</> : null}
+              <span className="text-gray-500"> · ระบบดึงมาให้เห็นประวัติของเคลมตอนดึงงานครั้งถัดไป อ่านอย่างเดียว ไม่ต้องตรวจ ไม่ส่งเข้า EMCS/se-billing อีก</span>
+            </div>
+          )}
           {/* คำอธิบายดอกจัน — จุดแดงชุดเดียวกับที่ผู้สำรวจเห็นบนแอป (อิงตัวตรวจของระบบประกัน) */}
           <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-gray-500">
             <span><span className="text-red-500">*</span> ช่องบังคับของระบบประกัน — เว้นว่างแล้วส่งงานเข้าระบบประกันไม่ผ่าน</span>

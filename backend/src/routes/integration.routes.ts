@@ -119,6 +119,17 @@ router.post('/cases/import', integrationAuth, asyncHandler(async (req: Request, 
     res.status(400).json({ success: false, message: `ทางนี้รับเฉพาะ source='isurvey_live' (ได้รับ '${source}')` });
     return;
   }
+  // งานครั้งถัดไป (13/09/69): ตัวดึงงานส่ง visit_no = ครั้งที่ตามเลขเซอร์เวย์ และส่ง reference มาเมื่อดึง
+  // "ครั้งก่อนหน้าที่ปิดจบบน ISURVEY แล้ว" มาให้เห็นประวัติ → เก็บเป็น source='isurvey_reference'
+  // (อนุมัติแล้ว/ถือว่าเข้า EMCS แล้ว/ปิด ISURVEY แล้ว ตั้งแต่สร้าง — ไม่เข้าคิวตรวจ ไม่เข้ารายการนำเข้า EMCS)
+  const rawRef = (b.reference ?? null) as Record<string, unknown> | null;
+  const reference = rawRef && typeof rawRef === 'object' && !Array.isArray(rawRef)
+    ? {
+        closedAt: (() => { const v = String(rawRef.closed_at ?? '').trim(); return v && Number.isFinite(Date.parse(v)) ? v : null; })(),
+        round: Number.isInteger(Number(rawRef.round)) && Number(rawRef.round) > 0 ? Number(rawRef.round) : null,
+      }
+    : null;
+  const visitNo = Number.isInteger(Number(b.visit_no)) && Number(b.visit_no) > 0 ? Number(b.visit_no) : null;
 
   const rawExp = (b.expenses ?? null) as Record<string, unknown> | null;
   let expenses: Record<string, number | null> | null = null;
@@ -171,7 +182,9 @@ router.post('/cases/import', integrationAuth, asyncHandler(async (req: Request, 
     expenses,
     surveyorCode: String(b.surveyorCode ?? '').toUpperCase(),
     warnings,
-    source: 'isurvey_live',
+    source: reference ? 'isurvey_reference' : 'isurvey_live',
+    visitNo,
+    reference,
   }, { insuranceCompany, createdBy });
 
   res.json({ success: true, data: { ...result, warnings, hasMoney: expenses !== null } });
@@ -234,6 +247,8 @@ router.get('/cases', integrationAuth, asyncHandler(async (_req: Request, res: Re
        LEFT JOIN reviews rv ON rv.case_id = c.id
        LEFT JOIN users ck ON ck.id = rv.checker_id
       WHERE c.status = 'reviewed'
+        -- เคสอ้างอิง (ครั้งก่อนหน้าที่ปิดแล้ว) อยู่ในเรื่องบน EMCS อยู่แล้ว — ห้ามโผล่ในรายการนำเข้าของบอท
+        AND c.source <> 'isurvey_reference'
       ORDER BY c.created_at DESC
       LIMIT 100`
   );

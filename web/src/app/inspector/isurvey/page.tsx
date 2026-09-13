@@ -28,7 +28,12 @@ type Row = {
   imported_case_id?: number | null; imported_status?: string | null;
 };
 type Filter = { applied: boolean; group_name: string | null; members: number; hidden: number };
-type PullResult = { caseId?: number; warnings?: string[]; photos?: { added?: number; error?: string; note?: string } };
+type PullResult = {
+  caseId?: number; warnings?: string[]; photos?: { added?: number; error?: string; note?: string };
+  /** ครั้งที่ของใบที่ดึง (ตามเลขเซอร์เวย์) + ครั้งก่อนหน้าที่ระบบดึงมาเป็นเคสอ้างอิงให้เอง (13/09/69) */
+  visit_no?: number | null;
+  references?: { survey_no: string; round: number; caseId?: number | null; skipped?: string | null }[];
+};
 
 const PENDING = 'รอตรวจข้อมูล';
 const NO_STATUS = '(ไม่ระบุ)';
@@ -184,7 +189,13 @@ export default function IsurveyPendingPage() {
       const d = (res.data?.data ?? {}) as PullResult;
       const photos = d.photos?.error ? `รูป: ${d.photos.error}` : `รูป ${d.photos?.added ?? 0} ใบ`;
       const warn = d.warnings?.length ? ` · เตือน ${d.warnings.length} ข้อ` : '';
-      setResults((m) => ({ ...m, [k]: { ok: true, text: `ดึงแล้ว → เคส #${d.caseId} (${photos}${warn})`, caseId: d.caseId } }));
+      // งานครั้งถัดไป: ระบบดึงครั้งก่อนหน้าของเคลมมาเป็นเคสอ้างอิงให้ก่อนแล้ว (ไม่มีรูป) — บอกให้รู้ว่าได้กี่ใบ/ข้ามใบไหน
+      const refs = d.references ?? [];
+      const refTxt = refs.length
+        ? ` · ครั้งที่ ${d.visit_no ?? '?'} ของเคลม — ดึงครั้งก่อนหน้ามาเป็นเคสอ้างอิง ${refs.filter((x) => x.caseId).length}/${refs.length} ใบ`
+          + (refs.some((x) => x.skipped) ? ` (ข้าม ${refs.filter((x) => x.skipped).map((x) => `ครั้งที่ ${x.round}: ${x.skipped}`).join(', ')})` : '')
+        : '';
+      setResults((m) => ({ ...m, [k]: { ok: true, text: `ดึงแล้ว → เคส #${d.caseId} (${photos}${warn})${refTxt}`, caseId: d.caseId } }));
       setRows((rs) => (rs ?? []).map((x) => (key(x) === k ? { ...x, imported_case_id: d.caseId ?? null, imported_status: 'surveyed' } : x)));
       // ดึงทีละงาน = ตั้งใจจะไปตรวจงานนั้นต่อ → เปิดหน้าเคสให้เลย ไม่ต้องไปหาในรายการงาน
       if (opts.navigate && d.caseId) router.push(`/inspector/cases/${d.caseId}`);

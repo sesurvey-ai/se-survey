@@ -100,6 +100,8 @@ async function probeAutokey(): Promise<AutokeyState> {
 const SOURCE_LABEL: Record<string, { text: string; cls: string }> = {
   mobile: { text: 'แอปมือถือ', cls: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
   isurvey_live: { text: 'ระบบเก่า (สด)', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  // ครั้งก่อนหน้าของเคลมที่ปิดจบบน ISURVEY แล้ว — ระบบดึงมาให้เห็นประวัติตอนดึงงานครั้งถัดไป (13/09/69) อ่านอย่างเดียว
+  isurvey_reference: { text: 'อ้างอิง ISURVEY', cls: 'bg-gray-100 text-gray-500 border-gray-200' },
   isurvey_xml: { text: 'ไฟล์ XML', cls: 'bg-gray-100 text-gray-600 border-gray-200' },
   emcs_extract: { text: 'ข้อมูลทดสอบ', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
 };
