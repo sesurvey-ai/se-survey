@@ -43,6 +43,21 @@ async function attachMembers(g: StaffGroup): Promise<StaffGroup> {
   return { ...g, members: r.rows as StaffMember[], member_count: r.rowCount ?? r.rows.length };
 }
 
+/**
+ * ทะเบียนพนักงาน (users.supervisor_id) ต้องตามทีมเสมอ — คอลัมน์ "หัวหน้า" ในหน้าทะเบียนพนักงานสำรวจอ่านจากคอลัมน์นี้
+ * ซึ่งเดิมมีแต่ตัวนำเข้าไฟล์ตารางเวรเขียน ส่วนหน้าจัดการผู้ใช้/ทีมเขียนลง staff_groups → สองที่ไม่ตามกัน
+ * (user เจอ 14/09/69: ย้าย SEC311/SEC454 ไปทีมศุภชัยแล้ว ทะเบียนยังโชว์ยรรยง) · ทีมที่ยังไม่มีบัญชีผู้ตรวจ = NULL
+ */
+async function syncSupervisorFromTeam(userIds: Array<number | null | undefined>): Promise<void> {
+  const ids = userIds.filter((n): n is number => Number.isInteger(n) && (n as number) > 0);
+  if (!ids.length) return;
+  await db.query(
+    `UPDATE users u SET supervisor_id = (
+        SELECT g.checker_id FROM staff_group_members m JOIN staff_groups g ON g.id = m.group_id
+         WHERE m.surveyor_id = u.id ORDER BY m.id DESC LIMIT 1)
+      WHERE u.id = ANY($1::int[])`, [ids]);
+}
+
 /** หา surveyor_id จากรหัส (ทะเบียนพนักงาน users.code) — ไม่เจอ = null ไม่ใช่ error */
 async function surveyorIdByCode(code: string | null): Promise<number | null> {
   if (!code) return null;
@@ -94,11 +109,18 @@ export const staffGroupService = {
         WHERE id = $1 RETURNING id`,
       [id, patch.name?.trim() ?? '', patch.checker_id !== undefined, patch.checker_id ?? null]);
     if (r.rows.length === 0) throw new NotFoundError('ไม่พบทีมนี้');
+    // เปลี่ยนบัญชีผู้ตรวจของทีม → หัวหน้าในทะเบียนของลูกทีมทุกคนต้องเปลี่ยนตาม
+    if (patch.checker_id !== undefined) {
+      const mem = await db.query('SELECT surveyor_id FROM staff_group_members WHERE group_id = $1 AND surveyor_id IS NOT NULL', [id]);
+      await syncSupervisorFromTeam(mem.rows.map((m: { surveyor_id: number }) => m.surveyor_id));
+    }
     return this.get(id);
   },
 
   async remove(id: number): Promise<void> {
+    const mem = await db.query('SELECT surveyor_id FROM staff_group_members WHERE group_id = $1 AND surveyor_id IS NOT NULL', [id]);
     await db.query('DELETE FROM staff_groups WHERE id = $1', [id]);
+    await syncSupervisorFromTeam(mem.rows.map((m: { surveyor_id: number }) => m.surveyor_id));   // ทีมหาย = ไม่มีหัวหน้า
   },
 
   /** เพิ่มสมาชิกด้วยข้อความเต็ม ("SEC343 นาย มี …" หรือชื่อบริษัท) — รหัสแยกให้เอง, จับคู่ทะเบียนให้เอง */
@@ -111,15 +133,19 @@ export const staffGroupService = {
         WHERE m.group_id <> $1 AND (($2::text IS NOT NULL AND UPPER(m.staff_code) = $2) OR LOWER(m.staff_name) = LOWER($3))`,
       [groupId, code, name]);
     if (dup.rows.length) throw new AppError(409, `รายการนี้อยู่ในทีม "${dup.rows[0].name}" แล้ว — ย้ายโดยลบจากทีมเดิมก่อน`);
+    const surveyorId = await surveyorIdByCode(code);
     await db.query(
       `INSERT INTO staff_group_members (group_id, staff_name, staff_code, surveyor_id) VALUES ($1, $2, $3, $4)
        ON CONFLICT (group_id, staff_name) DO NOTHING`,
-      [groupId, name, code, await surveyorIdByCode(code)]);
+      [groupId, name, code, surveyorId]);
+    await syncSupervisorFromTeam([surveyorId]);
     return this.get(groupId);
   },
 
   async removeMember(groupId: number, memberId: number): Promise<StaffGroup> {
+    const m = await db.query('SELECT surveyor_id FROM staff_group_members WHERE id = $1 AND group_id = $2', [memberId, groupId]);
     await db.query('DELETE FROM staff_group_members WHERE id = $1 AND group_id = $2', [memberId, groupId]);
+    await syncSupervisorFromTeam([m.rows[0]?.surveyor_id]);
     return this.get(groupId);
   },
 
@@ -136,7 +162,7 @@ export const staffGroupService = {
     await db.query(
       `DELETE FROM staff_group_members WHERE surveyor_id = $1 OR ($2::text IS NOT NULL AND UPPER(staff_code) = $2)`,
       [userId, upperCode]);
-    if (!groupId) return;
+    if (!groupId) { await syncSupervisorFromTeam([userId]); return; }
     const g = await db.query('SELECT id FROM staff_groups WHERE id = $1', [groupId]);
     if (g.rows.length === 0) throw new AppError(400, 'ไม่พบทีม/หัวหน้าที่เลือก');
     const staffName = [upperCode, `${first_name ?? ''} ${last_name ?? ''}`.trim()].filter(Boolean).join(' ');
@@ -144,6 +170,7 @@ export const staffGroupService = {
       `INSERT INTO staff_group_members (group_id, staff_name, staff_code, surveyor_id) VALUES ($1, $2, $3, $4)
        ON CONFLICT (group_id, staff_name) DO UPDATE SET staff_code = EXCLUDED.staff_code, surveyor_id = EXCLUDED.surveyor_id`,
       [groupId, staffName, upperCode, userId]);
+    await syncSupervisorFromTeam([userId]);
   },
 
   /** ทีมปัจจุบันของช่าง (id) — null = ยังไม่มีหัวหน้ากำกับ */

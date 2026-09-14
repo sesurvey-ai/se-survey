@@ -140,6 +140,7 @@ export default function AdminStaffPage() {
         <h1 className="text-2xl font-bold text-gray-800">ทะเบียนพนักงานสำรวจ</h1>
         <p className="text-sm text-gray-500 mt-1">
           เบอร์ในหน้านี้คือต้นทางของช่อง &quot;โทรศัพท์ผู้สำรวจภัย&quot; ที่ระบบเติมให้เคสอัตโนมัติ
+          · คอลัมน์ &quot;หัวหน้า&quot; = ผู้ตรวจของทีมที่สังกัด (แก้ที่ จัดการผู้ใช้ › หัวหน้า/ทีมที่สังกัด หรือ จัดการทีมผู้ตรวจ)
         </p>
       </div>
 
