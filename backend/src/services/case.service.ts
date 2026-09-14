@@ -4,6 +4,7 @@ import { AppError, NotFoundError, ForbiddenError } from '../middleware/errorHand
 import { fcmService } from './fcm.service';
 import { generateSurveyXml, emcsNameWarnings } from './xmlExport.service';
 import { invalidateCaseOwner } from '../middleware/uploadsAuth';
+import { storage, normalizeKey, contentTypeOf } from '../config/storage';
 import { isFirebaseReady } from '../config/firebase';
 import type { XmlImportResult } from './xmlImport.service';
 import { assertReportRev } from './reportRev';
@@ -256,25 +257,22 @@ export const caseService = {
       if (ocrImagePaths && Array.isArray(ocrImagePaths) && ocrImagePaths.length > 0) {
         const fs = await import('fs');
         const pathMod = await import('path');
-        const folderPath = pathMod.default.resolve(env.UPLOAD_DIR, claimFolder, jobFolder);
-        if (!fs.default.existsSync(folderPath)) {
-          fs.default.mkdirSync(folderPath, { recursive: true });
-        }
+        await storage.ensureFolder(`${claimFolder}/${jobFolder}`);
 
         for (const rawFilePath of ocrImagePaths) {
           // กัน path traversal: ใช้เฉพาะชื่อไฟล์ (basename) — client ส่ง '../../.env' มาย้าย/ลบไฟล์ระบบไม่ได้
           const filePath = pathMod.default.basename(String(rawFilePath));
           if (!filePath || filePath === '.' || filePath === '..') continue;
 
-          const srcPath = pathMod.default.resolve(env.UPLOAD_DIR, filePath);
-          const uploadRoot = pathMod.default.resolve(env.UPLOAD_DIR);
+          // ไฟล์ OCR ชั่วคราวอยู่ที่รากดิสก์เสมอ (multer) → ย้ายเข้าที่เก็บจริง (ดิสก์หรือ S3 ตามโหมด)
+          const srcPath = pathMod.default.resolve(storage.localRoot, filePath);
           // ยืนยันว่า src อยู่ใน UPLOAD_DIR จริง (กันหลุดกรอบแม้ basename แล้ว)
-          if (srcPath !== uploadRoot && !srcPath.startsWith(uploadRoot + pathMod.default.sep)) continue;
+          if (!srcPath.startsWith(storage.localRoot + pathMod.default.sep)) continue;
 
-          const destPath = pathMod.default.join(folderPath, filePath);
+          const destKey = `${claimFolder}/${jobFolder}/${filePath}`;
           try {
-            if (fs.default.existsSync(srcPath) && !fs.default.existsSync(destPath)) {
-              fs.default.renameSync(srcPath, destPath);
+            if (fs.default.existsSync(srcPath) && !(await storage.exists(destKey))) {
+              await storage.putFromFile(srcPath, destKey);
             }
           } catch { /* skip */ }
 
@@ -737,13 +735,11 @@ export const caseService = {
     const fs = await import('fs');
     const pathMod = await import('path');
 
-    // โครงสร้าง: uploads/{เลขเคลม}/{เลขเรื่องเซอร์เวย์}/
-    const subFolderPath = pathMod.default.resolve(env.UPLOAD_DIR, claimNo, surveyJobNo);
-    if (!fs.default.existsSync(subFolderPath)) {
-      fs.default.mkdirSync(subFolderPath, { recursive: true });
-    }
+    // โครงสร้าง: uploads/{เลขเคลม}/{เลขเรื่องเซอร์เวย์}/ — ผ่านชั้น storage (ดิสก์หรือ S3; S3 ไม่มีโฟลเดอร์จริง)
+    const folderKey = `${claimNo}/${surveyJobNo}`;
+    await storage.ensureFolder(folderKey);
 
-    // ลบรูปที่อยู่นอกโฟลเดอร์เคลม (uploads/ root) ของเคสนี้
+    // ลบรูปที่อยู่นอกโฟลเดอร์เคลม (uploads/ root) ของเคสนี้ — ไฟล์ชั่วคราวเหล่านี้อยู่บนดิสก์เสมอ
     const surveyPhotos = await db.query(
       `SELECT sp.file_path FROM survey_photos sp JOIN survey_reports sr ON sp.report_id = sr.id WHERE sr.case_id = $1`, [caseId]
     );
@@ -780,27 +776,22 @@ export const caseService = {
     // ลบรูปเก่าในโฟลเดอร์ย่อย ยกเว้นรูป OCR
     // มี keep → ลบเฉพาะไฟล์ที่หลุดจากชุดปัจจุบันของ client (ผู้ใช้ลบรูปในแอป) — ไฟล์ที่อัปโหลดไว้แล้ว
     // จากคำขอก่อนหน้า (per-file + retry) ต้องคงอยู่; ไม่มี keep → ล้าง non-OCR ทั้งหมด (แอปเก่า)
-    try {
-      const existing = fs.default.readdirSync(subFolderPath);
-      for (const f of existing) {
-        if (ocrFiles.has(f)) continue; // ข้ามรูป OCR
-        if (keep !== null && keep.has(f)) continue; // ยังอยู่ในชุดของ client → เก็บไว้
-        try { fs.default.unlinkSync(pathMod.default.join(subFolderPath, f)); } catch { /* skip */ }
-      }
-    } catch { /* folder may not exist */ }
+    for (const f of await storage.list(folderKey)) {            // ยังไม่มีโฟลเดอร์ = []
+      if (ocrFiles.has(f)) continue; // ข้ามรูป OCR
+      if (keep !== null && keep.has(f)) continue; // ยังอยู่ในชุดของ client → เก็บไว้
+      try { await storage.del(`${folderKey}/${f}`); } catch { /* skip */ }
+    }
 
-    // ใส่รูปใหม่จากมือถือ
+    // ใส่รูปใหม่จากมือถือ — ย้ายจากไฟล์ชั่วคราวของ multer เข้าที่เก็บจริง
+    // (โหมด s3 อัปโหลดพลาด = โยน 500 ให้แอป retry ไฟล์นั้น — ห้ามกลืนเงียบ ไม่งั้นแอปคิดว่าอัปแล้ว)
     const movedFiles: string[] = [];
     for (const file of files) {
       const safeName = file.originalname.replace(/[/\\?%*:|"<>]/g, '_');
-      const destPath = pathMod.default.join(subFolderPath, safeName);
-      try {
-        fs.default.renameSync(file.path, destPath);
-        movedFiles.push(`${claimNo}/${surveyJobNo}/${safeName}`);
-      } catch { movedFiles.push(safeName); }
+      await storage.putFromFile(file.path, `${folderKey}/${safeName}`, file.mimetype);
+      movedFiles.push(`${folderKey}/${safeName}`);
     }
 
-    return { folder: `${claimNo}/${surveyJobNo}`, files: movedFiles };
+    return { folder: folderKey, files: movedFiles };
   },
 
   // รายชื่อไฟล์ที่อยู่ในโฟลเดอร์เคสบน server แล้ว — แอปใช้ข้ามไฟล์ที่อัปโหลดสำเร็จไปก่อนหน้า
@@ -810,11 +801,7 @@ export const caseService = {
     if (own.rows.length === 0) throw new NotFoundError('Case not found');
     assertCaseAccess(own.rows[0], user);
 
-    const fs = await import('fs');
-    const pathMod = await import('path');
-    const folderPath = pathMod.default.resolve(env.UPLOAD_DIR, `case_${caseId}`, `job_${caseId}`);
-    let files: string[] = [];
-    try { files = fs.default.readdirSync(folderPath); } catch { /* ยังไม่มีโฟลเดอร์ = ยังไม่มีไฟล์ */ }
+    const files = await storage.list(`case_${caseId}/job_${caseId}`);   // ยังไม่มีโฟลเดอร์ = ยังไม่มีไฟล์
     return { files };
   },
 
@@ -826,13 +813,9 @@ export const caseService = {
     // โฟลเดอร์ผูกกับ case id (immutable) — สอดคล้องกับ uploadCaseFolder/submitSurvey
     const folderName = `case_${caseId}`;
 
-    const fs = await import('fs');
     const path = await import('path');
-    const folderPath = path.default.resolve(env.UPLOAD_DIR, folderName);
-    if (!fs.default.existsSync(folderPath)) {
-      fs.default.mkdirSync(folderPath, { recursive: true });
-    }
-    return { folder: folderName, path: folderPath };
+    await storage.ensureFolder(folderName);   // โหมด s3 ไม่มีโฟลเดอร์จริง — ไฟล์แรกที่อัปคือการสร้าง
+    return { folder: folderName, path: path.default.resolve(storage.localRoot, folderName) };
   },
 
   /**
@@ -1004,7 +987,6 @@ export const caseService = {
         `${san(data.claim_no) || `case_${caseId}`}/${san(data.survey_job_no) || `job_${caseId}`}`,
         `${san(oldClaimNo) || `case_${caseId}`}/${san(oldSurveyJobNo) || `job_${caseId}`}`,
       ])];
-      const fs = await import('fs');
       const pathMod = await import('path');
 
       // จำหมวดเดิมของแต่ละไฟล์ไว้ก่อนลบ — รูปที่ผู้ตรวจอัปเองบนเว็บ (web_*.jpg) อยู่โฟลเดอร์
@@ -1038,13 +1020,11 @@ export const caseService = {
       // fall-through เมื่อโฟลเดอร์มีอยู่แต่ว่าง: โฟลเดอร์ที่มีอยู่ = upload ระบบใหม่เขียน/prune แล้ว
       // เนื้อในคือชุดปัจจุบันของผู้ใช้ (0 รูป = ตั้งใจลบทั้งหมด) — ถ้าไปสแกนโฟลเดอร์เก่าต่อ
       // รูป stale ก่อน migrate จะฟื้นคืนเข้ารายงาน
-      const uploadRoot = pathMod.default.resolve(env.UPLOAD_DIR);
       for (const rel of candidateFolders) {
-        const folderPath = pathMod.default.resolve(env.UPLOAD_DIR, rel);
-        // containment: เลขเคลมมาจาก payload/DB — ห้ามชี้ออกนอก uploads
-        if (folderPath !== uploadRoot && !folderPath.startsWith(uploadRoot + pathMod.default.sep)) continue;
-        if (!fs.default.existsSync(folderPath)) continue; // ไม่เคยสร้าง → ลองโฟลเดอร์ระบบเก่า
-        const photoFiles = fs.default.readdirSync(folderPath).filter((f) => !ocrFileNames.has(f));
+        // containment: เลขเคลมมาจาก payload/DB — ห้ามชี้ออกนอก uploads (normalizeKey ปัด '..' ทิ้ง)
+        if (normalizeKey(rel) !== rel) continue;
+        if (!(await storage.folderExists(rel))) continue; // ไม่เคยสร้าง → ลองโฟลเดอร์ระบบเก่า
+        const photoFiles = (await storage.list(rel)).filter((f) => !ocrFileNames.has(f));
         for (const fileName of photoFiles) {
           await client.query(
             'INSERT INTO survey_photos (report_id, file_path, category) VALUES ($1, $2, $3)',
@@ -1422,15 +1402,13 @@ export const caseService = {
    * ซึ่งไม่มีวันไปโผล่ที่ระบบต้นทาง
    */
   async addCasePhotos(caseId: number, files: Express.Multer.File[], category: string) {
-    const fs = await import('fs');
     const pathMod = await import('path');
     await assertNotApproved(caseId);            // อนุมัติแล้ว = ชุดรูปถูกรับรองไปแล้ว ห้ามเติม
     const rid = await db.query('SELECT id FROM survey_reports WHERE case_id = $1', [caseId]);
     if (rid.rows.length === 0) throw new NotFoundError('Report not found');
     const reportId = rid.rows[0].id;
 
-    const dir = pathMod.default.resolve(env.UPLOAD_DIR, `case_${caseId}`, `job_${caseId}`);
-    fs.default.mkdirSync(dir, { recursive: true });
+    const folderKey = `case_${caseId}/job_${caseId}`;
 
     let added = 0;
     const ids: number[] = [];   // id ของรูปที่เพิ่ม — หน้าเว็บจำรูป "รายการตรวจสอบ" ไว้แทนที่ตอนอนุมัติซ้ำ (08/09/69)
@@ -1439,7 +1417,7 @@ export const caseService = {
       const ext = (pathMod.default.extname(f.originalname || '').toLowerCase()
                    .replace(/[^.a-z0-9]/g, '')) || '.jpg';
       const name = `web_${Date.now()}_${added}${ext}`;
-      fs.default.writeFileSync(pathMod.default.join(dir, name), f.buffer);
+      await storage.put(`${folderKey}/${name}`, f.buffer, f.mimetype);
       const ins = await db.query(
         'INSERT INTO survey_photos (report_id, file_path, category) VALUES ($1, $2, $3) RETURNING id',
         [reportId, `case_${caseId}/job_${caseId}/${name}`, category]);
@@ -1457,8 +1435,6 @@ export const caseService = {
    * แต่ลบได้ **ก่อนอนุมัติ** เท่านั้น หลังอนุมัติชุดรูปถือว่าถูกรับรองไปแล้ว
    */
   async deleteCasePhoto(caseId: number, photoId: number) {
-    const fs = await import('fs');
-    const pathMod = await import('path');
     await assertNotApproved(caseId);
     // ผูก photo กับ case ใน query เดียว — กันลบรูปของเคสอื่นด้วยการเดา id
     const r = await db.query(
@@ -1470,11 +1446,7 @@ export const caseService = {
     await db.query('DELETE FROM survey_photos WHERE id = $1', [photoId]);
     // ไฟล์ลบไม่ได้ก็ไม่ล้มทั้งงาน — แถวหายแล้วรูปก็ไม่โผล่ที่ไหนอีก (ไฟล์ค้างดีกว่าลบพลาด)
     try {
-      const full = pathMod.default.resolve(env.UPLOAD_DIR, String(r.rows[0].file_path));
-      const root = pathMod.default.resolve(env.UPLOAD_DIR);
-      if (full.startsWith(root + pathMod.default.sep) && fs.default.existsSync(full)) {
-        fs.default.unlinkSync(full);
-      }
+      await storage.del(String(r.rows[0].file_path));   // ดิสก์หรือ S3 ตามโหมด · key ไม่ปลอดภัย = ไม่ทำอะไร
     } catch { /* ไฟล์หายอยู่แล้ว/ลบไม่ได้ — ข้าม */ }
     return { deleted: photoId };
   },
@@ -1489,8 +1461,6 @@ export const caseService = {
    *   ที่พึ่ง EXIF จะหมุนเพี้ยน · เขียนไฟล์ชั่วคราวแล้ว rename ทับ — ไม่มีจังหวะที่ไฟล์เขียนครึ่งเดียว
    */
   async rotateCasePhoto(caseId: number, photoId: number, deg: number) {
-    const fs = await import('fs');
-    const pathMod = await import('path');
     if (![90, -90, 180].includes(deg)) throw new AppError(400, 'หมุนได้เฉพาะ 90 / -90 / 180 องศา');
     await assertNotApproved(caseId);
     const r = await db.query(
@@ -1498,13 +1468,10 @@ export const caseService = {
          JOIN survey_reports sr ON sp.report_id = sr.id
         WHERE sp.id = $1 AND sr.case_id = $2`, [photoId, caseId]);
     if (r.rows.length === 0) throw new NotFoundError('ไม่พบรูปนี้ในเคส');
-    const full = pathMod.default.resolve(env.UPLOAD_DIR, String(r.rows[0].file_path));
-    const root = pathMod.default.resolve(env.UPLOAD_DIR);
-    if (!full.startsWith(root + pathMod.default.sep) || !fs.default.existsSync(full)) {
-      throw new NotFoundError('ไม่พบไฟล์รูปบนเซิร์ฟเวอร์');
-    }
+    const key = String(r.rows[0].file_path);
+    const input = await storage.getBuffer(key);     // ดิสก์หรือ S3 ตามโหมด
+    if (!input) throw new NotFoundError('ไม่พบไฟล์รูปบนเซิร์ฟเวอร์');
     const sharp = (await import('sharp')).default;
-    const input = fs.default.readFileSync(full);
     const meta = await sharp(input).metadata();
     // ⛔ sharp หมุนได้ครั้งเดียวต่อ pipeline — `.rotate().rotate(deg)` จะทิ้งอันหนึ่งเงียบ ๆ (พิสูจน์แล้ว 04/09/69)
     //    จึงจัดตาม EXIF ให้เสร็จเป็นรูปจริงก่อน (pass 1) แล้วค่อยหมุนตามที่สั่ง (pass 2)
@@ -1516,9 +1483,7 @@ export const caseService = {
     else if (meta.format === 'webp') pipe = pipe.webp({ quality: 92 });
     else throw new AppError(400, `หมุนไฟล์ชนิด ${meta.format ?? 'ไม่ทราบ'} ไม่ได้`);
     const out = await pipe.toBuffer();
-    const tmp = `${full}.rotating`;
-    fs.default.writeFileSync(tmp, out);
-    fs.default.renameSync(tmp, full);
+    await storage.put(key, out, contentTypeOf(key));   // ดิสก์: เขียนไฟล์ชั่วคราวแล้ว rename ทับ · S3: เขียนทับ object เดิม
     const after = await sharp(out).metadata();
     return { rotated: photoId, deg, width: after.width, height: after.height };
   },
@@ -1533,8 +1498,6 @@ export const caseService = {
    */
   async importPhotoZip(caseId: number, zipBuffer: Buffer, opts: { skipExisting?: boolean } = {}) {
     const AdmZip = (await import('adm-zip')).default;
-    const fs = await import('fs');
-    const pathMod = await import('path');
     const rid = await db.query('SELECT id FROM survey_reports WHERE case_id = $1', [caseId]);
     if (rid.rows.length === 0) throw new NotFoundError('Report not found');
     const reportId = rid.rows[0].id;
@@ -1556,8 +1519,8 @@ export const caseService = {
       TP_VEH: 'รูปรถคู่กรณี', TP_PERSON: 'รูปผู้บาดเจ็บ', TP_PROP: 'รูปทรัพย์สิน',
     };
     const IMG = /\.(jpe?g|png|webp|gif|bmp)$/i;
-    const dir = pathMod.default.resolve(env.UPLOAD_DIR, `case_${caseId}`, `job_${caseId}`);
-    fs.default.mkdirSync(dir, { recursive: true });
+    const folderKey = `case_${caseId}/job_${caseId}`;
+    const taken = new Set(await storage.list(folderKey));   // ชื่อที่มีอยู่แล้ว (ดิสก์/S3) — กันชื่อชนข้ามหมวด
 
     let added = 0;
     const perCat: Record<string, number> = {};
@@ -1570,11 +1533,12 @@ export const caseService = {
       const cat = CAT[(parts[1] || '').toUpperCase()] ?? 'รูปประกอบ';
       // กันชื่อชนกันข้ามหมวด (zip ของพอร์ทัลตั้งชื่อซ้ำได้) — ไม่ทับไฟล์เดิม
       let name = base;
-      for (let i = 2; fs.default.existsSync(pathMod.default.join(dir, name)); i++) {
+      for (let i = 2; taken.has(name); i++) {
         const dot = base.lastIndexOf('.');
         name = `${base.slice(0, dot)}_${i}${base.slice(dot)}`;
       }
-      fs.default.writeFileSync(pathMod.default.join(dir, name), e.getData());
+      await storage.put(`${folderKey}/${name}`, e.getData(), contentTypeOf(name));
+      taken.add(name);
       await db.query(
         'INSERT INTO survey_photos (report_id, file_path, category) VALUES ($1, $2, $3)',
         [reportId, `case_${caseId}/job_${caseId}/${name}`, cat]);

@@ -1,11 +1,9 @@
 import bcrypt from 'bcryptjs';
-import fs from 'fs';
-import path from 'path';
 import { db } from '../config/database';
+import { storage } from '../config/storage';
 import { staffGroupService } from './staffGroup.service';
 import { removeCapture, sendCapture } from './sebilling.service';
 import { notifyCaseChanged } from './caseEvents';
-import { env } from '../config/env';
 import { NotFoundError, AppError } from '../middleware/errorHandler';
 import { assertStrongPassword } from './password';
 
@@ -406,28 +404,14 @@ export const adminService = {
       client.release();
     }
 
-    // Delete photo files from disk + cleanup empty folders (หลัง COMMIT — ไฟล์หายกู้ไม่ได้ ทำหลังยืนยัน)
-    const foldersToClean = new Set<string>();
-    for (const photo of [...surveyPhotos.rows, ...caseImages.rows]) {
-      const filePath = path.join(env.UPLOAD_DIR, photo.file_path);
-      try { fs.unlinkSync(filePath); } catch { /* file may not exist */ }
-      // เก็บ path โฟลเดอร์ย่อยเพื่อลบทีหลัง
-      const dir = path.dirname(filePath);
-      if (dir !== path.resolve(env.UPLOAD_DIR)) foldersToClean.add(dir);
-    }
-
-    // ลบโฟลเดอร์ย่อย (surveyJobNo) แล้วลบโฟลเดอร์แม่ (claimNo) ถ้าว่าง
-    for (const folder of foldersToClean) {
-      try {
-        if (fs.existsSync(folder) && fs.readdirSync(folder).length === 0) {
-          fs.rmdirSync(folder);
-          const parent = path.dirname(folder);
-          if (parent !== path.resolve(env.UPLOAD_DIR) && fs.existsSync(parent) && fs.readdirSync(parent).length === 0) {
-            fs.rmdirSync(parent);
-          }
-        }
-      } catch { /* skip */ }
-    }
+    // ลบไฟล์รูป (ดิสก์หรือ S3 ตามโหมด — config/storage.ts) หลัง COMMIT: ไฟล์หายกู้ไม่ได้ ทำหลังยืนยัน
+    const keys = [...surveyPhotos.rows, ...caseImages.rows].map((p: { file_path: string }) => String(p.file_path));
+    const failed = await storage.deleteMany(keys);
+    if (failed.length) console.warn(`[purge] เคส #${id} ลบไฟล์ไม่ได้ ${failed.length} ไฟล์:`, failed.slice(0, 5));
+    // โฟลเดอร์ประจำเคส case_<id> (ผูกกับเคสที่ไม่มีแล้ว) ทิ้งทั้งก้อน — ไฟล์ค้างที่ไม่มีแถวใน DB ก็ไม่เหลือ
+    try { await storage.deleteFolder(`case_${id}`); } catch (e) { console.warn(`[purge] เคส #${id} ลบโฟลเดอร์ไม่ได้:`, e); }
+    // โฟลเดอร์เลขเคลมระบบเก่าบนดิสก์ที่ว่างแล้ว (surveyJobNo → claimNo)
+    storage.cleanupEmptyFolders(keys);
 
     return { id };
   },

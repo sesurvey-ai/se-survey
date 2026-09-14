@@ -6,6 +6,7 @@ import path from 'path';
 import { env } from './config/env';
 import { errorHandler } from './middleware/errorHandler';
 import { uploadsAuth } from './middleware/uploadsAuth';
+import { serveUploads } from './middleware/serveUploads';
 import { isFirebaseReady } from './config/firebase';
 import routes from './routes';
 
@@ -21,9 +22,12 @@ app.use(morgan('dev'));
 app.use(express.json());
 
 // Static files (uploaded photos) — ต้องผ่าน auth (รูปเป็น PII: บัตร ปชช./ใบขับขี่/รูปลงเวลา)
+// โหมด s3 (config/storage.ts): serveUploads เสิร์ฟจาก object storage ก่อน ไม่เจอค่อยตกมา express.static
+// (ไฟล์เก่าบนดิสก์ที่ยังไม่ย้าย) · โหมด local: serveUploads ผ่านเฉย ๆ = พฤติกรรมเดิมทุกประการ
 app.use(
   '/uploads',
   uploadsAuth,
+  serveUploads,
   express.static(path.resolve(env.UPLOAD_DIR), {
     dotfiles: 'deny',       // กันเข้าถึงไฟล์ซ่อน (.env ฯลฯ) ที่อาจถูกย้ายเข้ามา
     index: false,           // ไม่ list ไดเรกทอรี

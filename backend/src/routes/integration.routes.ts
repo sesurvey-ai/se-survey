@@ -5,6 +5,7 @@ import { UnauthorizedError } from '../middleware/errorHandler';
 import { env } from '../config/env';
 import { caseService } from '../services/case.service';
 import { uploadZipOnly } from '../config/multer';
+import { storage, normalizeKey } from '../config/storage';
 import { notifyCaseChanged } from '../services/caseEvents';
 import { emcsQueueService } from '../services/emcsQueue.service';
 
@@ -364,23 +365,18 @@ router.get('/cases/:id/photos', integrationAuth, asyncHandler(async (req: Reques
   res.json({ success: true, data: { photos: r.rows } });
 }));
 
-// stream ไฟล์รูปตาม file_path จากรายการข้างบน — containment ใน UPLOAD_DIR เท่านั้น
+// stream ไฟล์รูปตาม file_path จากรายการข้างบน — อ่านผ่านชั้น storage (ดิสก์หรือ S3 ตามโหมด)
 router.get('/files', integrationAuth, asyncHandler(async (req: Request, res: Response) => {
-  const rel = String(req.query.path ?? '');
-  const pathMod = await import('path');
-  const fs = await import('fs');
-  const uploadRoot = pathMod.default.resolve(env.UPLOAD_DIR);
-  const full = pathMod.default.resolve(uploadRoot, rel);
-  // กัน path traversal — path จาก query ต้องอยู่ใต้ uploads เสมอ
-  if (full !== uploadRoot && !full.startsWith(uploadRoot + pathMod.default.sep)) {
-    res.status(400).json({ success: false, message: 'invalid path' });
-    return;
-  }
-  if (!fs.default.existsSync(full) || !fs.default.statSync(full).isFile()) {
-    res.status(404).json({ success: false, message: 'file not found' });
-    return;
-  }
-  res.sendFile(full);
+  // กัน path traversal — normalizeKey ปัด '..' / path สัมบูรณ์ทิ้ง (key ต้องอยู่ใต้ uploads เสมอ)
+  const key = normalizeKey(String(req.query.path ?? ''));
+  if (!key) { res.status(400).json({ success: false, message: 'invalid path' }); return; }
+  const r = await storage.get(key);
+  if (!r || r.kind !== 'ok') { res.status(404).json({ success: false, message: 'file not found' }); return; }
+  res.set('Content-Type', r.contentType);
+  if (typeof r.size === 'number') res.set('Content-Length', String(r.size));
+  res.on('close', () => { try { r.body.destroy(); } catch { /* skip */ } });
+  r.body.on('error', (err: Error) => { if (!res.headersSent) res.status(500).end(); else res.destroy(err); });
+  r.body.pipe(res);
 }));
 
 // ───────────── คิวนำเข้า EMCS — ฝั่งสถานี (main.py --station) ─────────────

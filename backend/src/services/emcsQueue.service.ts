@@ -14,10 +14,8 @@
  *  - สถานีตาย/เน็ตหลุดระหว่างทำ: งานที่ running แล้วไม่มี heartbeat เกิน STALE_MIN นาที → กลับเข้าคิว
  *    (ไม่เกิน MAX_ATTEMPTS ครั้ง แล้วถือว่า failed ให้คนดู)
  */
-import fs from 'fs';
-import path from 'path';
 import { db } from '../config/database';
-import { env } from '../config/env';
+import { storage } from '../config/storage';
 import { AppError, NotFoundError } from '../middleware/errorHandler';
 import { notifyCaseChanged } from './caseEvents';
 
@@ -162,11 +160,9 @@ export const emcsQueueService = {
       try {
         const buf = Buffer.from(body.screenshot_b64, 'base64');
         if (buf.length > 0 && buf.length <= 6 * 1024 * 1024) {
-          const rel = path.join('emcs_jobs', `job_${jobId}.png`);
-          const full = path.resolve(env.UPLOAD_DIR, rel);
-          fs.mkdirSync(path.dirname(full), { recursive: true });
-          fs.writeFileSync(full, buf);
-          shot = rel.replace(/\\/g, '/');
+          const rel = `emcs_jobs/job_${jobId}.png`;
+          await storage.put(rel, buf, 'image/png');   // ดิสก์หรือ S3 ตามโหมด (config/storage.ts)
+          shot = rel;
         }
       } catch { /* ภาพเป็นของแถม — เก็บไม่ได้ก็ไม่ล้มงาน */ }
     }

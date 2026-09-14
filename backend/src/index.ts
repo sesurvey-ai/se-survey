@@ -5,8 +5,13 @@ import { initFirebase } from './config/firebase';
 import { setupSocket } from './socket';
 import { startUploadSweeper } from './utils/uploadSweeper';
 import { startTrashPurge } from './utils/trashPurge';
+import { startUploadMigrator } from './utils/uploadMigrator';
+import { storage } from './config/storage';
 
 const server = http.createServer(app);
+
+// ที่เก็บไฟล์อัปโหลด — บอกให้ชัดตั้งแต่บูตว่าใช้ดิสก์หรือ object storage (14/09/69)
+console.log(`[storage] ${storage.describe()}`);
 
 // Firebase — ไม่มี credential ก็ยัง boot ได้ (พฤติกรรมเดิม) แต่ log ดังแล้ว
 // ตั้ง FCM_REQUIRED=1 เมื่ออยากให้ "ไม่มี push = ไม่ต้องขึ้นเลย" (ต้องตั้งใจเปิดเอง)
@@ -22,6 +27,8 @@ setupSocket(server);
 startUploadSweeper();
 // ลบจริงเคสในถังขยะที่พักครบ 30 วัน (migration 062, 14/09/69)
 startTrashPurge();
+// ย้ายไฟล์ที่ค้างบนดิสก์ขึ้น S3 (เฉพาะเมื่อตั้ง S3_MIGRATE_LOCAL — ครั้งเดียวตอนเปิดโหมด s3)
+startUploadMigrator();
 
 server.listen(env.PORT, () => {
   console.log(`Server running on port ${env.PORT} (${env.NODE_ENV})`);

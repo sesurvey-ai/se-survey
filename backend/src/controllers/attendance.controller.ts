@@ -4,6 +4,7 @@ import { sendSuccess, sendError } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
 import { clearSurveyorLocation } from '../utils/clearSurveyorLocation';
 import { broadcastSurveyorLocation } from '../utils/broadcastSurveyorLocation';
+import { storage } from '../config/storage';
 
 // แปลงค่าจาก multipart (เป็น string) -> number | null
 const toNum = (v: unknown): number | null => {
@@ -30,6 +31,9 @@ export const attendanceController = {
       sendError(res, 'ต้องถ่ายรูปเพื่อลงเวลาเข้างาน กรุณาถ่ายรูปแล้วลองใหม่', 400);
       return;
     }
+    // ย้ายรูปจากไฟล์ชั่วคราวของ multer เข้าที่เก็บจริง (โหมด s3 = อัปขึ้น bucket) — ต้องสำเร็จก่อนบันทึกแถว
+    // ไม่งั้นแถวลงเวลาชี้ไปไฟล์ที่ไม่มีใครเสิร์ฟได้ (โหมด local = ไฟล์อยู่ที่รากถูกที่แล้ว ไม่ทำอะไร)
+    await storage.putFromFile(file.path, file.filename, file.mimetype);
     const row = await attendanceService.checkIn(req.user!.id, lat, lng, file.filename);
     if (!row) {
       sendError(res, 'คุณยังมีรอบที่ยังไม่ได้ลงเวลาออก กรุณาลงเวลาออกก่อนจึงจะลงเวลาเข้าใหม่ได้', 400);

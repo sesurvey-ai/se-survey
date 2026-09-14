@@ -82,6 +82,12 @@ NODE_ENV=development
 CORS_ORIGIN=http://localhost:3000
 UPLOAD_DIR=./src/uploads
 MAX_FILE_SIZE=10485760
+# (ไม่บังคับ) เก็บรูปบน object storage แบบ S3 แทนดิสก์ — ตั้งครบ 4 ตัวถึงเปิด (ดู backend/src/config/storage.ts)
+# S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
+# S3_BUCKET=sesurvey-uploads
+# S3_ACCESS_KEY_ID=...
+# S3_SECRET_ACCESS_KEY=...
+# S3_REGION=auto
 ```
 
 #### Web App — สร้างไฟล์ `web/.env.local`
@@ -300,7 +306,15 @@ git push -u origin main
    CORS_ORIGIN=https://yourdomain.com
    UPLOAD_DIR=./uploads
    MAX_FILE_SIZE=10485760
+   # เก็บรูปบน object storage (Cloudflare R2 / S3) แทน volume — ตั้งครบ 4 ตัวถึงเปิด; ไม่ตั้ง = ดิสก์ /app/uploads
+   S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
+   S3_BUCKET=sesurvey-uploads
+   S3_ACCESS_KEY_ID=...
+   S3_SECRET_ACCESS_KEY=...
+   S3_REGION=auto
+   # ครั้งแรกหลังเปิด: S3_MIGRATE_LOCAL=copy (ย้ายรูปเก่าใน volume ขึ้น bucket ตอนบูต) → ตรวจแล้วเปลี่ยนเป็น move → เอาออก
    ```
+   ตรวจว่า bucket ใช้ได้: Open Terminal ในคอนเทนเนอร์ backend → `node dist/scripts/storageCheck.js`
 4. ตั้ง **Domain**: `api.yourdomain.com` → Enable SSL
 
 #### Service 2: Web App

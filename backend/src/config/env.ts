@@ -3,6 +3,9 @@ import { z } from 'zod';
 
 dotenv.config();
 
+// ค่าว่าง → ไม่ตั้ง (Dokploy ชอบส่ง KEY= เปล่า ๆ มา — ถ้าใช้ .url()/.enum() ตรง ๆ backend จะตายตั้งแต่ boot)
+const blank = <T extends z.ZodTypeAny>(schema: T) => z.preprocess((v) => (v === '' ? undefined : v), schema);
+
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   JWT_SECRET: z.string().min(16, 'JWT_SECRET must be at least 16 characters'),
@@ -41,6 +44,18 @@ const envSchema = z.object({
   CORS_ORIGIN: z.string().default('http://localhost:3000'),
   UPLOAD_DIR: z.string().default('./src/uploads'),
   MAX_FILE_SIZE: z.coerce.number().default(10485760),
+  // ที่เก็บไฟล์อัปโหลด (14/09/69): ไม่ตั้ง S3_* = ดิสก์ UPLOAD_DIR เหมือนเดิม · ตั้ง S3_ENDPOINT/S3_BUCKET/
+  // S3_ACCESS_KEY_ID/S3_SECRET_ACCESS_KEY ครบ = object storage (Cloudflare R2 / Wasabi / AWS S3 — ดู config/storage.ts)
+  // STORAGE_DRIVER=local บังคับใช้ดิสก์แม้มีคีย์ · ค่าว่าง = ไม่ตั้ง (Dokploy ส่ง KEY= เปล่ามาได้)
+  STORAGE_DRIVER: blank(z.enum(['local', 's3']).optional()),
+  S3_ENDPOINT: blank(z.string().url().optional()),        // R2: https://<account-id>.r2.cloudflarestorage.com
+  S3_BUCKET: blank(z.string().optional()),
+  S3_REGION: blank(z.string().optional()),                // R2 = auto (ค่าเริ่มต้น) · Wasabi เช่น ap-southeast-1
+  S3_ACCESS_KEY_ID: blank(z.string().optional()),
+  S3_SECRET_ACCESS_KEY: blank(z.string().optional()),
+  S3_PREFIX: blank(z.string().optional()),                // โฟลเดอร์ย่อยใน bucket (ไม่ตั้ง = ราก)
+  S3_FORCE_PATH_STYLE: blank(z.string().optional()),      // '0' = virtual-hosted · ค่าเริ่มต้น path-style (R2/Wasabi/MinIO ใช้ได้)
+  S3_MIGRATE_LOCAL: blank(z.string().optional()),         // copy|move = ย้ายไฟล์ที่ค้างบนดิสก์ขึ้น S3 ตอนบูต (utils/uploadMigrator) เอาออกเมื่อย้ายครบ
 });
 
 export const env = envSchema.parse(process.env);
