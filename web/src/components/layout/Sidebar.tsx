@@ -9,8 +9,8 @@ import AppearanceControls from './AppearanceControls';
 const NAV_ITEMS: Record<string, { label: string; href: string }[]> = {
   admin: [
     { label: 'แดชบอร์ด', href: '/admin' },
+    // "ทะเบียนพนักงานสำรวจ" ยุบเข้าหน้านี้แล้ว 14/09/69 (รหัส/เบอร์/หัวหน้า-ทีม/นำเข้า Excel อยู่ในจัดการผู้ใช้)
     { label: 'จัดการผู้ใช้', href: '/admin/users' },
-    { label: 'ทะเบียนพนักงานสำรวจ', href: '/admin/staff' },
     { label: 'จัดการทีมผู้ตรวจ', href: '/admin/staff-groups' },
     { label: 'จัดการเคส', href: '/admin/cases' },
     { label: 'จัดการรีวิว', href: '/admin/reviews' },

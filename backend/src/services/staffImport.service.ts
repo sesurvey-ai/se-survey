@@ -92,7 +92,7 @@ export async function parseRoster(buf: Buffer): Promise<{ staff: StaffRow[]; sup
 export async function planImport(buf: Buffer): Promise<ImportPlan> {
   const { staff, supervisors } = await parseRoster(buf);
   const users = await db.query(
-    `SELECT id, UPPER(TRIM(code)) AS code, first_name, last_name, role, is_active,
+    `SELECT id, UPPER(TRIM(code)) AS code, first_name, last_name, role, is_active, supervisor_id,
             COALESCE(NULLIF(TRIM(phone), ''), '') AS phone
        FROM users`);
   const byCode = new Map<string, (typeof users.rows)[number]>();
@@ -122,8 +122,11 @@ export async function planImport(buf: Buffer): Promise<ImportPlan> {
     const who = `${u.first_name} ${u.last_name}`.trim();
     if (s.phone && s.phone !== u.phone) plan.updatePhone.push({ id: u.id, code: s.code, who, from: u.phone, to: s.phone });
     if (s.name && bare(s.name) !== bare(who)) plan.updateName.push({ id: u.id, code: s.code, from: who, to: s.name });
+    // ผูกเฉพาะคนที่หัวหน้ายังไม่ตรง (ช่องหัวหน้าซิงก์กับทีมแล้ว — เดิมนับทุกคนทุกครั้งที่นำเข้า)
     const sid = supId.get(s.supervisor);
-    if (sid && sid !== u.id) plan.linkSupervisor.push({ id: u.id, code: s.code, supervisor: s.supervisor, supervisorId: sid });
+    if (sid && sid !== u.id && u.supervisor_id !== sid) {
+      plan.linkSupervisor.push({ id: u.id, code: s.code, supervisor: s.supervisor, supervisorId: sid });
+    }
   }
 
   // อยู่ในระบบ (ยัง active, เป็นผู้สำรวจ, มีรหัส) แต่ไม่มีในไฟล์ = ออกแล้ว → ปิดใช้งาน ไม่ลบ
@@ -203,6 +206,22 @@ export async function applyImport(buf: Buffer, opts: ApplyOpts) {
     }
     if (opts.doSupervisor) {
       for (const l of plan.linkSupervisor) {
+        // "หัวหน้า" ที่มาจริงคือทีมผู้ตรวจ (staff_groups — ตัวกรองงานรอตรวจ + คอลัมน์หัวหน้า) ไม่ใช่ช่องเก่าของบัญชี
+        // (14/09/69) → หัวหน้ามีทีม = ย้ายช่างเข้าทีมนั้น (ช่างอยู่ได้ทีมเดียว) แล้วซิงก์ช่องเก่าให้ตรง
+        //   หัวหน้ายังไม่มีทีม = ผูกได้แค่ช่องเก่าเหมือนเดิม (ไปสร้างทีมที่หน้าจัดการทีมผู้ตรวจก่อน)
+        const g = await client.query('SELECT id FROM staff_groups WHERE checker_id = $1 LIMIT 1', [l.supervisorId]);
+        if (g.rows.length > 0) {
+          const u = await client.query('SELECT code, first_name, last_name FROM users WHERE id = $1', [l.id]);
+          const code = u.rows[0]?.code ? String(u.rows[0].code).trim().toUpperCase() : null;
+          await client.query(
+            `DELETE FROM staff_group_members WHERE surveyor_id = $1 OR ($2::text IS NOT NULL AND UPPER(staff_code) = $2)`,
+            [l.id, code]);
+          const staffName = [code, `${u.rows[0]?.first_name ?? ''} ${u.rows[0]?.last_name ?? ''}`.trim()].filter(Boolean).join(' ');
+          await client.query(
+            `INSERT INTO staff_group_members (group_id, staff_name, staff_code, surveyor_id) VALUES ($1, $2, $3, $4)
+             ON CONFLICT (group_id, staff_name) DO UPDATE SET staff_code = EXCLUDED.staff_code, surveyor_id = EXCLUDED.surveyor_id`,
+            [g.rows[0].id, staffName, code, l.id]);
+        }
         await client.query('UPDATE users SET supervisor_id = $1 WHERE id = $2', [l.supervisorId, l.id]);
         done.supervisor++;
       }

@@ -68,7 +68,8 @@ export const adminService = {
       params.push(is_active);
     }
     if (search) {
-      conditions.push(`(username ILIKE $${idx} OR first_name ILIKE $${idx} OR last_name ILIKE $${idx})`);
+      // ค้นด้วยรหัสพนักงาน (SE315) ได้ด้วย — หน้าจัดการผู้ใช้เป็นทะเบียนพนักงานสำรวจแล้ว (14/09/69)
+      conditions.push(`(username ILIKE $${idx} OR first_name ILIKE $${idx} OR last_name ILIKE $${idx} OR code ILIKE $${idx})`);
       params.push(`%${search}%`);
       idx++;
     }
@@ -81,7 +82,12 @@ export const adminService = {
         // app_version = เวอร์ชันแอปล่าสุดที่เครื่องคนนี้ยิงเข้ามา (soft mode ไม่บล็อก)
         // ไว้ไล่ดูว่าใครยังไม่อัป APK — แจกด้วยมือ ไม่มีทางรู้จากที่อื่น
         `SELECT id, username, code, first_name, last_name, role, supervisor_id, is_active, phone, created_at,
-                app_version, to_char(app_version_at, 'YYYY-MM-DD HH24:MI') AS app_version_at
+                app_version, to_char(app_version_at, 'YYYY-MM-DD HH24:MI') AS app_version_at,
+                -- หัวหน้า/ทีม (14/09/69 หน้าจัดการผู้ใช้โชว์คอลัมน์นี้แทนหน้าทะเบียนที่ยุบไป):
+                -- ทีมผู้ตรวจที่สังกัด = ที่มาจริง · ชื่อหัวหน้าจากช่องเก่า (ซิงก์กับทีมแล้ว) ไว้เผื่อยังไม่มีทีม
+                (SELECT g.name FROM staff_group_members m JOIN staff_groups g ON g.id = m.group_id
+                  WHERE m.surveyor_id = users.id ORDER BY m.id DESC LIMIT 1) AS staff_group_name,
+                (SELECT s.first_name || ' ' || s.last_name FROM users s WHERE s.id = users.supervisor_id) AS supervisor_name
          FROM users ${where} ORDER BY id ASC LIMIT $${idx} OFFSET $${idx + 1}`,
         [...params, limit, offset]
       ),
