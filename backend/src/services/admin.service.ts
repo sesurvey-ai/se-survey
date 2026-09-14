@@ -3,7 +3,8 @@ import fs from 'fs';
 import path from 'path';
 import { db } from '../config/database';
 import { staffGroupService } from './staffGroup.service';
-import { removeCapture } from './sebilling.service';
+import { removeCapture, sendCapture } from './sebilling.service';
+import { notifyCaseChanged } from './caseEvents';
 import { env } from '../config/env';
 import { NotFoundError, AppError } from '../middleware/errorHandler';
 import { assertStrongPassword } from './password';
@@ -27,6 +28,9 @@ interface CaseFilters extends PaginationParams {
 interface ReviewFilters extends PaginationParams {
   status?: string;
 }
+
+/** พักเคสที่ลบไว้กี่วันก่อนลบจริง (ถังขยะ) — user เคาะ 14/09/69 */
+export const TRASH_DAYS = 30;
 
 export const adminService = {
   // ==================== Dashboard ====================
@@ -295,9 +299,71 @@ export const adminService = {
     return result.rows[0];
   },
 
-  async deleteCase(id: number) {
-    // แถวในบัญชี se-billing ของเคสนี้ (ถ้าเคยอนุมัติแล้วส่งไป) ต้องถอนก่อน — ลบเคสแล้วปล่อยแถวค้าง
-    // = ยอดผีในบัญชีที่ไม่มีเคสให้ย้อนดู (removeCapture ไม่ throw · ไม่ได้ตั้ง SEBILLING_URL = ข้าม)
+  /**
+   * ลบแบบพักไว้ (soft delete) — user สั่ง 14/09/69 หลังเคส #226 ถูกลบจริงแล้วกู้ไม่ได้
+   * แค่ประทับ deleted_at บนตารางจริง (cases_all) → VIEW `cases` ซ่อนแถวนี้จากทุกหน้าทันที (migration 062)
+   * ข้อมูล/รูป/ใบอนุมัติยังอยู่ครบ กู้คืนได้ที่ถังขยะ · ลบจริงเมื่อครบ TRASH_DAYS (trashPurge) หรือกด "ลบถาวร"
+   */
+  async deleteCase(id: number, deletedBy?: number | null) {
+    const r = await db.query(
+      `UPDATE cases_all SET deleted_at = now(), deleted_by = $2 WHERE id = $1 AND deleted_at IS NULL RETURNING id`,
+      [id, deletedBy ?? null]);
+    if (r.rows.length === 0) throw new NotFoundError('Case not found');
+    // แถวในบัญชี se-billing ของเคสนี้ (ถ้าเคยอนุมัติแล้วส่งไป) ถอนออกระหว่างพัก — กู้คืนแล้วส่งกลับให้ (restoreCase)
+    await removeCapture(id);
+    notifyCaseChanged(id, 'deleted', deletedBy ?? null);
+    return { id, trash_days: TRASH_DAYS };
+  },
+
+  /** รายการในถังขยะ — อ่านจากตารางจริง (VIEW cases มองไม่เห็นแถวที่ลบ) */
+  async listTrash() {
+    const r = await db.query(
+      `SELECT ca.id, ca.status, ca.source, ca.customer_name, ca.visit_no,
+              sr.claim_no, sr.survey_job_no, sr.insurance_company,
+              to_char(ca.deleted_at AT TIME ZONE 'Asia/Bangkok', 'DD/MM/YYYY HH24:MI') AS deleted_at_th,
+              (u.first_name || ' ' || u.last_name) AS deleted_by_name,
+              GREATEST(0, $1 - FLOOR(EXTRACT(EPOCH FROM (now() - ca.deleted_at)) / 86400))::int AS days_left,
+              (SELECT COUNT(*) FROM survey_photos sp JOIN survey_reports r2 ON r2.id = sp.report_id
+                WHERE r2.case_id = ca.id)::int AS photo_count
+         FROM cases_all ca
+         LEFT JOIN survey_reports sr ON sr.case_id = ca.id
+         LEFT JOIN users u ON u.id = ca.deleted_by
+        WHERE ca.deleted_at IS NOT NULL
+        ORDER BY ca.deleted_at DESC`, [TRASH_DAYS]);
+    return { cases: r.rows, days: TRASH_DAYS };
+  },
+
+  /** กู้คืนจากถังขยะ — กลับสถานะเดิมทุกอย่าง · เคสที่อนุมัติแล้วส่งยอดกลับ se-billing ให้ด้วย (ตอนลบถอนไว้) */
+  async restoreCase(id: number, by?: number | null) {
+    const r = await db.query(
+      `UPDATE cases_all SET deleted_at = NULL, deleted_by = NULL WHERE id = $1 AND deleted_at IS NOT NULL RETURNING id, status`,
+      [id]);
+    if (r.rows.length === 0) throw new NotFoundError('ไม่พบเคสนี้ในถังขยะ');
+    let billing: unknown = null;
+    if (r.rows[0].status === 'reviewed') billing = await sendCapture(id);   // ไม่ throw
+    notifyCaseChanged(id, 'restored', by ?? null);
+    return { id, status: r.rows[0].status, billing };
+  },
+
+  /** ลบจริงทุกเคสที่พักในถังขยะเกิน TRASH_DAYS — เรียกจาก trashPurge (พังทีละเคส ไม่ล้มทั้งรอบ) */
+  async purgeExpired(days: number = TRASH_DAYS) {
+    const r = await db.query(
+      `SELECT id FROM cases_all WHERE deleted_at IS NOT NULL AND deleted_at < now() - ($1::int * INTERVAL '1 day') ORDER BY id`,
+      [days]);
+    const failed: number[] = [];
+    let purged = 0;
+    for (const row of r.rows as { id: number }[]) {
+      try { await this.purgeCase(row.id); purged++; } catch { failed.push(row.id); }
+    }
+    return { purged, failed };
+  },
+
+  /**
+   * ลบจริง (purge) — เฉพาะเคสที่อยู่ในถังขยะแล้วเท่านั้น: ลบรายงาน/ค่าใช้จ่าย/ใบอนุมัติ/รูป + ไฟล์บนดิสก์
+   * ใช้โดยปุ่ม "ลบถาวร" ในถังขยะ และตัวลบอัตโนมัติหลังครบกำหนด · กู้ไม่ได้
+   */
+  async purgeCase(id: number) {
+    // แถวในบัญชี se-billing ถอนไว้ตั้งแต่ตอนพัก — เรียกซ้ำเผื่อกู้คืนแล้วลบใหม่ (removeCapture ไม่ throw)
     await removeCapture(id);
     // Find related photos before deleting
     const surveyPhotos = await db.query(
@@ -328,8 +394,9 @@ export const adminService = {
       await client.query('DELETE FROM reviews WHERE case_id = $1', [id]);
       await client.query('DELETE FROM case_images WHERE case_id = $1', [id]);
 
-      const result = await client.query('DELETE FROM cases WHERE id = $1 RETURNING id', [id]);
-      if (result.rows.length === 0) throw new NotFoundError('Case not found');
+      // ลบจากตารางจริง และเฉพาะแถวที่พักในถังขยะแล้ว — เคสที่ยังใช้งานอยู่ต้องผ่านการพักก่อนเสมอ
+      const result = await client.query('DELETE FROM cases_all WHERE id = $1 AND deleted_at IS NOT NULL RETURNING id', [id]);
+      if (result.rows.length === 0) throw new NotFoundError('ไม่พบเคสนี้ในถังขยะ (ลบถาวรได้เฉพาะเคสที่พักไว้แล้ว)');
 
       await client.query('COMMIT');
     } catch (err) {

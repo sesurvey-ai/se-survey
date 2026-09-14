@@ -66,9 +66,20 @@ export const adminController = {
     sendSuccess(res, caseData);
   }),
 
+  // ลบ = พักไว้ในถังขยะ (กู้คืนได้ · ลบจริงเองหลัง TRASH_DAYS) — user สั่ง 14/09/69
   deleteCase: asyncHandler(async (req: Request, res: Response) => {
-    await adminService.deleteCase(Number(req.params.id));
-    sendSuccess(res, { message: 'Case deleted' });
+    const r = await adminService.deleteCase(Number(req.params.id), req.user?.id ?? null);
+    sendSuccess(res, { message: 'Case moved to trash', ...r });
+  }),
+  listTrash: asyncHandler(async (_req: Request, res: Response) => {
+    sendSuccess(res, await adminService.listTrash());
+  }),
+  restoreCase: asyncHandler(async (req: Request, res: Response) => {
+    sendSuccess(res, await adminService.restoreCase(Number(req.params.id), req.user?.id ?? null));
+  }),
+  purgeCase: asyncHandler(async (req: Request, res: Response) => {
+    await adminService.purgeCase(Number(req.params.id));
+    sendSuccess(res, { message: 'Case purged' });
   }),
 
   // Reviews

@@ -97,8 +97,9 @@ export default function AdminCasesPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">จัดการเคส</h1>
-          <p className="text-gray-500 text-sm mt-1">ทั้งหมด {total} เคส</p>
+          <p className="text-gray-500 text-sm mt-1">ทั้งหมด {total} เคส · กดลบ = พักไว้ในถังขยะ 30 วัน กู้คืนได้</p>
         </div>
+        <Link href="/admin/cases/trash" className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 text-sm">🗑 ถังขยะ</Link>
       </div>
 
       {/* Filters */}
@@ -185,7 +186,8 @@ export default function AdminCasesPage() {
                           <button onClick={() => setDeleteConfirm(null)} className="px-3 py-1 text-xs bg-gray-300 text-gray-700 rounded hover:bg-gray-400">ยกเลิก</button>
                         </div>
                       ) : (
-                        <button onClick={() => setDeleteConfirm(c.id)} className="px-3 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 transition-colors">ลบ</button>
+                        <button onClick={() => setDeleteConfirm(c.id)} title="พักไว้ในถังขยะ 30 วัน กู้คืนได้ที่หน้าถังขยะ"
+                          className="px-3 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 transition-colors">ลบ</button>
                       )}
                     </div>
                   </td>

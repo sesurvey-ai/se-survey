@@ -60,9 +60,13 @@ const updateCaseSchema = z.object({
 });
 
 router.get('/cases', adminController.getCases);
+// ถังขยะ (14/09/69) — ต้องมาก่อน /cases/:id ไม่งั้น "trash" ถูกจับเป็น id
+router.get('/cases/trash', adminController.listTrash);
 router.get('/cases/:id', adminController.getCaseById);
 router.put('/cases/:id', validate(updateCaseSchema), adminController.updateCase);
-router.delete('/cases/:id', adminController.deleteCase);
+router.delete('/cases/:id', adminController.deleteCase);            // = พักไว้ในถังขยะ
+router.post('/cases/:id/restore', adminController.restoreCase);     // กู้คืน
+router.delete('/cases/:id/purge', adminController.purgeCase);       // ลบถาวร (เฉพาะที่อยู่ในถังขยะ)
 
 // Reviews CRUD
 const updateReviewSchema = z.object({

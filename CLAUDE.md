@@ -21,3 +21,6 @@
 - **push ขึ้น `main` = deploy อัตโนมัติ** ผ่าน Dokploy (backend กับ web เป็นคนละ service ใช้เวลาไม่เท่ากัน)
 - **แอปมือถือไม่ได้อัปเดตตาม push** — ต้อง `flutter build apk --release` แล้วติดตั้งทับทุกเครื่อง
 - **EMCS เป็นระบบของบริษัทประกัน** ห้ามแตะโดยไม่ได้รับอนุญาตชัดเจน — บอท `se-autokey` default เป็น dry-run เสมอ
+- **`cases` เป็น VIEW ตั้งแต่ migration 062 — ตารางจริงคือ `cases_all`** (ลบแบบพักไว้: VIEW ซ่อนแถวที่ `deleted_at` ไม่ว่าง)
+  เพิ่ม/แก้คอลัมน์ต้อง `ALTER TABLE cases_all ...` แล้ว `CREATE OR REPLACE VIEW cases AS SELECT * FROM cases_all WHERE deleted_at IS NULL;` ซ้ำทุกครั้ง
+  ไม่งั้นคอลัมน์ใหม่มองไม่เห็นผ่าน `cases` · อ่าน/กู้เคสในถังขยะต้องอ่านจาก `cases_all` · `INSERT INTO cases` ห้ามใช้ `ON CONFLICT` (VIEW ไม่รองรับ)

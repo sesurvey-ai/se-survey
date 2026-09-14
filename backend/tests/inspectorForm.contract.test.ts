@@ -36,12 +36,16 @@ check('พบดอกจันในฟอร์ม', reqs.length > 0, `${reqs.
  */
 const tlRows = Array.from(src.matchAll(/\btl\('([a-z_0-9]+)',\s*'([a-z_0-9]+)',\s*'([a-z_0-9]+)'/g));
 const tlNames = tlRows.flatMap((m) => [m[1], m[2], m[3]]);
-check('การ์ดลำดับเวลามีครบ 5 จังหวะ', tlRows.length === 5, `${tlRows.length} จังหวะ · ${tlNames.length} ช่อง`);
+// 13/09/69: จังหวะ 6 "ส่งงาน" เข้าตาราง tl() ด้วย (ช่องกรอกเหมือนจังหวะอื่น) → 6 จังหวะ 18 ช่อง
+check('การ์ดลำดับเวลามีครบ 6 จังหวะ (5 ของ EMCS + ส่งงาน)', tlRows.length === 6, `${tlRows.length} จังหวะ · ${tlNames.length} ช่อง`);
 check('ช่องในการ์ดลำดับเวลาผูกชื่อจากตารางเดียวกัน',
       /name=\{n\.date\}/.test(src) && /name=\{n\.hour\}/.test(src) && /name=\{n\.min\}/.test(src));
-check('ดอกจันของลำดับเวลาคุมทั้ง 3 ช่องของจังหวะนั้น', /<Req of=\{n\.keys\.join\(','\)\} \/>/.test(src));
-// จังหวะ 6 "ส่งงาน" อ่านอย่างเดียว (10/09/69) — ไม่ผ่าน tl() ไม่มีช่องกรอก ไม่มีดอกจัน · กริดขยายเป็น 6 ช่อง
-check('จังหวะ 6 "ส่งงาน" อ่านอย่างเดียวจาก submitted_at_th', src.includes('submitted_at_th') && src.includes('xl:grid-cols-6') && !/name="submitted_at/.test(src));
+// ดอกจันวาดเฉพาะจังหวะที่ EMCS บังคับ (req=true) — จังหวะ 6 "ส่งงาน" เป็นของเราเอง ไม่มีดอกจัน ไม่เข้าตัวไล่ช่องว่าง
+check('ดอกจันของลำดับเวลาคุมทั้ง 3 ช่องของจังหวะนั้น (เฉพาะจังหวะที่บังคับ)', /\{n\.req && <Req of=\{n\.keys\.join\(','\)\} \/>\}/.test(src));
+// จังหวะ 6 "ส่งงาน" (13/09/69) — ช่องวันที่ + ชม:นาที แก้ได้ ค่าจาก submitted_at_th · ไม่ใช่ช่องบังคับ (req=false) · กริด 6 ช่อง
+check('จังหวะ 6 "ส่งงาน" เป็นช่องกรอกจาก submitted_at_th แบบไม่บังคับ',
+      src.includes('submitted_at_th') && src.includes('xl:grid-cols-6')
+      && /tl\('submitted_date_val', 'submitted_hour', 'submitted_minute',[\s\S]{0,200}?false\)/.test(src));
 
 // ผ่อนให้เฉพาะดอกจันของลำดับเวลาเท่านั้น — ตัวอื่นยังต้องเป็นสตริงตรง ๆ
 const TL_REQ = /\bof=\{n\.keys\.join\(','\)\}/;
@@ -398,8 +402,9 @@ check('ช่อง ชม./นาที บนเว็บเติมศูน
       (src.match(/onBlur=\{padTimeOnBlur\}/g) || []).length === 6);
 
 console.log(String.fromCharCode(10) + '-- ประตูอนุมัติ: ต้องครอบของที่ EMCS บังคับ --');
+// 13/09/69: คู่กรณีใช้ opponentMissing() (รวมช่องบังคับแบบมีเงื่อนไข: ยี่ห้อเมื่อเลือกประเภทรถ) — การ์ดกับประตูอนุมัติต้องใช้ตัวเดียวกัน
 check('นับช่องบังคับของคู่กรณี/ผู้บาดเจ็บ/ทรัพย์สินเข้าประตูอนุมัติ',
-      /recordGaps > 0 \? \[/.test(src) && /OPPONENT_REQUIRED, INJURED_REQUIRED, PROPERTY_REQUIRED/.test(src));
+      /recordGaps > 0 \? \[/.test(src) && /opponentMissing\(it\)\.length/.test(src) && /INJURED_REQUIRED, PROPERTY_REQUIRED/.test(src));
 check('บังคับให้มีรายการความเสียหายอย่างน้อย 1 ชิ้น',
       /damageRows === 0 \? \[/.test(src));
 check('เลิกผูกดอกจันกับ damage_description (ค่าไม่เคยถึง EMCS)',

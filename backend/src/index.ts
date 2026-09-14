@@ -4,6 +4,7 @@ import { env } from './config/env';
 import { initFirebase } from './config/firebase';
 import { setupSocket } from './socket';
 import { startUploadSweeper } from './utils/uploadSweeper';
+import { startTrashPurge } from './utils/trashPurge';
 
 const server = http.createServer(app);
 
@@ -19,6 +20,8 @@ setupSocket(server);
 
 // กวาดไฟล์ OCR temp ที่ค้าง (orphan) ใน uploads root เป็นระยะ
 startUploadSweeper();
+// ลบจริงเคสในถังขยะที่พักครบ 30 วัน (migration 062, 14/09/69)
+startTrashPurge();
 
 server.listen(env.PORT, () => {
   console.log(`Server running on port ${env.PORT} (${env.NODE_ENV})`);

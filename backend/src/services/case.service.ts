@@ -88,11 +88,16 @@ const assertSurveyJobNoUnique = async (jobNos: unknown[], excludeCaseId?: number
   for (const raw of jobNos) {
     const jobNo = String(raw ?? '').trim();
     if (!jobNo) continue;
+    // อ่านจากตารางจริง (cases_all) — เคสที่พักในถังขยะยังถือเลขนี้อยู่ (ลบจริงค่อยหลุด) ต้องบอกให้ชัดว่าไปกู้คืน/ลบถาวรแทน
     const dup = await db.query(
-      `SELECT c.id FROM cases c JOIN survey_reports sr ON sr.case_id = c.id
+      `SELECT c.id, (c.deleted_at IS NOT NULL) AS in_trash FROM cases_all c JOIN survey_reports sr ON sr.case_id = c.id
         WHERE (sr.survey_job_no = $1 OR sr.survey_job_no_2 = $1) AND c.id != $2 LIMIT 1`,
       [jobNo, excludeCaseId ?? -1]);
     if (dup.rows.length > 0) {
+      if (dup.rows[0].in_trash) {
+        throw new AppError(409,
+          `เลขเซอร์เวย์ ${jobNo} อยู่ในเคส #${dup.rows[0].id} ที่พักในถังขยะ — กู้คืนเคสนั้น หรือลบถาวรจากถังขยะก่อน (แอดมิน › จัดการเคส › ถังขยะ)`);
+      }
       throw new AppError(409,
         `เลขเซอร์เวย์ ${jobNo} ถูกใช้แล้วในเคส #${dup.rows[0].id} — เลขเซอร์เวย์ใช้อ้างอิงเบิกเงิน ห้ามซ้ำ`);
     }
