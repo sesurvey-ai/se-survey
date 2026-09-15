@@ -34,7 +34,8 @@ const NAV_ITEMS: Record<string, { label: string; href: string }[]> = {
   checker: [
     { label: 'รายการงาน', href: '/inspector' },
     // งานจากระบบ ISURVEY เดิม: อัปโหลด XML → สร้างเคส → ตรวจ/แก้ → ปิดงาน → บอทนำเข้า EMCS
-    { label: 'นำเข้าจากไฟล์ XML', href: '/inspector/cases/import-xml' },
+    // ⛔ ซ่อนเมนูไว้ก่อน (user สั่ง 15/09/69) — หน้า /inspector/cases/import-xml ยังเปิดตรง ๆ ได้ ทางดึงสดจาก ISURVEY ใช้แทน
+    // { label: 'นำเข้าจากไฟล์ XML', href: '/inspector/cases/import-xml' },
     { label: 'งานรอตรวจ (ISURVEY)', href: '/inspector/isurvey' },
     { label: 'บัญชี ISURVEY', href: '/inspector/isurvey/account' },
     { label: 'ลูกทีมของฉัน', href: '/inspector/team' },
