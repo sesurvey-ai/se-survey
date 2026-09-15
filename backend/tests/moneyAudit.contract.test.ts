@@ -40,7 +40,7 @@ check('ป้ายไทยฝั่งยอดความเสียหา�
     snap.estimated_cost === '4000.00' && snap.opponent_1_cost === '8000' && snap.opponent_2_cost === '' && !('opponent_3_cost' in snap));
   const cs = read('src', 'services', 'case.service.ts');
   check('updateReport จดประวัติยอดความเสียหาย (ก่อน-หลัง UPDATE ใน transaction เดียวกัน)',
-    /const damageBefore = damageSubmitted[\s\S]{0,400}?kind: 'damage'/.test(cs));
+    /const damageBefore = damageSubmitted[\s\S]{0,1200}?UPDATE survey_reports SET[\s\S]{0,600}?kind: 'damage'/.test(cs));
 }
 
 /** ป้ายไทยครบทุกช่องที่เก็บ — ไม่มีป้าย = โชว์ชื่อคอลัมน์ดิบให้ผู้ตรวจอ่าน */
