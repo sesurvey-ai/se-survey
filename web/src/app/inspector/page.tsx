@@ -139,9 +139,15 @@ export default function InspectorDashboard() {
     return Array.from(s).sort((a, b) => a.localeCompare(b, 'th'));
   }, [cases]);
 
-  const shown = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    return groups[tab].filter((c) => {
+  /**
+   * ค้นหาด้วยข้อความ = ค้น**ทุกสถานะ** (user สั่ง 15/09/69) — เดิมค้นเฉพาะแท็บที่เลือกอยู่
+   * พิมพ์เลขเคลมตอนอยู่แท็บ "อนุมัติแล้ว" ทั้งที่งานยังรอตรวจ = หาไม่เจอ และไม่มีอะไรบอกว่าต้องสลับแท็บก่อน
+   * ระหว่างค้น แท็บโชว์ "พบ/ทั้งหมด" ของแต่ละสถานะแทน (ไม่ไฮไลต์แท็บ เพราะผลรวมทุกสถานะ) · ตัวกรองที่มา/ช่าง
+   * ยังกรองซ้อนได้ · ล้างช่องค้นหาแล้วแท็บกลับมามีผลตามเดิม
+   */
+  const needle = q.trim().toLowerCase();
+  const { shown, hits } = useMemo(() => {
+    const ok = (c: Case) => {
       if (src && String(c.source ?? 'mobile') !== src) return false;
       if (who) {
         const name = `${c.surveyor_code ? c.surveyor_code + ' ' : ''}${c.surveyor_first_name ?? ''}`;
@@ -150,8 +156,14 @@ export default function InspectorDashboard() {
       if (!needle) return true;
       return [c.claim_no, c.survey_job_no, c.claim_ref_no, c.license_plate, c.customer_name]
         .some((v) => String(v ?? '').toLowerCase().includes(needle));
-    });
-  }, [groups, tab, q, src, who]);
+    };
+    const pool = needle ? cases : groups[tab];
+    const keys = Object.keys(groups) as Tab[];
+    return {
+      shown: pool.filter(ok),
+      hits: needle ? Object.fromEntries(keys.map((k) => [k, groups[k].filter(ok).length])) as Record<Tab, number> : null,
+    };
+  }, [cases, groups, tab, needle, src, who]);
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="text-gray-500">กำลังโหลดรายการงาน...</div></div>;
   if (error) return <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">{error}</div>;
@@ -261,11 +273,14 @@ export default function InspectorDashboard() {
       <div className="flex gap-2 mb-3">
         {TABS.map((t) => (
           <button key={t.key} type="button" onClick={() => setTab(t.key)}
+            title={hits ? `กำลังค้นทุกสถานะ — พบในสถานะนี้ ${hits[t.key]} จาก ${t.n} เรื่อง` : undefined}
             className={`px-4 py-1.5 text-sm rounded-lg border transition-colors ${
-              tab === t.key
+              !hits && tab === t.key
                 ? 'bg-white border-gray-400 text-gray-800 font-medium'
                 : 'bg-transparent border-transparent text-gray-500 hover:bg-gray-100'}`}>
-            {t.label} {t.n}
+            {t.label} {hits ? (
+              <span className={hits[t.key] > 0 ? 'text-gray-800 font-medium' : ''}>{hits[t.key]}<span className="text-gray-400 font-normal">/{t.n}</span></span>
+            ) : t.n}
           </button>
         ))}
       </div>
@@ -291,7 +306,7 @@ export default function InspectorDashboard() {
 
       {(q || src || who) && (
         <p className="text-xs text-gray-500 mb-2">
-          แสดง {shown.length} จาก {groups[tab].length} เรื่อง
+          แสดง {shown.length} จาก {needle ? cases.length : groups[tab].length} เรื่อง{needle ? ' — ค้นทุกสถานะ' : ''}
           <button type="button" onClick={() => { setQ(''); setSrc(''); setWho(''); }}
             className="ml-2 text-blue-600 hover:underline">ล้างตัวกรอง</button>
         </p>
