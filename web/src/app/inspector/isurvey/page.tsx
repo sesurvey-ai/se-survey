@@ -76,6 +76,8 @@ export default function IsurveyPendingPage() {
   const statusBoxRef = useRef<HTMLDivElement | null>(null);
   /** งานที่อนุมัติแล้วในระบบเรา ซ่อนจากมุมมอง "รอตรวจข้อมูล" — กดโชว์ได้ */
   const [showApproved, setShowApproved] = useState(false);
+  /** ค้นหา เลขเคลม / เลขเซอร์เวย์ / ผู้สำรวจ / จังหวัด — พิมพ์แล้วค้น**ทุกสถานะ** ไม่สนตัวกรองสถานะ (user ขอ 15/09/69) */
+  const [q, setQ] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [needAccount, setNeedAccount] = useState(false);
@@ -178,9 +180,20 @@ export default function IsurveyPendingPage() {
    * ซ่อนจากมุมมองที่มี "รอตรวจข้อมูล" จนกว่าจะกด "โหลดรายการ" ซึ่ง ISURVEY จะบอกสถานะใหม่เอง · ดูทั้งหมด/สถานะอื่น = ไม่ซ่อน
    */
   const hideApproved = !isAll && statuses.includes(PENDING) && !showApproved;
-  const visible = useMemo(() => byStatus.filter((r) => !(hideApproved && r.status === PENDING && r.imported_status === 'reviewed')),
+  const afterHide = useMemo(() => byStatus.filter((r) => !(hideApproved && r.status === PENDING && r.imported_status === 'reviewed')),
     [byStatus, hideApproved]);
-  const hiddenApproved = byStatus.length - visible.length;
+  const hiddenApproved = byStatus.length - afterHide.length;
+  /**
+   * ค้นหา (user ขอ 15/09/69): พิมพ์อะไรก็ตาม = ค้นจากรายการที่โหลดมา**ทุกสถานะ** (ตัวกรองสถานะ/การซ่อนงานอนุมัติแล้วไม่มีผลชั่วคราว)
+   * ตรงกับ เลขเคลม · เลขเซอร์เวย์ · ผู้สำรวจ (รหัส+ชื่อ) · จังหวัด แบบมีคำนั้นอยู่ ไม่สนตัวพิมพ์
+   */
+  const needle = q.trim().toLowerCase();
+  const searching = needle.length > 0;
+  const visible = useMemo(() => {
+    if (!searching) return afterHide;
+    return (rows ?? []).filter((r) =>
+      [r.claim_no, r.survey_no, r.surveyor_name, r.acc_province].some((v) => String(v ?? '').toLowerCase().includes(needle)));
+  }, [afterHide, rows, searching, needle]);
   const toggleStatus = (s: string) =>
     setStatuses((cur) => (cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]));
   const statusLabel = isAll ? `ทั้งหมด (${rows?.length ?? 0})`
@@ -253,10 +266,25 @@ export default function IsurveyPendingPage() {
             {loading ? 'กำลังโหลด…' : 'โหลดรายการ'}
           </button>
           {rows && (
-            /* ตัวกรองสถานะ ISURVEY — ติ๊กได้หลายค่าพร้อมกัน (user ขอ 08/09/69) · ไม่ติ๊กเลย = ทั้งหมด */
-            <div ref={statusBoxRef} className="relative flex flex-col text-xs text-gray-600">สถานะ
-              <button type="button" onClick={() => setStatusOpen((o) => !o)}
-                className="border border-gray-300 bg-white px-2 py-1 text-sm text-gray-800 text-left min-w-[12rem] flex items-center justify-between gap-2">
+            /* ค้นหาข้ามสถานะ (user ขอ 15/09/69) — เลขเคลม / เลขเซอร์เวย์ / ผู้สำรวจ / จังหวัด · พิมพ์แล้วตัวกรองสถานะพักไว้ */
+            <div className="flex flex-col text-xs text-gray-600">ค้นหา (ทุกสถานะ)
+              <div className="relative">
+                <input type="search" value={q} onChange={(e) => setQ(e.target.value)}
+                  placeholder="เลขเคลม / เลขเซอร์เวย์ / ผู้สำรวจ / จังหวัด"
+                  className="border border-gray-300 bg-white px-2 py-1 pr-7 text-sm text-gray-800 w-[19rem]" />
+                {searching && (
+                  <button type="button" onClick={() => setQ('')} title="ล้างคำค้น"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-800 text-sm px-1">✕</button>
+                )}
+              </div>
+            </div>
+          )}
+          {rows && (
+            /* ตัวกรองสถานะ ISURVEY — ติ๊กได้หลายค่าพร้อมกัน (user ขอ 08/09/69) · ไม่ติ๊กเลย = ทั้งหมด · ตอนค้นหาพักไว้ (ค้นทุกสถานะ) */
+            <div ref={statusBoxRef} className={`relative flex flex-col text-xs text-gray-600 ${searching ? 'opacity-50' : ''}`}>สถานะ
+              <button type="button" onClick={() => setStatusOpen((o) => !o)} disabled={searching}
+                title={searching ? 'กำลังค้นหาทุกสถานะ — ล้างคำค้นก่อนถึงจะกรองสถานะ' : ''}
+                className="border border-gray-300 bg-white px-2 py-1 text-sm text-gray-800 text-left min-w-[12rem] flex items-center justify-between gap-2 disabled:cursor-not-allowed">
                 <span className="truncate">{statusLabel}</span><span className="text-gray-500">▾</span>
               </button>
               {statusOpen && (
@@ -322,6 +350,13 @@ export default function IsurveyPendingPage() {
         </div>
       )}
 
+      {rows && searching && (
+        <div className="mb-2 text-xs text-gray-700">
+          ค้นหา &quot;<span className="font-semibold">{q.trim()}</span>&quot; ใน<span className="font-semibold">ทุกสถานะ</span> ({rows.length} รายการที่โหลดมา) — พบ {visible.length} รายการ
+          {' · '}<button type="button" className="text-blue-700 hover:underline" onClick={() => setQ('')}>ล้างคำค้น</button>
+          <span className="text-gray-500"> · ตัวกรองสถานะพักไว้ระหว่างค้นหา</span>
+        </div>
+      )}
       {rows && (
         <div className="bg-white border border-gray-200 overflow-x-auto">
           <table className="min-w-full text-sm">

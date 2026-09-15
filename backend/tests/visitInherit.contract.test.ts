@@ -129,6 +129,11 @@ check('เคสอ้างอิง: locked = approved && !isReference · แ�
   && /const actionBar = approved && isReference \? \(/.test(cd));
 const pull = read('..', 'web', 'src', 'app', 'inspector', 'isurvey', 'page.tsx');
 check('หน้าดึงงานบอกจำนวนรูปของแต่ละครั้งก่อนหน้า', pull.includes('refPhotos(x)'));
+/** ค้นหาข้ามสถานะ (user ขอ 15/09/69): เลขเคลม/เลขเซอร์เวย์/ผู้สำรวจ/จังหวัด · พิมพ์แล้วตัวกรองสถานะพักไว้ */
+check('หน้าดึงงาน: ค้นหาจากรายการที่โหลดมาทุกสถานะ (4 ช่อง ไม่สนตัวพิมพ์) และพักตัวกรองสถานะระหว่างค้น',
+  /if \(!searching\) return afterHide;\s*return \(rows \?\? \[\]\)\.filter\(\(r\) =>\s*\[r\.claim_no, r\.survey_no, r\.surveyor_name, r\.acc_province\]\.some\(\(v\) => String\(v \?\? ''\)\.toLowerCase\(\)\.includes\(needle\)\)\);/.test(pull)
+  && pull.includes('placeholder="เลขเคลม / เลขเซอร์เวย์ / ผู้สำรวจ / จังหวัด"') && /onClick=\{\(\) => setStatusOpen\(\(o\) => !o\)\} disabled=\{searching\}/.test(pull)
+  && pull.includes('ตัวกรองสถานะพักไว้ระหว่างค้นหา'));
 
 console.log(failed === 0 ? '\n✅ ผ่านทั้งหมด\n' : `\n❌ ไม่ผ่าน ${failed} ข้อ\n`);
 process.exit(failed === 0 ? 0 : 1);
