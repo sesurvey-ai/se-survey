@@ -67,6 +67,21 @@ check('TIMESTAMP จาก pg (Date) ถูกแปลงเป็น ISO strin
 check('คืนรายชื่อช่องที่เติม (ไว้จดเตือนให้หัวหน้า)', filled.length >= 12 && filled.includes('car_type'), `${filled.length} ช่อง`);
 check('ไม่มีครั้งที่ 1 ให้สืบทอด (แถวว่าง) → ไม่แตะอะไร',
   inheritFromFirstVisit({ car_type: '' }, {}).length === 0);
+/**
+ * ช่องคู่หู (15/09/69 ครั้งที่ 3–4 ของเคลม 2026013057520): ตัวดึงงานตั้ง driver_id_type='thai' ทั้งที่ไม่มีเลขบัตร
+ * พอเติมพาสปอร์ตของครั้งที่ 1 มาแล้วชนิดยังเป็นไทย → หน้าตรวจเตือน "เลขบัตรไทยไม่ถูกต้อง" ทั้งที่คนขับเป็นต่างชาติ
+ */
+{
+  const r = { driver_id_card: '', driver_id_type: 'thai', driver_license_no: '', driver_license_type: 'ใบขับขี่รถยนต์ส่วนบุคคล', driver_license_place: '' };
+  const f = inheritFromFirstVisit(r, { driver_id_card: 'EQ0097565', driver_id_type: 'foreign', driver_license_no: 'DL-1', driver_license_type: 'ใบขับขี่รถยนต์ส่วนบุคคล', driver_license_place: 'ระยอง' });
+  check('เติมเลขบัตรจากครั้งที่ 1 แล้วชนิดบัตรตามมาด้วยแม้ตัวดึงงานตั้งค่าไว้ (thai → foreign)',
+    r.driver_id_card === 'EQ0097565' && r.driver_id_type === 'foreign' && f.includes('driver_id_type'));
+  check('ใบขับขี่: เลขที่เติมแล้ว ชนิด/สถานที่ออกตามครั้งที่ 1 (ค่าเท่ากันไม่นับซ้ำ)',
+    r.driver_license_no === 'DL-1' && r.driver_license_place === 'ระยอง' && !f.includes('driver_license_type') && f.includes('driver_license_place'));
+  const keep = { driver_id_card: '1234567890123', driver_id_type: 'thai' };
+  inheritFromFirstVisit(keep, { driver_id_card: 'EQ0097565', driver_id_type: 'foreign' });
+  check('ครั้งนี้มีเลขบัตรของตัวเอง → ไม่แตะทั้งเลขและชนิด', keep.driver_id_card === '1234567890123' && keep.driver_id_type === 'thai');
+}
 check('isBlank: 0/false เป็นค่าจริง · null/""/"[]"/[]/{} ว่าง',
   !isBlank(0) && !isBlank(false) && isBlank(null) && isBlank('  ') && isBlank('[]') && isBlank([]) && isBlank({}));
 check('VISIT_OWN_FIELDS ครอบทั้งชุด: ผลการดำเนินงาน · รูปไม่อยู่ในตารางนี้อยู่แล้ว · เวลา/สถานที่ออกตรวจ · ช่าง · เลขเซอร์เวย์',

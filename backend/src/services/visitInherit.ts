@@ -34,6 +34,16 @@ export const LIST_FLAGS: Readonly<Record<string, string>> = {
   damaged_property: 'has_property',
 };
 
+/**
+ * ช่อง "คู่หู" ที่ต้องไปกับช่องหลักเสมอ — ตัวดึงงานใส่ค่าตั้งต้นให้ช่องคู่หูแม้ช่องหลักว่าง (เช่น driver_id_type='thai'
+ * ทั้งที่ไม่มีเลขบัตร) พอเติมเลขบัตรของครั้งที่ 1 (พาสปอร์ต) มาแล้วชนิดยังเป็น "ไทย" → หน้าตรวจเตือน "เลขบัตรไทยไม่ถูกต้อง"
+ * (เจอจริง 15/09/69 เคลม 2026013057520 ครั้งที่ 3–4) → เติมช่องหลักเมื่อไหร่ ให้ช่องคู่หูตามค่าครั้งที่ 1 ไปด้วยแม้ไม่ว่าง
+ */
+export const COMPANION_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  driver_id_card: ['driver_id_type'],
+  driver_license_no: ['driver_license_type', 'driver_license_place'],
+};
+
 /** ว่าง = null/undefined/สตริงว่าง/'[]'/'{}'/array-object เปล่า · ⛔ 0 กับ false ไม่ใช่ว่าง (เป็นค่าจริงได้) */
 export const isBlank = (v: unknown): boolean => {
   if (v === null || v === undefined) return true;
@@ -63,6 +73,11 @@ export function inheritFromFirstVisit(
     if (flag && first[flag] !== null && first[flag] !== undefined) {
       report[flag] = first[flag];
       filled.push(flag);
+    }
+    for (const mate of COMPANION_FIELDS[k] ?? []) {
+      if (isBlank(first[mate]) || report[mate] === first[mate]) continue;
+      report[mate] = first[mate];                                 // ทับค่าตั้งต้นของตัวดึงงาน — ชนิดต้องตรงกับเลขที่เติมมา
+      if (!filled.includes(mate)) filled.push(mate);
     }
   }
   return filled;
