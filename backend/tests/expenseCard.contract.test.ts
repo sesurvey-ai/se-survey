@@ -479,22 +479,19 @@ console.log('\n── ตัวสลับฟอนต์ ──');
   const sw = read('..', 'web', 'src', 'components', 'layout', 'AppearanceControls.tsx');
   const hdr = read('..', 'web', 'src', 'components', 'layout', 'Header.tsx');
 
-  check('โหลดฟอนต์ครบ 3 แบบ',
-        ['Noto_Sans_Thai', 'IBM_Plex_Sans_Thai', 'Sarabun'].every((f) => lay.includes(f)));
+  /** user ตัดสินใจ 15/09/69: ฟอนต์ Sarabun ตัวเดียว — ถอดตัวสลับฟอนต์ (3 แบบตั้งแต่ 02/09/69) ออก */
+  check('โหลดฟอนต์ Sarabun ตัวเดียว (ไม่โหลด Noto/Plex ถ่วงหน้าอีก)',
+        lay.includes('Sarabun') && !lay.includes('Noto_Sans_Thai') && !lay.includes('IBM_Plex_Sans_Thai'));
   check('⛔ ตัวแปรฟอนต์อยู่บน <html> ไม่ใช่ <body> (ไม่งั้น var() หาไม่เจอ)',
-        /<html[^>]*className=\{`\$\{notoThai\.variable\}/.test(lay)
-        && !/<body className=\{`\$\{/.test(lay));
+        /<html[^>]*className=\{sarabun\.variable\}/.test(lay) && !/<body className=\{`\$\{/.test(lay));
   check('ทั้งเว็บอ่าน var(--font-thai)', css.includes('font-family: var(--font-thai)'));
-  check('เลือกฟอนต์ก่อนหน้าถูกวาด (ไม่แวบเปลี่ยนทุกครั้งที่เปิดหน้า)',
-        lay.includes("localStorage.getItem('ui_font')") && lay.includes('dangerouslySetInnerHTML'));
-  check('⛔ คีย์ที่จำไว้ตรงกันทั้งสคริปต์บูตกับตัวสลับ',
-        lay.includes("'ui_font'") && sw.includes("localStorage.setItem('ui_font', id)"));
-  check('⛔ อ่านค่าที่จำไว้แบบกันค่าขยะ (ค่านี้ถูกยัดลง setProperty ตรง ๆ)',
-        lay.includes('/^[a-z-]+$/.test(f)'));
-  check('ตัวสลับเขียนทับที่ documentElement',
-        sw.includes("documentElement.style.setProperty('--font-thai', `var(--font-${id})`)"));
+  check('ไม่มีตัวเลือกฟอนต์ในเมนูแล้ว และไม่อ่านค่า ui_font ตอนบูต',
+        !sw.includes("localStorage.setItem('ui_font'") && !sw.includes('<select') && !lay.includes("localStorage.getItem('ui_font')")
+        && sw.includes("localStorage.removeItem('ui_font')"));
+  check('ขนาดตัวอักษรยังตั้งก่อนหน้าถูกวาด (ไม่แวบเปลี่ยนทุกครั้งที่เปิดหน้า)',
+        lay.includes("localStorage.getItem('ui_scale')") && lay.includes('dangerouslySetInnerHTML'));
     check('⛔ localStorage ห่อ try/catch (โหมดส่วนตัวเข้าถึงแล้ว throw)',
-        (sw.match(/catch/g) ?? []).length >= 3 && lay.includes('catch(e){}'));
+        (sw.match(/catch/g) ?? []).length >= 2 && lay.includes('catch(e){}'));
 
   const nav = read('..', 'web', 'src', 'components', 'layout', 'Sidebar.tsx');
 

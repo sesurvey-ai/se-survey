@@ -6,7 +6,7 @@
 :root {
   --background: #ffffff;
   --foreground: #201e1d;
-  /* ฟอนต์ตั้งต้นของทั้งเว็บ — ตัวสลับเขียนทับตัวแปรนี้ที่ <html> (ดู AppearanceControls.tsx) */
+  /* ฟอนต์ของทั้งเว็บ = Sarabun ตัวเดียว (user ตัดสินใจ 15/09/69 — ถอดตัวสลับฟอนต์ออกแล้ว) · ตัวแปร --font-sarabun มาจาก layout.tsx บน <html> */
   --font-thai: var(--font-sarabun);
 }
 
