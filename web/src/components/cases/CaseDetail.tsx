@@ -1755,7 +1755,10 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
   useEffect(() => {
     const form = formRef.current;
     if (!form) return;
-    const touch = () => {
+    const touch = (e: Event) => {
+      // ตัวเลือก "ครั้งที่" (data-no-dirty) อยู่ในฟอร์มแต่เป็นการ "ไปหน้าอื่น" ไม่ใช่การแก้ข้อมูล — ถ้านับว่าค้าง
+      // เบราว์เซอร์จะถาม "ออกจากเว็บไซต์ไหม" ทุกครั้งที่เปลี่ยนครั้ง ทั้งที่ไม่ได้พิมพ์อะไร (user ทัก 15/09/69)
+      if ((e.target as HTMLElement | null)?.dataset?.noDirty) return;
       if (dirtyRef.current) return;
       dirtyRef.current = true;
       setFormDirty(true);
@@ -3328,7 +3331,7 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
               <div className="ml-auto flex items-center gap-2 shrink-0">
                 <span className="text-white/70 text-xs">ครั้งที่</span>
                 {(visits ?? []).length > 1 ? (
-                  <select value={String(viewVisit ?? caseData?.id ?? '')}
+                  <select data-no-dirty="1" value={String(viewVisit ?? caseData?.id ?? '')}
                     // 15/09/69 แบบ EMCS: เลือกครั้งที่ = พาไปหน้าของครั้งนั้น (คนละเคส) ทุกอย่างรวมรูป/ปุ่มอนุมัติตามครั้ง — ไม่ใช่ดูอย่างเดียวในหน้าเดิม
                     onChange={(e) => switchVisit(e.target.value)}
                     className="border border-[var(--md-line-2)] rounded-none px-2 h-7 text-sm font-semibold text-[var(--md-ink)] bg-white">

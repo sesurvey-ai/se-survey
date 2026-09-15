@@ -370,6 +370,10 @@ check('เลือกครั้งที่ = ไปหน้าของค�
 check('เปลี่ยนครั้งไม่มีกล่องถาม แต่ยังมี beforeunload กันของพิมพ์ค้าง',
       /const switchVisit = \(id: string\) => \{\s*if \(!id \|\| Number\(id\) === Number\(caseData\?\.id\)\) return;\s*window\.location\.href = `\/inspector\/cases\/\$\{id\}`;\s*\};/.test(src)
       && !src.includes('เปิดเคสของครั้งที่เลือก?') && /window\.addEventListener\('beforeunload', warn\)/.test(src));
+/** ตัวเลือกครั้งที่อยู่ในฟอร์ม → change ของมันเคยทำให้ฟอร์ม "ค้าง" แล้วเบราว์เซอร์ถาม "ออกจากเว็บไซต์ไหม" ทั้งที่ไม่ได้พิมพ์ (user ทัก 15/09/69) */
+check('เปลี่ยนครั้งที่ไม่นับว่าฟอร์มค้าง (data-no-dirty) → ไม่มีกล่องเบราว์เซอร์ถ้าไม่ได้พิมพ์อะไร',
+      /<select data-no-dirty="1" value=\{String\(viewVisit/.test(src)
+      && /const touch = \(e: Event\) => \{[\s\S]{0,400}?if \(\(e\.target as HTMLElement \| null\)\?\.dataset\?\.noDirty\) return;/.test(src));
 check('ช่อง "ค่าคัดประจำวัน" รับค่าที่โหลดมาทีหลังได้', /key=\{`dc-\$\{String\(payV/.test(src));
 
 /**
