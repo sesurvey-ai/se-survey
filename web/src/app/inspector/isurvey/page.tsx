@@ -269,7 +269,8 @@ export default function IsurveyPendingPage() {
             /* ค้นหาข้ามสถานะ (user ขอ 15/09/69) — เลขเคลม / เลขเซอร์เวย์ / ผู้สำรวจ / จังหวัด · พิมพ์แล้วตัวกรองสถานะพักไว้ */
             <div className="flex flex-col text-xs text-gray-600">ค้นหา (ทุกสถานะ)
               <div className="relative">
-                <input type="search" value={q} onChange={(e) => setQ(e.target.value)}
+                {/* type="text" ไม่ใช่ "search" — Chrome วาดปุ่ม ✕ ของตัวเองซ้อนกับปุ่มล้างของเรา (user ทัก 15/09/69) */}
+                <input type="text" value={q} onChange={(e) => setQ(e.target.value)}
                   placeholder="เลขเคลม / เลขเซอร์เวย์ / ผู้สำรวจ / จังหวัด"
                   className="border border-gray-300 bg-white px-2 py-1 pr-7 text-sm text-gray-800 w-[19rem]" />
                 {searching && (
