@@ -210,7 +210,8 @@ check('ปุ่มเปิดแผงขึ้นเฉพาะแอดม�
  */
 console.log('\n-- หน้าตรวจเคส: ค่าใช้จ่ายอยู่คอลัมน์ขวาเฉพาะจอกว้าง --');
 const payStart = src.indexOf('{/* ── ค่าใช้จ่าย (คอลัมน์ขวาบนจอกว้าง) ──');
-const fsEnd = src.indexOf('</fieldset>');
+// fieldset หลักที่ล็อกทั้งฟอร์มปิดท้ายสุด — fieldset ย่อยที่ครอบตัวแก้คู่กรณี/ผู้บาดเจ็บ/ทรัพย์สิน (ล็อกข้อมูลหลักของครั้งที่ 2+, 15/09/69) อยู่ก่อนหน้า
+const fsEnd = src.lastIndexOf('</fieldset>');
 const payBlock = payStart > 0 && fsEnd > payStart ? src.slice(payStart, fsEnd) : '';
 check('ค่าใช้จ่ายยังอยู่ใน fieldset ที่ล็อกตอนอนุมัติแล้ว', payBlock.length > 0);
 check('จอแคบกลับไปเรียงลงล่างเอง (คอลัมน์เดียว)',
@@ -360,10 +361,12 @@ const pageSrc = fs.readFileSync(
   path.join(__dirname, '..', '..', 'web', 'src', 'app', 'inspector', 'cases', '[id]', 'page.tsx'), 'utf8');
 check('โหลดใหม่แล้วไม่ถอดทั้งหน้าทิ้ง (โชว์ตัวโหลดเฉพาะครั้งแรก)',
       /if \(firstLoad\.current\) setLoading\(true\)/.test(pageSrc));
-check('สลับครั้งที่แล้วเก็บค่าที่พิมพ์ไว้ก่อน', /railDraft\.current = readRail\(\)/.test(src));
-check('กลับมาครั้งเดิมแล้วเขียนค่าคืน', /railDraft\.current\[el\.name\]/.test(src));
-check('เลือกครั้งของเคสตัวเอง = กลับเป็น self (ไม่สร้างรางใหม่ซ้ำซ้อน)',
-      /to === Number\(caseData\?\.id\) \? null : to/.test(src));
+/**
+ * 15/09/69 แบบ EMCS (user เคาะ): ตัวเลือก "ครั้งที่" พาไปหน้าของครั้งนั้น (คนละเคส) ไม่ใช่สลับดูในหน้าเดิม
+ * — ทุกอย่างรวมรูป/ปุ่มอนุมัติตามครั้งโดยอัตโนมัติ · ก่อนออกจากหน้าถามก่อนถ้าพิมพ์ค้าง
+ */
+check('เลือกครั้งที่ = ไปหน้าของครั้งนั้น', /onChange=\{\(e\) => switchVisit\(e\.target\.value\)\}/.test(src));
+check('ไปครั้งอื่นถามก่อนถ้ายังไม่ได้บันทึกร่าง', /const switchVisit = \(id: string\) => \{[\s\S]{0,400}?window\.confirm\(msg\)/.test(src));
 check('ช่อง "ค่าคัดประจำวัน" รับค่าที่โหลดมาทีหลังได้', /key=\{`dc-\$\{String\(payV/.test(src));
 
 /**

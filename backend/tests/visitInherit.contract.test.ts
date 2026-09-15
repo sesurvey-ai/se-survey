@@ -1,15 +1,16 @@
 /**
- * การ์ดของ "งานครั้งที่ 2+ สืบทอดข้อมูลครั้งที่ 1" (user สั่ง 15/09/69 เคลม 2026013057520 ครั้งที่ 1–4)
+ * การ์ดของ "เคลมเดียวหลายครั้ง — หน้าเคสแบบ EMCS" (user เคาะ 15/09/69 เคลม 2026013057520 ครั้งที่ 1–4)
  *
- * ทำไมต้องมี: ISURVEY เก็บข้อมูลหลักไว้ที่ครั้งที่ 1 ใบครั้งถัดไปมีแค่ของประจำครั้ง → ดึงเข้าเว็บแล้ว
- * หน้าตรวจขึ้น "ช่องบังคับยังว่าง 20+ ช่อง" ทั้งที่งานต่อเนื่องไม่ต้องกรอกช่องพวกนั้น
- * และรูปของครั้งก่อนหน้าต้องเข้าเว็บด้วย (กติกา 13/09 "ข้ามรูป" ถูกยกเลิก)
+ * รายการงานแยกใบตามเลขเซอร์เวย์ (แบบ ISURVEY: 1 ครั้ง = 1 เคส อนุมัติ/ปิด ISURVEY/ส่ง se-billing/เข้า EMCS ทีละใบ)
+ * แต่ข้อมูลหลักของเคลมมีชุดเดียวที่ครั้งที่ 1 (แบบ EMCS) → ครั้งที่ 2+ "รายงานที่มีผล" = ครั้งที่ 1 สด + ของครั้งนั้น
+ * หน้าเคส/บอท/XML ใช้ชุดเดียวกัน · ไม่ก๊อปตอนดึงงานอีก (เคยทำเช้า 15/09 แล้วแก้ครั้งที่ 1 ทีหลังไม่ตาม)
+ * + เคสอ้างอิง (ครั้งก่อนหน้าที่ปิดจบบน ISURVEY) แก้ข้อมูลตั้งต้นได้โดยไม่ต้องปลดล็อก · รูปของทุกครั้งเข้าเว็บ
  *
  * ครึ่งแรกเรียกฟังก์ชันจริง (ไม่แตะฐานข้อมูล) ครึ่งหลังตรวจการต่อสาย
  */
 import * as fs from 'fs';
 import * as path from 'path';
-import { inheritFromFirstVisit, VISIT_OWN_FIELDS, LIST_FLAGS, isBlank } from '../src/services/visitInherit';
+import { effectiveReport, mainLockedFields, VISIT_OWN_FIELDS, MAIN_FORM_PARTS } from '../src/services/visitInherit';
 
 let failed = 0;
 const check = (label: string, ok: boolean, note = '') => {
@@ -18,121 +19,116 @@ const check = (label: string, ok: boolean, note = '') => {
 };
 const read = (...p: string[]) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 
-console.log('\n── งานครั้งที่ 2+ สืบทอดข้อมูลครั้งที่ 1 ──');
+console.log('\n── รายงานที่มีผลของครั้งที่ 2+ (ข้อมูลหลักจากครั้งที่ 1) ──');
 
-/** ครั้งที่ 1 ตามโครงจริง (สรุปจากเคส #359) · ครั้งที่ 3 ตามโครงจริง (เคส #361: มีของประจำครั้ง ไม่มีของครั้งที่ 1) */
+/** ครั้งที่ 1 (โครงจริงจากเคส #359) · ครั้งที่ 3 (จากเคส #378: มีแค่ของประจำครั้ง + ค่าตั้งต้นของตัวดึงงาน) */
 const first: Record<string, unknown> = {
-  id: 339, case_id: 359, rev: 1, updated_at: null, created_at: new Date('2026-09-15T00:27:01Z'),
+  id: 339, case_id: 359, rev: 2, updated_by: 168, created_at: new Date('2026-09-15T00:27:01Z'),
   claim_no: '2026013057520', survey_job_no: 'SEABI-121260700125', claim_type: 'F',
-  car_type: 'เก๋งเอเชีย', car_province: 'ระยอง', driver_id_card: '1234567890123', driver_birthdate: '01/01/2530',
-  acc_police_station: 'สภ.ปลวกแดง', estimated_cost: '4000.00', prb_number: 'PRB1', risk_code: '110',
-  driver_by_policy: true, insured_damage: [{ part: 'กันชนหน้า', level: 'M' }],
-  opposing_parties: [{ plate: 'กข 1234', estimated_cost: '2500' }], has_opponents: true,
-  injured_persons: [], has_injured: false,
-  survey_result: 'ผลครั้งที่ 1', acc_survey_arrive_date: '16/07/2569|21:17', survey_place: 'นิคมอมตะซิตี้',
-  acc_surveyor: 'SE272 นาย ก', surveyor_name: 'นาย ก', customer_reported_at: new Date('2026-07-16T10:00:00Z'),
-  policy_no: 'POL-1', driver_first_name: 'สมชาย', acc_date: '16/07/2569',
+  car_type: 'T', car_brand: 'TOYOTA', driver_id_card: 'EQ0097565', driver_id_type: 'foreign', driver_birthdate: '01/08/2528',
+  acc_police_station: 'ปลวกแดง จ.ระยอง(สภอ.)', estimated_cost: '19000.00', prb_number: '125013353460',
+  insured_damage: [{ part: 'กันชนหน้า', level: 'L' }], opposing_parties: [{ plate: 'กข 1234' }], has_opponents: true,
+  survey_result: 'ผลครั้งที่ 1', review_comment: 'ความเห็นครั้งที่ 1', acc_survey_arrive_date: '16/07/2569|21:17',
+  survey_place: 'นิคมอมตะซิตี้', acc_surveyor: 'SE272 นาย ก', checklist: { a: 1 }, acc_date: '16/07/2569',
 };
 const third: Record<string, unknown> = {
-  claim_no: '2026013057520', survey_job_no: 'SEABI-421260800193', claim_type: '',
-  car_type: '', car_province: null, driver_id_card: '', estimated_cost: '', insured_damage: '[]',
-  opposing_parties: [], has_opponents: false, injured_persons: [{ name: 'ผู้บาดเจ็บของครั้งนี้' }], has_injured: true,
-  survey_result: 'ผลครั้งที่ 3', acc_survey_arrive_date: '21/08/2569|13:13', survey_place: 'ว.4 สภ.ปลวกแดง',
-  acc_surveyor: 'SE300 นาย ข', surveyor_name: 'นาย ข', policy_no: 'POL-1', driver_first_name: 'สมชาย', acc_date: '16/07/2569',
+  id: 358, case_id: 378, rev: 3, updated_by: 168, created_at: new Date('2026-09-15T09:32:00Z'),
+  claim_no: '2026013057520', survey_job_no: 'SEABI-421260800193', claim_type: 'C',
+  car_type: '', car_brand: 'TOYOTA', driver_id_card: '', driver_id_type: 'thai', driver_birthdate: '',
+  acc_police_station: '', estimated_cost: null, prb_number: '',
+  insured_damage: [], opposing_parties: [], has_opponents: false,
+  survey_result: 'ผลครั้งที่ 3', review_comment: '', acc_survey_arrive_date: '21/08/2569|13:13',
+  survey_place: 'ว.4 สภ.ปลวกแดง', acc_surveyor: 'SE300 นาย ข', checklist: null, acc_date: '16/07/2569',
 };
-const rep = { ...third };
-const filled = inheritFromFirstVisit(rep, first);
+const eff = effectiveReport(third, first);
+check('ข้อมูลหลักทุกช่องมาจากครั้งที่ 1 (ทับแม้ครั้งนี้มีค่าตั้งต้น เช่น ชนิดบัตร thai → foreign · ยี่ห้อ)',
+  eff.car_type === 'T' && eff.driver_id_card === 'EQ0097565' && eff.driver_id_type === 'foreign' && eff.driver_birthdate === '01/08/2528'
+  && eff.acc_police_station === 'ปลวกแดง จ.ระยอง(สภอ.)' && eff.estimated_cost === '19000.00' && eff.prb_number === '125013353460'
+  && (eff.insured_damage as unknown[]).length === 1 && (eff.opposing_parties as unknown[]).length === 1 && eff.has_opponents === true);
+check('ของครั้งนี้คงไว้: เลขเซอร์เวย์ · ประเภทเคลม · ผลการดำเนินงาน · ความเห็น · เวลาถึง · สถานที่ออกตรวจ · ช่าง · checklist',
+  eff.survey_job_no === 'SEABI-421260800193' && eff.claim_type === 'C' && eff.survey_result === 'ผลครั้งที่ 3' && eff.review_comment === ''
+  && eff.acc_survey_arrive_date === '21/08/2569|13:13' && eff.survey_place === 'ว.4 สภ.ปลวกแดง' && eff.acc_surveyor === 'SE300 นาย ข' && eff.checklist === null);
+check('ตัวชี้ของใบนี้คงไว้ (id/case_id/rev/updated_by) — rev ใช้กันบันทึกทับของใบนี้เอง',
+  eff.id === 358 && eff.case_id === 378 && eff.rev === 3 && eff.updated_by === 168);
+check('ไม่แก้ object ที่รับมา', third.car_type === '' && first.survey_result === 'ผลครั้งที่ 1');
+check('ครั้งที่ 1 หรือเคลมเดี่ยว: ไม่มีอะไรทับ (effectiveReport ไม่ถูกเรียก — ดูการต่อสายด้านล่าง)', true);
 
-check('ช่องว่างของครั้งที่ 3 ถูกเติมจากครั้งที่ 1 (ประเภทรถ/จังหวัดทะเบียน/บัตร/ตำรวจ/ยอด/พรบ./รหัสภัย/ผู้ขับขี่ตามกรมธรรม์)',
-  rep.car_type === 'เก๋งเอเชีย' && rep.car_province === 'ระยอง' && rep.driver_id_card === '1234567890123'
-  && rep.acc_police_station === 'สภ.ปลวกแดง' && rep.estimated_cost === '4000.00' && rep.prb_number === 'PRB1'
-  && rep.risk_code === '110' && rep.driver_by_policy === true && rep.driver_birthdate === '01/01/2530');
-check('รายการความเสียหาย "[]" (สตริง) ถือว่าว่าง → เติมรายการของครั้งที่ 1',
-  Array.isArray(rep.insured_damage) && (rep.insured_damage as unknown[]).length === 1);
-check('คู่กรณีว่าง → เติม + ธง has_opponents ตามมาด้วย',
-  Array.isArray(rep.opposing_parties) && (rep.opposing_parties as unknown[]).length === 1 && rep.has_opponents === true
-  && filled.includes('opposing_parties') && filled.includes('has_opponents'));
-check('ผู้บาดเจ็บของครั้งนี้มีอยู่แล้ว → ไม่ทับ และธง has_injured ไม่ถูกแตะ',
-  (rep.injured_persons as { name: string }[])[0].name === 'ผู้บาดเจ็บของครั้งนี้' && rep.has_injured === true);
-check('ของประจำครั้งไม่ถูกทับ: ผลการดำเนินงาน · เลขเซอร์เวย์ · ประเภทเคลม · เวลาถึง · สถานที่ออกตรวจ · ช่าง',
-  rep.survey_result === 'ผลครั้งที่ 3' && rep.survey_job_no === 'SEABI-421260800193' && rep.claim_type === ''
-  && rep.acc_survey_arrive_date === '21/08/2569|13:13' && rep.survey_place === 'ว.4 สภ.ปลวกแดง'
-  && rep.acc_surveyor === 'SE300 นาย ข' && rep.surveyor_name === 'นาย ข');
-check('ค่าที่ครั้งนี้มีอยู่แล้ว (กรมธรรม์/ชื่อผู้ขับขี่/วันเกิดเหตุ) ไม่นับเป็นการเติม',
-  !filled.includes('policy_no') && !filled.includes('driver_first_name') && !filled.includes('acc_date'));
-check('คอลัมน์ระบบของครั้งที่ 1 (id/case_id/rev/created_at) ไม่หลุดมา',
-  !('id' in rep) && !('case_id' in rep) && !('rev' in rep) && !('created_at' in rep));
-check('TIMESTAMP จาก pg (Date) ถูกแปลงเป็น ISO string ก่อน bind',
-  rep.customer_reported_at === '2026-07-16T10:00:00.000Z');
-check('คืนรายชื่อช่องที่เติม (ไว้จดเตือนให้หัวหน้า)', filled.length >= 12 && filled.includes('car_type'), `${filled.length} ช่อง`);
-check('ไม่มีครั้งที่ 1 ให้สืบทอด (แถวว่าง) → ไม่แตะอะไร',
-  inheritFromFirstVisit({ car_type: '' }, {}).length === 0);
-/**
- * ช่องคู่หู (15/09/69 ครั้งที่ 3–4 ของเคลม 2026013057520): ตัวดึงงานตั้ง driver_id_type='thai' ทั้งที่ไม่มีเลขบัตร
- * พอเติมพาสปอร์ตของครั้งที่ 1 มาแล้วชนิดยังเป็นไทย → หน้าตรวจเตือน "เลขบัตรไทยไม่ถูกต้อง" ทั้งที่คนขับเป็นต่างชาติ
- */
-{
-  const r = { driver_id_card: '', driver_id_type: 'thai', driver_license_no: '', driver_license_type: 'ใบขับขี่รถยนต์ส่วนบุคคล', driver_license_place: '' };
-  const f = inheritFromFirstVisit(r, { driver_id_card: 'EQ0097565', driver_id_type: 'foreign', driver_license_no: 'DL-1', driver_license_type: 'ใบขับขี่รถยนต์ส่วนบุคคล', driver_license_place: 'ระยอง' });
-  check('เติมเลขบัตรจากครั้งที่ 1 แล้วชนิดบัตรตามมาด้วยแม้ตัวดึงงานตั้งค่าไว้ (thai → foreign)',
-    r.driver_id_card === 'EQ0097565' && r.driver_id_type === 'foreign' && f.includes('driver_id_type'));
-  check('ใบขับขี่: เลขที่เติมแล้ว ชนิด/สถานที่ออกตามครั้งที่ 1 (ค่าเท่ากันไม่นับซ้ำ)',
-    r.driver_license_no === 'DL-1' && r.driver_license_place === 'ระยอง' && !f.includes('driver_license_type') && f.includes('driver_license_place'));
-  const keep = { driver_id_card: '1234567890123', driver_id_type: 'thai' };
-  inheritFromFirstVisit(keep, { driver_id_card: 'EQ0097565', driver_id_type: 'foreign' });
-  check('ครั้งนี้มีเลขบัตรของตัวเอง → ไม่แตะทั้งเลขและชนิด', keep.driver_id_card === '1234567890123' && keep.driver_id_type === 'thai');
-}
-check('isBlank: 0/false เป็นค่าจริง · null/""/"[]"/[]/{} ว่าง',
-  !isBlank(0) && !isBlank(false) && isBlank(null) && isBlank('  ') && isBlank('[]') && isBlank([]) && isBlank({}));
-check('VISIT_OWN_FIELDS ครอบทั้งชุด: ผลการดำเนินงาน · รูปไม่อยู่ในตารางนี้อยู่แล้ว · เวลา/สถานที่ออกตรวจ · ช่าง · เลขเซอร์เวย์',
-  ['survey_result', 'survey_job_no', 'survey_job_no_2', 'claim_type', 'acc_survey_arrive_date', 'acc_survey_complete_date',
-   'survey_place', 'survey_province', 'acc_surveyor', 'surveyor_name', 'checklist', 'source_remark', 'review_comment']
-    .every((k) => VISIT_OWN_FIELDS.has(k)));
-check('ธง has_* ผูกกับรายการของมันครบ 3 คู่', Object.keys(LIST_FLAGS).length === 3 && LIST_FLAGS.opposing_parties === 'has_opponents');
+const locked = mainLockedFields(Object.keys(third));
+check('ช่องที่หน้าเว็บต้องล็อก = คอลัมน์หลัก + ชิ้นส่วนบนฟอร์มของช่องหลัก (ไม่มีของประจำครั้ง)',
+  locked.includes('car_type') && locked.includes('driver_id_card') && locked.includes('opposing_parties') && locked.includes('acc_customer_report_date_val')
+  && locked.includes('acc_time_hour') && !locked.includes('survey_result') && !locked.includes('acc_survey_arrive_date') && !locked.includes('claim_type')
+  && !locked.includes('rev') && !locked.includes('survey_job_no'));
+check('ชิ้นส่วนบนฟอร์มของช่องประจำครั้ง (arrive/complete/notify) ไม่อยู่ใน MAIN_FORM_PARTS',
+  !MAIN_FORM_PARTS.some((p) => /arrive|complete|notify|submitted/.test(p)));
+check('VISIT_OWN_FIELDS ครอบ: ผล/ความเห็น/checklist · เวลา-สถานที่ออกตรวจ · ช่าง · เลขเซอร์เวย์ · ประเภทเคลม · ตัวชี้ใบ',
+  ['survey_result', 'review_comment', 'surveyor_comment', 'checklist', 'source_remark', 'notes', 'acc_survey_arrive_date', 'acc_survey_complete_date',
+   'acc_insurance_notify_date', 'survey_place', 'survey_province', 'survey_district', 'survey_subdistrict', 'acc_surveyor', 'acc_surveyor_phone',
+   'surveyor_name', 'surveyor_phone', 'survey_job_no', 'survey_job_no_2', 'claim_type', 'id', 'case_id', 'rev', 'updated_at', 'updated_by']
+    .every((k) => VISIT_OWN_FIELDS.has(k)) && !VISIT_OWN_FIELDS.has('car_type') && !VISIT_OWN_FIELDS.has('opposing_parties'));
 
 /* ── การต่อสาย ── */
+console.log('\n── การต่อสาย ──');
 const svc = read('src', 'services', 'case.service.ts');
-check('importFromXml สืบทอดเมื่อ visitNo > 1 โดยหาครั้งที่ 1 ของเคลมเดียวกันจาก DB (ครั้งที่น้อยกว่าเท่านั้น)',
-  /\(parsed\.visitNo \?\? 0\) > 1 && claimNoForVisit[\s\S]{0,400}?c\.visit_no < \$2[\s\S]{0,300}?inheritFromFirstVisit\(report, firstReport\)/.test(svc));
-check('สืบทอดก่อน INSERT (อยู่ก่อนเปิด transaction)',
-  svc.indexOf('inheritFromFirstVisit(report, firstReport)') < svc.indexOf("await client.query('BEGIN')", svc.indexOf('async importFromXml')));
-check('จดเตือนไว้กับเคสว่าเติมกี่ช่องจากครั้งไหน', svc.includes('ที่ใบนี้ไม่มีบน ISURVEY — รูปและผลการดำเนินงานเป็นของครั้งนี้'));
-
+check('หาครั้งที่ 1 ด้วยสูตรเดียวกับ visit_count (COALESCE(visit_no, ROW_NUMBER)) และคืน null เมื่อเคสนี้คือใบแรกเอง',
+  /const findFirstVisit = async \(claimNo: unknown, caseId: number\)/.test(svc)
+  && /COALESCE\(c\.visit_no, ROW_NUMBER\(\) OVER \(PARTITION BY sr\.claim_no ORDER BY c\.created_at\)\)::int AS fv_visit_no/.test(svc)
+  && /Number\(r\.rows\[0\]\.fv_case_id\) === Number\(caseId\)\) return null/.test(svc));
+check('getEffectiveReport มีให้บอท/XML ใช้ และคืน main_from + main_locked_fields',
+  /async getEffectiveReport\(caseId: number\)[\s\S]{0,700}?effectiveReport\(own, first\.report\)[\s\S]{0,300}?main_locked_fields: mainLockedFields\(Object\.keys\(own\)\)/.test(svc));
+check('หน้าเคส (getDetail) ได้รายงานที่ประกอบแล้ว + main_from + main_locked_fields',
+  /const reportOut = firstVisit && report \? effectiveReport\(report, firstVisit\.report\) : report;/.test(svc)
+  && /report: reportOut,\s*main_from: mainFrom,\s*main_locked_fields:/.test(svc));
+check('XML export ของครั้งที่ 2+ ใช้ข้อมูลหลักครั้งที่ 1 สด (ก่อน withInsurerBill)',
+  /const firstVisit = await findFirstVisit\(reportResult\.rows\[0\]\.claim_no, caseId\);\s*const base = firstVisit \? effectiveReport\(reportResult\.rows\[0\], firstVisit\.report\) : reportResult\.rows\[0\];\s*const row = await withInsurerBill\(caseId, base\);/.test(svc));
+check('บันทึกใบครั้งที่ 2+ ทิ้งช่องข้อมูลหลักที่หลุดมากับฟอร์ม (เขียนเฉพาะของครั้งนั้น)',
+  /if \(firstVisit\) \{\s*for \(const k of Object\.keys\(rd\)\) if \(validCols\.has\(k\) && !VISIT_OWN_FIELDS\.has\(k\)\) delete rd\[k\];/.test(svc));
+check('เลิกก๊อปข้อมูลครั้งที่ 1 ตอนดึงงาน (ไม่มี inheritFromFirstVisit อีก)',
+  !svc.includes('inheritFromFirstVisit') && svc.includes('**ไม่ก๊อป** ข้อมูลหลักของครั้งที่ 1'));
 const routes = read('src', 'routes', 'integration.routes.ts');
-/** รูปของครั้งก่อนหน้า: เคสอ้างอิงถูก reviewed ตั้งแต่สร้าง — ต้องไม่ติดล็อก 423 และไม่ติด 403 source */
-check('photos-zip รับเคสอ้างอิง (isurvey_reference) ทั้งที่ reviewed', /const isReference = c\.rows\[0\]\.source === 'isurvey_reference'/.test(routes)
-  && /status === 'reviewed' && !isReference/.test(routes) && /source !== 'isurvey_live' && !isReference/.test(routes));
-check('เคสที่คนอนุมัติจริง (ไม่ใช่อ้างอิง) ยังถูกล็อกเหมือนเดิม', routes.includes('อนุมัติแล้ว — เพิ่มรูปไม่ได้จนกว่าแอดมินจะปลดล็อก'));
+check('บอทอ่าน report ผ่าน getEffectiveReport (ชุดเดียวกับหน้าเคส)',
+  /const eff = await caseService\.getEffectiveReport\(caseId\);[\s\S]{0,200}?data: \{ \.\.\.eff\.report, main_from: eff\.main_from \}/.test(routes));
+check('photos-zip รับเคสอ้างอิง (isurvey_reference) ทั้งที่ reviewed · เคสที่คนอนุมัติจริงยังล็อก',
+  /const isReference = c\.rows\[0\]\.source === 'isurvey_reference'/.test(routes) && /status === 'reviewed' && !isReference/.test(routes)
+  && routes.includes('อนุมัติแล้ว — เพิ่มรูปไม่ได้จนกว่าแอดมินจะปลดล็อก'));
 
-const web = read('..', 'web', 'src', 'app', 'inspector', 'isurvey', 'page.tsx');
-check('หน้าดึงงานบอกจำนวนรูปของแต่ละครั้งก่อนหน้า', web.includes('refPhotos(x)') && web.includes('photos?: { added?: number; error?: string; note?: string } | null }[]'));
-
-/* ── เคสอ้างอิงแก้ข้อมูลตั้งต้นได้โดยไม่ต้องปลดล็อก (user สั่ง 15/09/69 ครั้งที่ 1 ของเคลม 2026013057520) ── */
-console.log('\n── เคสอ้างอิงแก้ได้ ──');
-check('ตัวล็อกอนุมัติมีช่องยกเว้นเคสอ้างอิง (ดู source ด้วย)',
+/* ── เคสอ้างอิงแก้ข้อมูลตั้งต้นได้โดยไม่ต้องปลดล็อก ── */
+check('ตัวล็อกอนุมัติมีช่องยกเว้นเคสอ้างอิง · แก้รายงาน + รูป 4 ฟังก์ชันยอม · ตัวระบุตัวเคสยังล็อก',
   /const assertNotApproved = async \(caseId: number, opts: \{ allowReference\?: boolean \} = \{\}\)/.test(svc)
-  && /SELECT status, source FROM cases WHERE id = \$1/.test(svc) && /opts\.allowReference && r\.rows\[0\]\.source === 'isurvey_reference'\) return;/.test(svc));
-check('แก้รายงาน + รูป (เพิ่ม/ลบ/หมุน/โฟลเดอร์) ยอมเคสอ้างอิง',
-  (svc.match(/assertNotApproved\(caseId, \{ allowReference: true \}\)/g) ?? []).length === 5);
-/** เลขเคลม/เลขเซอร์เวย์ของเคสอ้างอิงผูกครั้งที่ไว้ — ยังล็อกเหมือนเดิม (แอดมินแก้ตัวระบุตัวเคสไม่ได้จนกว่าจะปลดล็อก ซึ่งเคสอ้างอิงปลดไม่ได้) */
-check('ตัวระบุตัวเคส (updateCaseIdentity) ยังล็อกเคสอ้างอิง',
-  /async updateCaseIdentity[\s\S]{0,600}?await assertNotApproved\(caseId\);/.test(svc));
-/** ปุ่มบันทึกหน้าเคสยิง /pay ก่อน /report — ถ้าฝั่งยอดเงินยังล็อกเคสอ้างอิง ทั้งหน้าบันทึกไม่ผ่าน (เจอตอนเทส UI 15/09/69) */
+  && (svc.match(/assertNotApproved\(caseId, \{ allowReference: true \}\)/g) ?? []).length === 5
+  && /async updateCaseIdentity[\s\S]{0,600}?await assertNotApproved\(caseId\);/.test(svc));
 const psvc = read('src', 'services', 'pay.service.ts');
-check('ยอดพนักงาน (/pay) ไม่ล็อกเคสอ้างอิง',
-  /SELECT status, source FROM cases WHERE id = \$1/.test(psvc) && /status === 'reviewed' && r\.rows\[0\]\.source !== 'isurvey_reference'/.test(psvc));
+check('ยอดพนักงาน (/pay) ไม่ล็อกเคสอ้างอิง (ปุ่มบันทึกยิง /pay ก่อน /report)',
+  /status === 'reviewed' && r\.rows\[0\]\.source !== 'isurvey_reference'/.test(psvc));
 const rsvc = read('src', 'services', 'review.service.ts');
 check('ปลดล็อกเคสอ้างอิงไม่ได้ (จะพาเข้าคิวอนุมัติ → ส่ง se-billing/ปิด ISURVEY ซ้ำ)',
-  /source === 'isurvey_reference'\) \{\s*throw new ForbiddenError\('เคสอ้างอิงจาก ISURVEY แก้ข้อมูลได้เลย/.test(rsvc)
-  && /SELECT status, source, emcs_imported_at, emcs_submitted_at FROM cases/.test(rsvc));
+  /source === 'isurvey_reference'\) \{\s*throw new ForbiddenError\('เคสอ้างอิงจาก ISURVEY แก้ข้อมูลได้เลย/.test(rsvc));
+
+/* ── หน้าเว็บ ── */
+console.log('\n── หน้าเว็บ ──');
+const page = read('..', 'web', 'src', 'app', 'inspector', 'cases', '[id]', 'page.tsx');
+check('หน้า wrapper รับ main_from/main_locked_fields จาก /detail แล้วส่งให้ CaseDetail',
+  page.includes('setMainFrom(res.data.data.main_from || null)') && page.includes('setMainLockedFields(res.data.data.main_locked_fields || [])')
+  && page.includes('mainFrom={mainFrom} mainLockedFields={mainLockedFields}'));
 const cd = read('..', 'web', 'src', 'components', 'cases', 'CaseDetail.tsx');
-check('หน้าเคส: ล็อกช่องเฉพาะเคสที่คนอนุมัติจริง (locked = approved && !isReference)',
-  cd.includes("const isReference = String(caseData?.source ?? '') === 'isurvey_reference';") && cd.includes('const locked = approved && !isReference;')
-  && cd.includes('<fieldset disabled={locked}') && cd.includes('caseId={locked ? undefined : caseData?.id}') && cd.includes('items={damage} disabled={locked}'));
-check('หน้าเคส: เคสอ้างอิงมีแถบ "แก้ข้อมูลตั้งต้นได้" + ปุ่มบันทึก ไม่มีอนุมัติ/ตีกลับ/ปลดล็อก',
-  /const actionBar = approved && isReference \? \([\s\S]{0,900}?onClick=\{handleSave\}[\s\S]{0,600}?\) : approved \? \(/.test(cd)
-  && cd.includes('อ้างอิง ISURVEY · แก้ข้อมูลตั้งต้นได้'));
-check('ป้ายเคสอ้างอิงบอกว่าแก้ได้ + ครั้งถัดไปที่ดึงใหม่ใช้ข้อมูลนี้', cd.includes('แก้ข้อมูลตั้งต้นได้ที่นี่แล้วกด "บันทึก"'));
+check('ครั้งที่ 2+: ล็อกช่องข้อมูลหลักตามรายชื่อจาก backend ทุก render + คู่กรณี/ผู้บาดเจ็บ/ทรัพย์สิน/ความเสียหายล็อกด้วย',
+  cd.includes('const mainFromFirst = Boolean(mainFrom);') && /mainLockedRef\.current\.has\(el\.name\)/.test(cd)
+  && (cd.match(/<fieldset disabled=\{mainFromFirst\} className="contents/g) ?? []).length === 3 && cd.includes('disabled={locked || mainFromFirst}'));
+check('แถบบอกว่าข้อมูลหลักมาจากครั้งที่ 1 + ปุ่ม "แก้ที่ครั้งที่ 1" พาไปหน้าครั้งที่ 1',
+  cd.includes('แสดงจากครั้งที่ {String(mainFrom.visit_no ?? 1)}') && /onClick=\{\(\) => switchVisit\(String\(mainFrom\.case_id\)\)\}/.test(cd)
+  && cd.includes('แก้ที่ครั้งที่ {String(mainFrom.visit_no ?? 1)} →'));
+check('ตัวเลือก "ครั้งที่" พาไปหน้าของครั้งนั้น (ไม่ใช่ดูอย่างเดียว)', /onChange=\{\(e\) => switchVisit\(e\.target\.value\)\}/.test(cd));
+check('ด่านอนุมัติครั้งที่ 2+ = เฉพาะของครั้งนี้ (+ ผลการดำเนินงานต้องมี) · ด่านข้อมูลหลักไม่กั้นแต่บอกให้แก้ที่ครั้งที่ 1',
+  cd.includes('const approvalBlockers = mainFromFirst ? visitBlockers : [...visitBlockers, ...mainBlockers];')
+  && cd.includes("...(mainFromFirst && resultEmpty ? ['ยังไม่มี \"ผลการดำเนินงาน\" ของครั้งนี้'] : [])")
+  && cd.includes('ข้อมูลหลักยังมี {mainBlockers.length} ข้อที่ต้องแก้ที่ครั้งที่'));
+check('ตัวไล่ช่องบังคับข้ามช่องข้อมูลหลักของครั้งที่ 2+ และอ่านผลการดำเนินงานสด',
+  /if \(mainFromFirstRef\.current && mainLockedRef\.current\.has\(\(el as HTMLInputElement\)\.name\)\) return;/.test(cd)
+  && cd.includes("form.querySelector('[name=\"survey_result\"]') as HTMLTextAreaElement | null") && cd.includes('setResultEmpty('));
+check('เคสอ้างอิง: locked = approved && !isReference · แถบ "แก้ข้อมูลตั้งต้นได้" + ปุ่มบันทึก',
+  cd.includes('const locked = approved && !isReference;') && cd.includes('อ้างอิง ISURVEY · แก้ข้อมูลตั้งต้นได้')
+  && /const actionBar = approved && isReference \? \(/.test(cd));
+const pull = read('..', 'web', 'src', 'app', 'inspector', 'isurvey', 'page.tsx');
+check('หน้าดึงงานบอกจำนวนรูปของแต่ละครั้งก่อนหน้า', pull.includes('refPhotos(x)'));
 
 console.log(failed === 0 ? '\n✅ ผ่านทั้งหมด\n' : `\n❌ ไม่ผ่าน ${failed} ข้อ\n`);
 process.exit(failed === 0 ? 0 : 1);

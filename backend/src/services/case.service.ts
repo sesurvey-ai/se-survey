@@ -6,7 +6,7 @@ import { generateSurveyXml, emcsNameWarnings, sanitizeReportDates } from './xmlE
 import { invalidateCaseOwner } from '../middleware/uploadsAuth';
 import { storage, normalizeKey, contentTypeOf } from '../config/storage';
 import { normalizeVehicleFields, normalizeDamageLevels } from './vehicleBrand';
-import { inheritFromFirstVisit } from './visitInherit';
+import { effectiveReport, mainLockedFields, VISIT_OWN_FIELDS } from './visitInherit';
 import { isFirebaseReady } from '../config/firebase';
 import type { XmlImportResult } from './xmlImport.service';
 import { assertReportRev } from './reportRev';
@@ -128,6 +128,32 @@ const assertNotApproved = async (caseId: number, opts: { allowReference?: boolea
     if (opts.allowReference && r.rows[0].source === 'isurvey_reference') return;
     throw new AppError(423, 'เคสนี้อนุมัติแล้ว — แก้ไม่ได้จนกว่าแอดมินจะปลดล็อก');
   }
+};
+
+/**
+ * ครั้งที่ 1 ของเคลม = ใบแรกสุดของเลขเคลมในเว็บ (ตาม "ครั้งที่" ที่เก็บไว้ ไม่มีก็นับจากลำดับสร้าง — สูตรเดียวกับ visit_count)
+ * แหล่งข้อมูลหลักของทุกครั้งถัดไป (user เคาะ 15/09/69 แบบ EMCS) · คืน null เมื่อเคสนี้คือใบแรกเอง หรือไม่มีเลขเคลม
+ */
+type FirstVisit = {
+  case_id: number; visit_no: number | null; survey_job_no: string | null; status: string; source: string;
+  report: Record<string, unknown>;
+};
+const findFirstVisit = async (claimNo: unknown, caseId: number): Promise<FirstVisit | null> => {
+  const claim = String(claimNo ?? '').trim();
+  if (!claim) return null;
+  const r = await db.query(
+    `SELECT * FROM (
+       SELECT sr.*, c.id AS fv_case_id, c.status AS fv_status, c.source AS fv_source, c.created_at AS fv_created,
+              COALESCE(c.visit_no, ROW_NUMBER() OVER (PARTITION BY sr.claim_no ORDER BY c.created_at))::int AS fv_visit_no
+         FROM survey_reports sr JOIN cases c ON c.id = sr.case_id
+        WHERE sr.claim_no = $1) t
+     ORDER BY fv_visit_no, fv_created LIMIT 1`, [claim]);
+  if (r.rows.length === 0 || Number(r.rows[0].fv_case_id) === Number(caseId)) return null;
+  const { fv_case_id, fv_status, fv_source, fv_created: _c, fv_visit_no, ...report } = r.rows[0] as Record<string, unknown>;
+  return {
+    case_id: Number(fv_case_id), visit_no: fv_visit_no === null || fv_visit_no === undefined ? null : Number(fv_visit_no),
+    survey_job_no: (report.survey_job_no as string | null) ?? null, status: String(fv_status), source: String(fv_source), report,
+  };
 };
 
 // surveyor เข้าถึงได้เฉพาะเคสที่มอบหมายให้ตัวเอง (กัน IDOR ไล่เลข id อ่าน/ทับเคสคนอื่น)
@@ -1195,6 +1221,23 @@ export const caseService = {
       || team.match(`${r.surveyor_code ?? ''} ${r.surveyor_first_name ?? ''} ${r.surveyor_last_name ?? ''}`.trim()));
   },
 
+  /**
+   * "รายงานที่มีผล" ของเคส (user เคาะ 15/09/69 แบบ EMCS): ครั้งที่ 2+ = ข้อมูลหลักของครั้งที่ 1 สด + ของครั้งนั้นเอง
+   * (VISIT_OWN_FIELDS) · ครั้งที่ 1 หรือเคลมเดี่ยว = รายงานของตัวเอง · หน้าเคส/บอท/XML ใช้ชุดเดียวกัน
+   */
+  async getEffectiveReport(caseId: number) {
+    const r = await db.query('SELECT * FROM survey_reports WHERE case_id = $1', [caseId]);
+    if (r.rows.length === 0) return null;
+    const own = r.rows[0] as Record<string, unknown>;
+    const first = await findFirstVisit(own.claim_no, caseId);
+    if (!first) return { report: own, main_from: null, main_locked_fields: [] as string[] };
+    return {
+      report: effectiveReport(own, first.report),
+      main_from: { case_id: first.case_id, visit_no: first.visit_no, survey_job_no: first.survey_job_no, status: first.status, source: first.source },
+      main_locked_fields: mainLockedFields(Object.keys(own)),
+    };
+  },
+
   async getDetail(caseId: number, user?: CaseUser) {
     const caseResult = await db.query(
       `SELECT c.*, u.first_name AS surveyor_first_name, u.last_name AS surveyor_last_name,
@@ -1349,9 +1392,18 @@ export const caseService = {
       updatedBy = String(ub.rows[0]?.name ?? '').trim() || null;
     }
 
+    // ครั้งที่ 2+ (15/09/69 แบบ EMCS): ข้อมูลหลักจากครั้งที่ 1 สด + บอกหน้าเว็บว่าช่องไหนต้องล็อก (คอลัมน์จริง − ของครั้งนั้น + ชิ้นส่วนบนฟอร์ม)
+    const firstVisit = report ? await findFirstVisit(report.claim_no, caseId) : null;
+    const mainFrom = firstVisit
+      ? { case_id: firstVisit.case_id, visit_no: firstVisit.visit_no, survey_job_no: firstVisit.survey_job_no, status: firstVisit.status, source: firstVisit.source }
+      : null;
+    const reportOut = firstVisit && report ? effectiveReport(report, firstVisit.report) : report;
+
     return {
       case: caseResult.rows[0],
-      report,
+      report: reportOut,
+      main_from: mainFrom,
+      main_locked_fields: firstVisit && report ? mainLockedFields(Object.keys(report)) : [],
       report_updated_by: updatedBy,
       photos,
       review: reviewResult.rows[0] || null,
@@ -1388,7 +1440,10 @@ export const caseService = {
     assertCaseAccess(caseResult.rows[0], user);
     const reportResult = await db.query('SELECT * FROM survey_reports WHERE case_id = $1', [caseId]);
     if (reportResult.rows.length === 0) throw new NotFoundError('ยังไม่มีข้อมูลรายงานสำรวจของเคสนี้');
-    const row = await withInsurerBill(caseId, reportResult.rows[0]);
+    // ครั้งที่ 2+ (15/09/69 แบบ EMCS): ไฟล์ต้องมีข้อมูลหลักของครั้งที่ 1 สด + ของครั้งนี้ (เลขเซอร์เวย์/ผล/เวลาถึง-เสร็จ/ช่าง/บิล)
+    const firstVisit = await findFirstVisit(reportResult.rows[0].claim_no, caseId);
+    const base = firstVisit ? effectiveReport(reportResult.rows[0], firstVisit.report) : reportResult.rows[0];
+    const row = await withInsurerBill(caseId, base);
     // เตือนซ้ำในล็อกฝั่งเซิร์ฟเวอร์ด้วย เพราะบอทดึง XML ผ่านทางนี้ ไม่ได้เห็นแบนเนอร์บนเว็บ
     for (const w of emcsNameWarnings(row)) {
       console.warn(`[EMCS] เคส ${caseId}: ${w.label} มีอักขระ ${w.bad} ที่ EMCS จะล้างค่าทิ้ง — ${w.value}`);
@@ -1584,28 +1639,8 @@ export const caseService = {
     if (report.driver_gender !== undefined) report.driver_gender = driverGenderMF(report.driver_gender);
     await assertSurveyJobNoUnique([report.survey_job_no]);
 
-    // งานครั้งที่ 2+ (user สั่ง 15/09/69 เคลม 2026013057520): ISURVEY เก็บข้อมูลหลักไว้ที่ครั้งที่ 1 เท่านั้น ใบครั้งถัดไป
-    // มีแค่ของประจำครั้ง → เติมช่องที่ว่างจากครั้งที่ 1 ที่อยู่ในเว็บ (ตัวดึงงานเอาครั้งก่อนหน้าเข้ามาก่อนใบนี้เสมอ)
-    // ยกเว้นรูป · ผลการดำเนินงาน · เวลา/สถานที่ออกตรวจ · ช่าง · เลขเซอร์เวย์ · ประเภทเคลม (VISIT_OWN_FIELDS) ที่เป็นของครั้งนั้น
-    // ไม่มีครั้งที่ 1 ในเว็บ (เช่น ดึงไม่ผ่าน) = ปล่อยตามที่ใบนี้มี ไม่ล้มงาน
-    const claimNoForVisit = String(report.claim_no ?? '').trim();
-    if ((parsed.visitNo ?? 0) > 1 && claimNoForVisit) {
-      const first = await db.query(
-        `SELECT sr.*, c.visit_no AS first_visit_no
-           FROM survey_reports sr JOIN cases c ON c.id = sr.case_id
-          WHERE sr.claim_no = $1 AND (c.visit_no IS NULL OR c.visit_no < $2)
-          ORDER BY c.visit_no NULLS LAST, c.created_at LIMIT 1`,
-        [claimNoForVisit, parsed.visitNo]);
-      if (first.rows.length > 0) {
-        const { first_visit_no: firstVisitNo, ...firstReport } = first.rows[0] as Record<string, unknown>;
-        const filled = inheritFromFirstVisit(report, firstReport);
-        if (filled.length) {
-          parsed.warnings = [...(parsed.warnings ?? []),
-            `งานครั้งที่ ${parsed.visitNo}: เติม ${filled.length} ช่องจากครั้งที่ ${firstVisitNo ?? 1}` +
-            ` (${String(firstReport.survey_job_no ?? '?')}) ที่ใบนี้ไม่มีบน ISURVEY — รูปและผลการดำเนินงานเป็นของครั้งนี้`];
-        }
-      }
-    }
+    // งานครั้งที่ 2+ (user เคาะ 15/09/69 แบบ EMCS): **ไม่ก๊อป** ข้อมูลหลักของครั้งที่ 1 ลงใบนี้ — เก็บเฉพาะที่ต้นทางให้มา
+    // หน้าเคส/บอท/XML ประกอบ "รายงานที่มีผล" ตอนอ่าน (getEffectiveReport: ครั้งที่ 1 สด + ของครั้งนี้) จึงแก้ครั้งที่ 1 ทีหลังได้
 
     // ผู้สำรวจ: จับจากรหัสใน ACC_SURV ('SE272 นาย ...') — หาไม่เจอก็ปล่อยว่าง ไม่ล้มทั้งงาน
     let assignedTo: number | null = null;
@@ -1900,6 +1935,14 @@ export const caseService = {
       "SELECT column_name FROM information_schema.columns WHERE table_name = 'survey_reports' AND table_schema = 'public' AND column_name NOT IN ('id', 'case_id', 'created_at', 'rev', 'updated_at', 'updated_by')"
     );
     const validCols = new Set(colResult.rows.map((r: { column_name: string }) => r.column_name));
+
+    // ครั้งที่ 2+ (15/09/69 แบบ EMCS): ข้อมูลหลักอยู่ที่ครั้งที่ 1 ใบเดียว — ช่องหลักที่หลุดมากับฟอร์ม (แท็บเก่า/สคริปต์/ค่าที่ state
+    // ฝั่งเว็บส่งมาเสมอ เช่น คู่กรณี) ทิ้ง ไม่เขียนลงใบนี้ · แก้ข้อมูลหลักต้องไปแก้ที่ครั้งที่ 1
+    const claimRow = await db.query('SELECT claim_no FROM survey_reports WHERE id = $1', [reportId]);
+    const firstVisit = await findFirstVisit(claimRow.rows[0]?.claim_no, caseId);
+    if (firstVisit) {
+      for (const k of Object.keys(rd)) if (validCols.has(k) && !VISIT_OWN_FIELDS.has(k)) delete rd[k];
+    }
 
     const fields: string[] = [];
     const params: unknown[] = [];

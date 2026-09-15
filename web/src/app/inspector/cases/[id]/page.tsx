@@ -19,6 +19,9 @@ export default function CaseDetailPage() {
   /** ครั้งที่ทั้งหมดของเลขเคลมนี้ — แต่ละครั้งเป็นคนละเคส (ดู getDetail) */
   const [visits, setVisits] = useState([]);
   const [expenses, setExpenses] = useState(null);
+  /** ครั้งที่ 2+ (15/09/69 แบบ EMCS): ข้อมูลหลักมาจากครั้งที่ 1 — main_from = ใบครั้งที่ 1 · main_locked_fields = ช่องที่ต้องล็อกบนหน้านี้ */
+  const [mainFrom, setMainFrom] = useState<{ case_id: number; visit_no: number | null; survey_job_no: string | null; status: string; source: string } | null>(null);
+  const [mainLockedFields, setMainLockedFields] = useState<string[]>([]);
   /** ค่ารูปตามกติกาเหมา ที่ backend คิดให้ — null = ตัดสินไม่ได้ ให้คนกรอกเอง */
   const [photoFeeSuggest, setPhotoFeeSuggest] = useState<{count:number;price:number;reason:string}|null>(null);
   /** ตำบลที่มีเรทของตัวเอง — มาจากตารางเรท ไม่ใช่รายชื่อที่เขียนไว้ในหน้าเว็บ */
@@ -51,6 +54,8 @@ export default function CaseDetailPage() {
         setVisitCount(res.data.data.visit_count || 1);
         setVisits(res.data.data.visits || []);
         setExpenses(res.data.data.expenses || null);
+        setMainFrom(res.data.data.main_from || null);
+        setMainLockedFields(res.data.data.main_locked_fields || []);
         setPhotoFeeSuggest(res.data.data.photo_fee_suggest || null);
         setTumbonOptions(res.data.data.tumbon_options || []);
         setNameWarnings(res.data.data.emcs_name_warnings || []);
@@ -129,7 +134,7 @@ export default function CaseDetailPage() {
           </ul>
         </div>
       )}
-      <CaseDetail caseData={caseData} report={report} photos={photos} review={review} visitCount={visitCount} visits={visits} expenses={expenses} photoFeeSuggest={photoFeeSuggest} tumbonOptions={tumbonOptions} onReviewSubmitted={fetchDetail} />
+      <CaseDetail caseData={caseData} report={report} photos={photos} review={review} visitCount={visitCount} visits={visits} expenses={expenses} photoFeeSuggest={photoFeeSuggest} tumbonOptions={tumbonOptions} mainFrom={mainFrom} mainLockedFields={mainLockedFields} onReviewSubmitted={fetchDetail} />
     </div>
   );
 }

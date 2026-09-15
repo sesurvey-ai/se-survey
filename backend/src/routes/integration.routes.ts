@@ -352,10 +352,10 @@ router.post('/cases/:id/emcs-status', integrationAuth, asyncHandler(async (req: 
 router.get('/cases/:id/report', integrationAuth, asyncHandler(async (req: Request, res: Response) => {
   const caseId = parseInt(req.params.id as string);
   if (!(await assertApproved(caseId, res))) return;
-  const { db } = await import('../config/database');
-  const r = await db.query('SELECT * FROM survey_reports WHERE case_id = $1', [caseId]);
-  if (r.rows.length === 0) { res.status(404).json({ success: false, message: 'report not found' }); return; }
-  res.json({ success: true, data: r.rows[0] });
+  // ครั้งที่ 2+ (15/09/69 แบบ EMCS): ข้อมูลหลักจากครั้งที่ 1 สด + ของครั้งนั้น — ชุดเดียวกับหน้าเคส/XML (main_from บอกว่ามาจากใบไหน)
+  const eff = await caseService.getEffectiveReport(caseId);
+  if (!eff) { res.status(404).json({ success: false, message: 'report not found' }); return; }
+  res.json({ success: true, data: { ...eff.report, main_from: eff.main_from } });
 }));
 
 // รายการรูปของเคส (survey_photos ที่ผูกกับ report) — SE-AutoKey ใช้โหลดไปอัปเข้า EMCS

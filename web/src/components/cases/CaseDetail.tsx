@@ -50,6 +50,12 @@ interface CaseDetailProps {
   photoFeeSuggest?: { count: number; price: number; reason: string } | null;
   /** ตำบลที่มีเรทของตัวเอง (มาจากตารางเรท) — ใช้ทำตัวเลือก "ตำบล" ใต้เขต/อำเภอ */
   tumbonOptions?: { tumbon: string; district: string; province: string }[];
+  /**
+   * ครั้งที่ 2+ (user เคาะ 15/09/69 แบบ EMCS): ข้อมูลหลักของเคลมมาจากครั้งที่ 1 สด (report ที่ได้มาถูกประกอบแล้วฝั่ง backend)
+   * main_from = ใบครั้งที่ 1 · mainLockedFields = ชื่อช่องบนฟอร์มที่ต้องล็อก (แก้ที่ครั้งที่ 1) · null = ครั้งที่ 1 หรือเคลมเดี่ยว
+   */
+  mainFrom?: { case_id: number; visit_no: number | null; survey_job_no: string | null; status: string; source: string } | null;
+  mainLockedFields?: string[];
   onReviewSubmitted: () => void;
 }
 
@@ -533,7 +539,7 @@ const isBlank = (el: HTMLElement) => {
   return !v.trim();
 };
 
-export default function CaseDetail({ caseData, report, photos, review, visitCount = 1, visits = [], expenses, photoFeeSuggest = null, tumbonOptions = [], onReviewSubmitted }: CaseDetailProps) {
+export default function CaseDetail({ caseData, report, photos, review, visitCount = 1, visits = [], expenses, photoFeeSuggest = null, tumbonOptions = [], mainFrom = null, mainLockedFields = [], onReviewSubmitted }: CaseDetailProps) {
   const ex = expenses || {};
   // ประเภทรถ → ตัวเลือกยี่ห้อ (EMCS กรองลิสต์ยี่ห้อตามประเภทรถ; เดิมโชว์ชุดของ
   // 'เก๋งเอเชีย' ชุดเดียวกับทุกประเภท → กระบะ/มอเตอร์ไซค์เลือกยี่ห้อที่ EMCS ไม่รับ)
@@ -777,6 +783,35 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
    */
   const isReference = String(caseData?.source ?? '') === 'isurvey_reference';
   const locked = approved && !isReference;
+  /**
+   * ครั้งที่ 2+ (user เคาะ 15/09/69 แบบ EMCS): ข้อมูลหลักของเคลม (รถ กรมธรรม์ ผู้ขับขี่ เหตุ ตำรวจ ความเสียหาย คู่กรณี
+   * ผู้บาดเจ็บ ทรัพย์สิน) แสดงของครั้งที่ 1 สด **อ่านอย่างเดียว** ที่นี่ — แก้ที่ครั้งที่ 1 (ปุ่มในแถบด้านบน)
+   * ของครั้งนี้ที่แก้ได้: ผลการดำเนินงาน ความเห็น เรทราคา รูป ไทม์ไลน์ถึง/เสร็จ สถานที่ออกตรวจ ช่าง ประเภทเคลม
+   * ช่องที่ล็อก = รายชื่อจาก backend (main_locked_fields) ล็อกด้วยชื่อช่องหลังทุก render เพราะช่องส่วนใหญ่เป็น uncontrolled
+   * และ backend ทิ้งช่องหลักที่หลุดมากับการบันทึกอยู่แล้ว (updateReport) — ที่นี่ทำเพื่อให้ผู้ตรวจเห็นว่าแก้ตรงนี้ไม่ได้
+   */
+  const mainFromFirst = Boolean(mainFrom);
+  const mainLockedRef = useRef<Set<string>>(new Set());
+  mainLockedRef.current = new Set(mainLockedFields ?? []);
+  const mainFromFirstRef = useRef(false);
+  mainFromFirstRef.current = mainFromFirst;
+  useEffect(() => {
+    const form = formRef.current;
+    if (!form) return;
+    form.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('[name]').forEach((el) => {
+      const isMain = mainFromFirst && mainLockedRef.current.has(el.name);
+      if (isMain) {
+        if (!el.dataset.mainLocked) {
+          el.disabled = true; el.dataset.mainLocked = '1';
+          el.classList.add('bg-gray-100'); el.classList.remove('bg-white');
+          el.title = 'ข้อมูลหลักของเคลม — แก้ที่ครั้งที่ 1';
+        }
+      } else if (el.dataset.mainLocked) {
+        el.disabled = false; delete el.dataset.mainLocked;
+        el.classList.remove('bg-gray-100'); el.classList.add('bg-white'); el.title = '';
+      }
+    });
+  });
   const isAdmin = user?.role === 'admin';
   /**
    * ที่มาของงานที่ระบบ **เตือน** ว่ายังไม่ได้กรอกยอด — ไม่ใช่ตัวล็อกช่องอีกแล้ว
@@ -1119,6 +1154,8 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
    */
   // จำนวนช่องบังคับที่ยังว่าง — โชว์เป็นแถบสรุปหัวหน้า (กรอบแดงรายช่องดูใน effect ด้านล่าง)
   const [missing, setMissing] = useState<string[]>([]);
+  /** ครั้งที่ 2+: "ผลการดำเนินงาน" ของครั้งนี้ว่างไหม — ตัวไล่ช่อง (paint) อ่านจากช่องสดทุกครั้งที่พิมพ์ */
+  const [resultEmpty, setResultEmpty] = useState<boolean>(!String(report?.survey_result ?? '').trim());
   /**
    * หมวดไหนยังมีช่องแดง — ใช้ติดป้าย "ยังกรอกไม่ครบ" ที่หัวหมวดเท่านั้น
    *
@@ -1211,8 +1248,11 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
   const damageRows = damage.filter((x) => x.part && DAMAGE_LEVEL_OK.has(x.level)).length;
   const badDamageLevels = damage.filter((x) => x.part && !DAMAGE_LEVEL_OK.has(x.level)).length;
 
-  const approvalBlockers = [
-    ...(finishedWaiting ? ['ช่างเสร็จงานหน้างานแล้วแต่ยังไม่ส่งรายงาน — อนุมัติได้เมื่อช่างกดส่งงาน'] : []),
+  /**
+   * ด่านที่ผูกกับ "ข้อมูลหลักของเคลม" — ครั้งที่ 2+ (15/09/69 แบบ EMCS) ไม่กั้นการอนุมัติ เพราะ EMCS ใช้ของครั้งที่ 1
+   * และบอทงานต่อเนื่องไม่แตะหน้าหลัก · แต่ยังบอกไว้ในแถบบนให้ไปแก้ที่ครั้งที่ 1
+   */
+  const mainBlockers = [
     ...(missing.length > 0 ? [`ช่องบังคับยังว่าง ${missing.length} ช่อง`] : []),
     ...(claimHl === 'red' ? ['ยังไม่ได้ติ๊ก "การเรียกร้องค่าเสียหายจากคู่กรณี"'] : []),
     ...(oppNoHl === 'red' ? ['ยังไม่ได้กรอก "คู่กรณีคันที่"'] : []),
@@ -1220,14 +1260,20 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
     ...(carBrandIssue ? [`ยี่ห้อรถประกัน "${carBrandIssue.brand}" ไม่มีในประเภทรถ ${carBrandIssue.typeLabel} ของ EMCS`] : []),
     ...badDrvDates.map((k) => `${DRV_DATE_LABEL[k]} ไม่ใช่วันที่จริง (วว/ดด/ปปปป)`),
     ...(badDamageLevels > 0 ? [`รายการความเสียหายรถประกัน ${badDamageLevels} ชิ้นยังไม่ได้เลือกระดับ (L/M/H/X) — EMCS บังคับทุกชิ้น`] : []),
+    ...(recordGaps > 0 ? [`คู่กรณี/ผู้บาดเจ็บ/ทรัพย์สิน ยังขาด ${recordGaps} ช่องบังคับ`] : []),
+    ...(damageRows === 0 ? ['ยังไม่มีรายการความเสียหายรถประกัน (ปุ่ม "ข้อมูลความเสียหาย")'] : []),
+  ];
+  /** ด่านของ "ครั้งนี้" — ใช้ทุกครั้ง · ครั้งที่ 2+ บังคับผลการดำเนินงานด้วย (สิ่งเดียวที่บอทกรอกหน้าค่าใช้จ่าย EMCS นอกจากบิล/รูป) */
+  const visitBlockers = [
+    ...(finishedWaiting ? ['ช่างเสร็จงานหน้างานแล้วแต่ยังไม่ส่งรายงาน — อนุมัติได้เมื่อช่างกดส่งงาน'] : []),
+    ...(mainFromFirst && resultEmpty ? ['ยังไม่มี "ผลการดำเนินงาน" ของครั้งนี้'] : []),
     ...(payHl === 'red' ? ['ติ๊ก "รับเงินจำนวน" แล้วแต่ยังไม่กรอกยอด'] : []),
     ...(tickHl === 'red' ? ['กรอกยอด "รับเงินจำนวน" แล้วแต่ยังไม่ติ๊กกล่อง'] : []),
     ...(payOver ? ['"รับเงินจำนวน" มากกว่ายอดเรียกร้องทั้งหมด'] : []),
     ...timeErrs.map((e) => `"${TL_LABEL[e.at] ?? e.at}" ${e.msg}`),
-    ...(recordGaps > 0 ? [`คู่กรณี/ผู้บาดเจ็บ/ทรัพย์สิน ยังขาด ${recordGaps} ช่องบังคับ`] : []),
-    ...(damageRows === 0 ? ['ยังไม่มีรายการความเสียหายรถประกัน (ปุ่ม "ข้อมูลความเสียหาย")'] : []),
     ...moneyMissing,
   ];
+  const approvalBlockers = mainFromFirst ? visitBlockers : [...visitBlockers, ...mainBlockers];
 
   /**
    * 5 จังหวะของงาน เรียงตามลำดับที่ต้องเป็นจริง — ใช้วาดการ์ด "ลำดับเวลา"
@@ -1279,6 +1325,8 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
       const names: string[] = [];
       form.querySelectorAll('.req-mark').forEach((mark) => {
         fieldsOfMark(mark, form).forEach((el) => {
+          // ครั้งที่ 2+ (15/09/69 แบบ EMCS): ช่องข้อมูลหลักมาจากครั้งที่ 1 อ่านอย่างเดียว — ไม่นับ/ไม่ทาแดงที่นี่ (แก้ที่ครั้งที่ 1)
+          if (mainFromFirstRef.current && mainLockedRef.current.has((el as HTMLInputElement).name)) return;
           const blank = isBlank(el);
           // จำพื้นหลังเดิมไว้ครั้งแรก แล้วสลับไปมาระหว่างเดิม ↔ แดง
           if (!el.dataset.bg0) el.dataset.bg0 = BG_ORIG.find((c) => el.classList.contains(c)) || 'bg-white';
@@ -1291,8 +1339,12 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
       });
       // กลุ่ม radio ที่บังคับ (ดู REQ_RADIO_GROUPS) — นับเองเพราะตัวทาสีทั่วไปมองไม่เห็น
       for (const nm of REQ_RADIO_GROUPS) {
+        if (mainFromFirstRef.current && mainLockedRef.current.has(nm)) continue;   // ข้อมูลหลักจากครั้งที่ 1
         if (!form.querySelector(`input[name="${nm}"]:checked`)) names.push(nm);
       }
+      // ครั้งที่ 2+: ผลการดำเนินงานของครั้งนี้ (ช่องในรางขวา) ต้องมี — อ่านสดจากช่องทุกครั้งที่พิมพ์
+      const rsEl = form.querySelector('[name="survey_result"]') as HTMLTextAreaElement | null;
+      setResultEmpty(!String(rsEl?.value ?? '').trim());
 
       /**
        * ── ชื่อที่มีอักขระ EMCS ไม่รับ (วงเล็บ ทับ ฯลฯ) → ทาแดงที่ช่องเลย ──
@@ -2179,6 +2231,26 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
                 · <span className="text-gray-700">แก้ข้อมูลตั้งต้นได้ที่นี่แล้วกด "บันทึก"</span> — ครั้งถัดไปที่ดึงใหม่จะใช้ข้อมูลของครั้งที่ 1 เติมช่องที่ใบนั้นไม่มี (ยกเว้นรูป/ผลการดำเนินงาน)</span>
             </div>
           )}
+          {/* ครั้งที่ 2+ (15/09/69 แบบ EMCS): ข้อมูลหลักมาจากครั้งที่ 1 สด อ่านอย่างเดียว — ปุ่มพาไปแก้ที่ครั้งที่ 1 */}
+          {mainFromFirst && mainFrom && (
+            <div className="border border-sky-300 bg-sky-50 px-3 py-2 text-sm text-sky-900 flex flex-wrap items-center gap-2">
+              <span className="min-w-0">
+                <span className="font-semibold">ครั้งที่ {String(caseData?.visit_no ?? visitCount)} ของเคลม</span>
+                {' — '}ข้อมูลหลัก (รถ กรมธรรม์ ผู้ขับขี่ เหตุ ตำรวจ ความเสียหาย คู่กรณี ผู้บาดเจ็บ ทรัพย์สิน) แสดงจากครั้งที่ {String(mainFrom.visit_no ?? 1)}
+                {mainFrom.survey_job_no ? ` · ${mainFrom.survey_job_no}` : ''} อ่านอย่างเดียว
+                <span className="text-sky-700"> · แก้ได้เฉพาะของครั้งนี้: ผลการดำเนินงาน ความเห็น เรทราคา รูป ไทม์ไลน์ถึง/เสร็จ สถานที่ออกตรวจ ช่าง</span>
+              </span>
+              <button type="button" onClick={() => switchVisit(String(mainFrom.case_id))}
+                className="ml-auto shrink-0 px-3 py-1 border border-sky-700 bg-white text-xs font-bold text-sky-800 hover:bg-sky-100">
+                แก้ที่ครั้งที่ {String(mainFrom.visit_no ?? 1)} →
+              </button>
+              {mainBlockers.length > 0 && (
+                <span className="w-full text-xs text-amber-800">
+                  ข้อมูลหลักยังมี {mainBlockers.length} ข้อที่ต้องแก้ที่ครั้งที่ {String(mainFrom.visit_no ?? 1)} (ไม่กั้นการอนุมัติครั้งนี้ — EMCS ใช้ของครั้งที่ 1): {mainBlockers.join(' · ')}
+                </span>
+              )}
+            </div>
+          )}
           {/* คำอธิบายดอกจัน — จุดแดงชุดเดียวกับที่ผู้สำรวจเห็นบนแอป (อิงตัวตรวจของระบบประกัน) */}
           <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-gray-500">
             <span><span className="text-red-500">*</span> ช่องบังคับของระบบประกัน — เว้นว่างแล้วส่งงานเข้าระบบประกันไม่ผ่าน</span>
@@ -2222,7 +2294,7 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
           {approvalBlockers.length > 0 && (
             <div className="bg-amber-50 border border-amber-300 rounded-none px-4 py-2 text-sm text-amber-900">
               {/* เคสอ้างอิงไม่มีการอนุมัติ — รายการเดียวกันใช้เป็น "ข้อมูลตั้งต้นที่ยังขาด" ให้คนกรอกครั้งที่ 1 ให้ครบ (15/09/69) */}
-              <span className="font-semibold">{isReference ? `ข้อมูลตั้งต้นที่ยังขาด ${approvalBlockers.length} ข้อ (ครั้งถัดไปจะสืบทอดจากใบนี้)` : `ยังอนุมัติไม่ได้ ${approvalBlockers.length} ข้อ`}</span>
+              <span className="font-semibold">{isReference ? `ข้อมูลตั้งต้นที่ยังขาด ${approvalBlockers.length} ข้อ (ครั้งถัดไปใช้ข้อมูลหลักจากใบนี้)` : mainFromFirst ? `ยังอนุมัติไม่ได้ ${approvalBlockers.length} ข้อ (เฉพาะของครั้งนี้)` : `ยังอนุมัติไม่ได้ ${approvalBlockers.length} ข้อ`}</span>
               <ol className="list-decimal ml-5 mt-1 space-y-0.5 text-amber-800">
                 {approvalBlockers.map((b, i) => <li key={i}>{b}</li>)}
               </ol>
@@ -3123,14 +3195,15 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
           <div data-section="opp" className="border border-[var(--md-line)] bg-white">
             <SectionBar title={`คู่กรณี · ${opponents.length} คัน`} gap={(gapSec ?? []).includes('opp')} />
             <div className="bg-white overflow-hidden text-sm">
-              <div className="p-4"><OpponentEditor items={opponents} onChange={setOpponents} /></div>
+              {/* ครั้งที่ 2+: คู่กรณี/ผู้บาดเจ็บ/ทรัพย์สิน เป็นข้อมูลหลักจากครั้งที่ 1 — ตัวแก้ไม่มี name จึงล็อกด้วย fieldset ครอบ */}
+              <div className="p-4"><fieldset disabled={mainFromFirst} className="contents min-w-0 border-0 p-0 m-0"><OpponentEditor items={opponents} onChange={setOpponents} /></fieldset></div>
             </div>
           </div>
 
           <div data-section="inj" className="border border-[var(--md-line)] bg-white">
             <SectionBar title={`ผู้บาดเจ็บ · ${injured.length} คน`} gap={(gapSec ?? []).includes('inj')} />
             <div className="bg-white overflow-hidden text-sm">
-              <div className="p-4"><InjuredEditor items={injured} onChange={setInjured} /></div>
+              <div className="p-4"><fieldset disabled={mainFromFirst} className="contents min-w-0 border-0 p-0 m-0"><InjuredEditor items={injured} onChange={setInjured} /></fieldset></div>
             </div>
           </div>
 
@@ -3140,7 +3213,7 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
           <div data-section="prop" className="border border-[var(--md-line)] bg-white">
             <SectionBar title={`ทรัพย์สินเสียหาย · ${property.length} ชิ้น`} gap={(gapSec ?? []).includes('prop')} />
             <div className="bg-white overflow-hidden text-sm">
-              <div className="p-4"><PropertyEditor items={property} onChange={setProperty} /></div>
+              <div className="p-4"><fieldset disabled={mainFromFirst} className="contents min-w-0 border-0 p-0 m-0"><PropertyEditor items={property} onChange={setProperty} /></fieldset></div>
             </div>
           </div>
 
@@ -3255,11 +3328,8 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
                 <span className="text-white/70 text-xs">ครั้งที่</span>
                 {(visits ?? []).length > 1 ? (
                   <select value={String(viewVisit ?? caseData?.id ?? '')}
-                    onChange={(e) => {
-                      const to = Number(e.target.value);
-                      if (!previewing) railDraft.current = readRail();
-                      setViewVisit(to === Number(caseData?.id) ? null : to);
-                    }}
+                    // 15/09/69 แบบ EMCS: เลือกครั้งที่ = พาไปหน้าของครั้งนั้น (คนละเคส) ทุกอย่างรวมรูป/ปุ่มอนุมัติตามครั้ง — ไม่ใช่ดูอย่างเดียวในหน้าเดิม
+                    onChange={(e) => switchVisit(e.target.value)}
                     className="border border-[var(--md-line-2)] rounded-none px-2 h-7 text-sm font-semibold text-[var(--md-ink)] bg-white">
                     {(visits ?? []).map((v) => (
                       <option key={v.id} value={v.id}>
@@ -3756,7 +3826,7 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
         </div>
       )}
 
-      <DamageDialog open={dmgOpen} items={damage} disabled={locked}
+      <DamageDialog open={dmgOpen} items={damage} disabled={locked || mainFromFirst}
         onClose={() => setDmgOpen(false)} onSave={setDamage} />
 
     </form>

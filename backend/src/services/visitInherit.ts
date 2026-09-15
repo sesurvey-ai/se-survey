@@ -1,84 +1,59 @@
 /**
- * งานครั้งที่ 2+ ของเคลมเดียวกัน (งานติดตาม / เจรจาสินไหม) — สืบทอดข้อมูลหลักจากครั้งที่ 1
+ * เคลมเดียวหลายครั้ง (งานติดตาม / เจรจาสินไหม / งานครั้งถัดไป) — "รายงานที่มีผล" แบบ EMCS
  *
- * ทำไมต้องมี (user สั่ง 15/09/69 เคลม 2026013057520 ครั้งที่ 1–4): ISURVEY เก็บข้อมูลหลักของเคลม
- * (ผู้ขับขี่ · ตำรวจ · รายการความเสียหาย · คู่กรณี · ประเภทรถ · พรบ. · รหัสภัย ฯลฯ) ไว้ที่ **ครั้งที่ 1 เท่านั้น**
- * ใบครั้งถัดไปบน ISURVEY โชว์ข้อมูลของครั้งที่ 1 ให้ดู แต่ตัวใบเองมีแค่ของประจำครั้ง (ผลการดำเนินงาน · รูป ·
- * เวลา/สถานที่ออกตรวจ · ช่าง) → ตัวดึงงานเอามาเฉพาะที่ใบนั้นมี หน้าตรวจจึงขึ้น "ช่องบังคับยังว่าง 20+ ช่อง"
- * และตัวตรวจก่อนนำเข้าของบอทกั้น ทั้งที่งานต่อเนื่องไม่ต้องกรอกช่องพวกนั้นเลย
+ * user เคาะ 15/09/69 (เคลม 2026013057520 ครั้งที่ 1–4): รายการงานแยกใบตามเลขเซอร์เวย์แบบ ISURVEY (1 ครั้ง = 1 เคส
+ * อนุมัติ/ปิด ISURVEY/ส่ง se-billing/เข้า EMCS ทีละใบ) แต่**ข้อมูลหลักของเคลมมีชุดเดียวที่ครั้งที่ 1** เหมือน EMCS
+ * (งานต่อเนื่องบน EMCS กรอกแค่หน้าค่าใช้จ่าย + รูป ข้อมูลหลักใช้ของครั้งที่ 1 เสมอ)
  *
- * กติกา: เติม **เฉพาะช่องที่ใบนี้ว่าง** ด้วยค่าจากครั้งที่ 1 · ห้ามแตะของประจำครั้ง (VISIT_OWN_FIELDS)
- * ⛔ ไม่ใช่กติกาเดียวกับ createFollowup (งานครั้งถัดไปที่เปิดจากเว็บเอง ก๊อปแค่ตัวตนของเคลม เพราะช่างต้องไปสำรวจใหม่)
- *    — ทางนี้ใช้กับใบที่ดึงจาก ISURVEY ซึ่งงานสำรวจจบแล้วและระบบต้นทางแสดงข้อมูลครั้งที่ 1 อยู่แล้ว
+ * ครั้งที่ 2+ จึงไม่เก็บสำเนาข้อมูลหลัก (เคยก๊อปตอนดึงงานเมื่อเช้า 15/09 — แก้ครั้งที่ 1 ทีหลังแล้วครั้งอื่นไม่ตาม
+ * และผู้ตรวจอาจแก้ข้อมูลหลักบนใบครั้งที่ 4 ทั้งที่ EMCS ไม่รับ) → ประกอบตอนอ่าน: ข้อมูลหลักจากครั้งที่ 1 สด + ของครั้งนั้น
+ * ใช้ชุดเดียวกันทั้งหน้าเคส (/detail) · บอท (/integrations/cases/:id/report) · XML export
+ * ใช้กับทุกต้นทาง (ดึงจาก ISURVEY และงานครั้งถัดไปที่เปิดจากเว็บเอง)
  */
 
-/** ของประจำครั้ง — เป็นของครั้งนั้น ๆ ห้ามเอาของครั้งที่ 1 มาทับ (ว่างก็ปล่อยว่าง) */
+/** ของประจำครั้ง — เป็นของครั้งนั้น ๆ (แก้ได้บนใบนั้น) · ที่เหลือทั้งหมด = ข้อมูลหลักของเคลม อ่านจากครั้งที่ 1 */
 export const VISIT_OWN_FIELDS: ReadonlySet<string> = new Set([
-  // ระบบ / ตัวชี้
+  // ระบบ / ตัวชี้ของใบนี้ (rev ใช้กันบันทึกทับของใบนี้เอง)
   'id', 'case_id', 'created_at', 'updated_at', 'updated_by', 'rev',
   // ตัวตนของครั้งนี้ — เลขเซอร์เวย์ห้ามซ้ำ · ประเภทเคลมเป็นของครั้งนั้น (ติดตาม/เจรจา ≠ เคลมสดของครั้งที่ 1)
   'survey_job_no', 'survey_job_no_2', 'claim_type',
-  // สิ่งที่ครั้งนี้ทำ — user ย้ำ: ผลการดำเนินงานต้องเป็นของครั้งนั้น ๆ
+  // สิ่งที่ครั้งนี้ทำ — ผลการดำเนินงาน/ความเห็น/รายการตรวจสอบ/หมายเหตุต้นทาง
   'survey_result', 'review_comment', 'surveyor_comment', 'notes', 'source_remark', 'checklist',
-  // เวลา/สถานที่ออกตรวจของครั้งนี้ (ไทม์ไลน์จ่ายงาน→ถึง→เสร็จ เป็นรายครั้ง · ที่เกิดเหตุ acc_* เป็นของเคลม สืบทอดได้)
+  // เวลา/สถานที่ออกตรวจของครั้งนี้ (จ่ายงาน→ถึง→เสร็จ เป็นรายครั้ง · ที่เกิดเหตุ acc_* เป็นของเคลม)
   'acc_insurance_notify_date', 'acc_insurance_notify_time', 'acc_survey_arrive_date', 'acc_survey_complete_date',
   'survey_place', 'survey_province', 'survey_district', 'survey_subdistrict',
   // ช่างที่ออกครั้งนี้
   'acc_surveyor', 'acc_surveyor_branch', 'acc_surveyor_phone', 'surveyor_name', 'surveyor_phone',
 ]);
 
-/** รายการ 1:N กับธง "มี/ไม่มี" ที่ต้องไปด้วยกัน — สืบทอดรายการแล้วธงต้องตาม ไม่งั้นหน้าจอบอก "ไม่มีคู่กรณี" ทั้งที่มีรายการ */
-export const LIST_FLAGS: Readonly<Record<string, string>> = {
-  opposing_parties: 'has_opponents',
-  injured_persons: 'has_injured',
-  damaged_property: 'has_property',
-};
+/**
+ * ชิ้นส่วนบนฟอร์มหน้าเคสที่ไม่ใช่ชื่อคอลัมน์แต่ประกอบเป็นช่องหลัก (updateReport รวมเป็น "วันที่|ชม:นาที")
+ * — หน้าเว็บต้องล็อกด้วยเมื่อข้อมูลหลักมาจากครั้งที่ 1 · ชิ้นส่วนของช่องประจำครั้ง (arrive/complete/notify/submitted) ไม่อยู่ในนี้
+ */
+export const MAIN_FORM_PARTS: readonly string[] = [
+  'acc_time_hour', 'acc_time_minute',
+  'acc_customer_report_date_val', 'acc_customer_report_hour', 'acc_customer_report_minute',
+  'acc_police_hour', 'acc_police_minute',
+  'acc_followup_hour', 'acc_followup_minute',
+];
+
+/** ช่องที่หน้าเว็บต้องล็อกบนใบครั้งที่ 2+ = คอลัมน์จริงที่ไม่ใช่ของประจำครั้ง + ชิ้นส่วนบนฟอร์มของช่องหลัก */
+export function mainLockedFields(columns: Iterable<string>): string[] {
+  const out = new Set<string>();
+  for (const c of columns) if (!VISIT_OWN_FIELDS.has(c)) out.add(c);
+  for (const p of MAIN_FORM_PARTS) out.add(p);
+  return [...out];
+}
 
 /**
- * ช่อง "คู่หู" ที่ต้องไปกับช่องหลักเสมอ — ตัวดึงงานใส่ค่าตั้งต้นให้ช่องคู่หูแม้ช่องหลักว่าง (เช่น driver_id_type='thai'
- * ทั้งที่ไม่มีเลขบัตร) พอเติมเลขบัตรของครั้งที่ 1 (พาสปอร์ต) มาแล้วชนิดยังเป็น "ไทย" → หน้าตรวจเตือน "เลขบัตรไทยไม่ถูกต้อง"
- * (เจอจริง 15/09/69 เคลม 2026013057520 ครั้งที่ 3–4) → เติมช่องหลักเมื่อไหร่ ให้ช่องคู่หูตามค่าครั้งที่ 1 ไปด้วยแม้ไม่ว่าง
+ * รายงานที่มีผลของใบครั้งที่ 2+: เริ่มจากรายงานของใบนั้น แล้วทับทุกช่องที่ไม่ใช่ของประจำครั้งด้วยค่าของครั้งที่ 1 (สด)
+ * ไม่แก้ object ที่รับมา · ช่องที่ครั้งที่ 1 ไม่มีคีย์ (ไม่น่าเกิด — ตารางเดียวกัน) คงของใบนั้นไว้
  */
-export const COMPANION_FIELDS: Readonly<Record<string, readonly string[]>> = {
-  driver_id_card: ['driver_id_type'],
-  driver_license_no: ['driver_license_type', 'driver_license_place'],
-};
-
-/** ว่าง = null/undefined/สตริงว่าง/'[]'/'{}'/array-object เปล่า · ⛔ 0 กับ false ไม่ใช่ว่าง (เป็นค่าจริงได้) */
-export const isBlank = (v: unknown): boolean => {
-  if (v === null || v === undefined) return true;
-  if (typeof v === 'string') { const s = v.trim(); return s === '' || s === '[]' || s === '{}'; }
-  if (Array.isArray(v)) return v.length === 0;
-  if (v instanceof Date) return false;
-  if (typeof v === 'object') return Object.keys(v as object).length === 0;
-  return false;
-};
-
-/**
- * เติมช่องว่างของ `report` (ใบครั้งที่ 2+) ด้วยค่าจาก `first` (แถว survey_reports ของครั้งที่ 1)
- * แก้ `report` ตรง ๆ · คืนชื่อช่องที่เติม (ไว้จดเตือนให้หัวหน้ารู้ว่าช่องไหนมาจากครั้งที่ 1)
- */
-export function inheritFromFirstVisit(
-  report: Record<string, unknown>,
+export function effectiveReport(
+  own: Record<string, unknown>,
   first: Record<string, unknown>,
-): string[] {
-  const filled: string[] = [];
-  const flagNames = new Set(Object.values(LIST_FLAGS));
-  for (const [k, v] of Object.entries(first)) {
-    if (VISIT_OWN_FIELDS.has(k) || flagNames.has(k)) continue;   // ธงตามรายการของมัน ไม่สืบทอดเดี่ยว ๆ
-    if (isBlank(v) || !isBlank(report[k])) continue;
-    report[k] = v instanceof Date ? v.toISOString() : v;         // TIMESTAMP จาก pg มาเป็น Date — bind กลับเป็น ISO
-    filled.push(k);
-    const flag = LIST_FLAGS[k];
-    if (flag && first[flag] !== null && first[flag] !== undefined) {
-      report[flag] = first[flag];
-      filled.push(flag);
-    }
-    for (const mate of COMPANION_FIELDS[k] ?? []) {
-      if (isBlank(first[mate]) || report[mate] === first[mate]) continue;
-      report[mate] = first[mate];                                 // ทับค่าตั้งต้นของตัวดึงงาน — ชนิดต้องตรงกับเลขที่เติมมา
-      if (!filled.includes(mate)) filled.push(mate);
-    }
-  }
-  return filled;
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...own };
+  for (const [k, v] of Object.entries(first)) if (!VISIT_OWN_FIELDS.has(k)) out[k] = v;
+  return out;
 }
