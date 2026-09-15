@@ -6,6 +6,7 @@ import { generateSurveyXml, emcsNameWarnings, sanitizeReportDates } from './xmlE
 import { invalidateCaseOwner } from '../middleware/uploadsAuth';
 import { storage, normalizeKey, contentTypeOf } from '../config/storage';
 import { normalizeVehicleFields, normalizeDamageLevels } from './vehicleBrand';
+import { inheritFromFirstVisit } from './visitInherit';
 import { isFirebaseReady } from '../config/firebase';
 import type { XmlImportResult } from './xmlImport.service';
 import { assertReportRev } from './reportRev';
@@ -1575,6 +1576,29 @@ export const caseService = {
     if (report.driver_gender !== undefined) report.driver_gender = driverGenderMF(report.driver_gender);
     await assertSurveyJobNoUnique([report.survey_job_no]);
 
+    // งานครั้งที่ 2+ (user สั่ง 15/09/69 เคลม 2026013057520): ISURVEY เก็บข้อมูลหลักไว้ที่ครั้งที่ 1 เท่านั้น ใบครั้งถัดไป
+    // มีแค่ของประจำครั้ง → เติมช่องที่ว่างจากครั้งที่ 1 ที่อยู่ในเว็บ (ตัวดึงงานเอาครั้งก่อนหน้าเข้ามาก่อนใบนี้เสมอ)
+    // ยกเว้นรูป · ผลการดำเนินงาน · เวลา/สถานที่ออกตรวจ · ช่าง · เลขเซอร์เวย์ · ประเภทเคลม (VISIT_OWN_FIELDS) ที่เป็นของครั้งนั้น
+    // ไม่มีครั้งที่ 1 ในเว็บ (เช่น ดึงไม่ผ่าน) = ปล่อยตามที่ใบนี้มี ไม่ล้มงาน
+    const claimNoForVisit = String(report.claim_no ?? '').trim();
+    if ((parsed.visitNo ?? 0) > 1 && claimNoForVisit) {
+      const first = await db.query(
+        `SELECT sr.*, c.visit_no AS first_visit_no
+           FROM survey_reports sr JOIN cases c ON c.id = sr.case_id
+          WHERE sr.claim_no = $1 AND (c.visit_no IS NULL OR c.visit_no < $2)
+          ORDER BY c.visit_no NULLS LAST, c.created_at LIMIT 1`,
+        [claimNoForVisit, parsed.visitNo]);
+      if (first.rows.length > 0) {
+        const { first_visit_no: firstVisitNo, ...firstReport } = first.rows[0] as Record<string, unknown>;
+        const filled = inheritFromFirstVisit(report, firstReport);
+        if (filled.length) {
+          parsed.warnings = [...(parsed.warnings ?? []),
+            `งานครั้งที่ ${parsed.visitNo}: เติม ${filled.length} ช่องจากครั้งที่ ${firstVisitNo ?? 1}` +
+            ` (${String(firstReport.survey_job_no ?? '?')}) ที่ใบนี้ไม่มีบน ISURVEY — รูปและผลการดำเนินงานเป็นของครั้งนี้`];
+        }
+      }
+    }
+
     // ผู้สำรวจ: จับจากรหัสใน ACC_SURV ('SE272 นาย ...') — หาไม่เจอก็ปล่อยว่าง ไม่ล้มทั้งงาน
     let assignedTo: number | null = null;
     if (parsed.surveyorCode) {
@@ -1679,7 +1703,9 @@ export const caseService = {
 
       await client.query('COMMIT');
       notifyCaseChanged(caseId, 'imported', null);
-      return { caseId, assignedTo, surveyorCode: parsed.surveyorCode, reference: Boolean(parsed.reference) };
+      // warnings ที่เก็บจริงกับเคส (รวมที่ระบบเติมเองตอนนำเข้า: ยี่ห้อ/วันที่/ระดับ/สืบทอดครั้งที่ 1) — ผู้เรียกใช้ตัวนี้แสดงผล
+      return { caseId, assignedTo, surveyorCode: parsed.surveyorCode, reference: Boolean(parsed.reference),
+               warnings: parsed.warnings ?? [] };
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;

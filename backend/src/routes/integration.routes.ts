@@ -189,7 +189,8 @@ router.post('/cases/import', integrationAuth, asyncHandler(async (req: Request, 
     reference,
   }, { insuranceCompany, createdBy });
 
-  res.json({ success: true, data: { ...result, warnings, hasMoney: expenses !== null } });
+  // คืน warnings ที่เก็บจริงกับเคส (มีที่ระบบเติมเองตอนนำเข้า เช่น "เติม N ช่องจากครั้งที่ 1") ไม่ใช่แค่ที่ผู้เรียกส่งมา
+  res.json({ success: true, data: { ...result, warnings: result.warnings ?? warnings, hasMoney: expenses !== null } });
 }));
 
 /**
@@ -198,6 +199,9 @@ router.post('/cases/import', integrationAuth, asyncHandler(async (req: Request, 
  * ⛔ ห้ามแตะเคสที่อนุมัติแล้ว — ถ้าเปลี่ยนรูปหลังอนุมัติได้ ประตูอนุมัติก็ไม่มีความหมาย
  *    (สิ่งที่บอทส่งเข้า EMCS จะไม่ใช่สิ่งที่หัวหน้ารับรอง)
  * ⛔ เฉพาะเคส source='isurvey_live' — งานมือถือรูปมาจากแอป ห้ามทางนี้ไปเติม
+ * ยกเว้นเคสอ้างอิง (source='isurvey_reference' — ครั้งก่อนหน้าที่ปิดจบบน ISURVEY แล้ว): ถูกอนุมัติ/ล็อกตั้งแต่สร้าง
+ * แต่ต้องรับรูปของครั้งนั้นได้ (user เปลี่ยนกติกา 15/09/69: เดิม 13/09 ข้ามรูปครั้งก่อนหน้า → ตอนนี้เอารูปทุกครั้ง
+ * เพราะรูปเป็นของครั้งนั้น ๆ ไม่ใช่ของครั้งที่ 1) · ไม่ผิดหลัก "อนุมัติแล้วห้ามแตะ" เพราะไม่มีใครตรวจ/ส่งใบอ้างอิงเข้า EMCS อีก
  */
 router.post('/cases/:id/photos-zip', integrationAuth, uploadZipOnly,
   asyncHandler(async (req: Request, res: Response) => {
@@ -205,11 +209,12 @@ router.post('/cases/:id/photos-zip', integrationAuth, uploadZipOnly,
     const { db } = await import('../config/database');
     const c = await db.query('SELECT status, source FROM cases WHERE id = $1', [caseId]);
     if (c.rows.length === 0) { res.status(404).json({ success: false, message: 'case not found' }); return; }
-    if (c.rows[0].status === 'reviewed') {
+    const isReference = c.rows[0].source === 'isurvey_reference';
+    if (c.rows[0].status === 'reviewed' && !isReference) {
       res.status(423).json({ success: false, message: `เคส #${caseId} อนุมัติแล้ว — เพิ่มรูปไม่ได้จนกว่าแอดมินจะปลดล็อก` });
       return;
     }
-    if (c.rows[0].source !== 'isurvey_live') {
+    if (c.rows[0].source !== 'isurvey_live' && !isReference) {
       res.status(403).json({ success: false, message: `ทางนี้ใช้ได้เฉพาะเคสที่ดึงจาก ISURVEY (source='${c.rows[0].source}')` });
       return;
     }

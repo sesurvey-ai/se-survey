@@ -32,7 +32,9 @@ type PullResult = {
   caseId?: number; warnings?: string[]; photos?: { added?: number; error?: string; note?: string };
   /** ครั้งที่ของใบที่ดึง (ตามเลขเซอร์เวย์) + ครั้งก่อนหน้าที่ระบบดึงมาเป็นเคสอ้างอิงให้เอง (13/09/69) */
   visit_no?: number | null;
-  references?: { survey_no: string; round: number; caseId?: number | null; skipped?: string | null }[];
+  references?: { survey_no: string; round: number; caseId?: number | null; skipped?: string | null;
+    /** รูปของครั้งนั้น (15/09/69 เลิกข้ามรูปครั้งก่อนหน้า) */
+    photos?: { added?: number; error?: string; note?: string } | null }[];
 };
 
 const PENDING = 'รอตรวจข้อมูล';
@@ -193,10 +195,14 @@ export default function IsurveyPendingPage() {
       const d = (res.data?.data ?? {}) as PullResult;
       const photos = d.photos?.error ? `รูป: ${d.photos.error}` : `รูป ${d.photos?.added ?? 0} ใบ`;
       const warn = d.warnings?.length ? ` · เตือน ${d.warnings.length} ข้อ` : '';
-      // งานครั้งถัดไป: ระบบดึงครั้งก่อนหน้าของเคลมมาเป็นเคสอ้างอิงให้ก่อนแล้ว (ไม่มีรูป) — บอกให้รู้ว่าได้กี่ใบ/ข้ามใบไหน
+      // งานครั้งถัดไป: ระบบดึงครั้งก่อนหน้าของเคลมมาเป็นเคสอ้างอิงให้ก่อนแล้ว พร้อมรูปของครั้งนั้น (15/09/69 เลิกข้ามรูป)
+      // — บอกให้รู้ว่าได้กี่ใบ/รูปกี่ใบ/ข้ามใบไหน
       const refs = d.references ?? [];
+      const refPhotos = (x: NonNullable<PullResult['references']>[number]) =>
+        x.photos?.error ? 'รูปพลาด' : `รูป ${x.photos?.added ?? 0} ใบ`;
       const refTxt = refs.length
         ? ` · ครั้งที่ ${d.visit_no ?? '?'} ของเคลม — ดึงครั้งก่อนหน้ามาเป็นเคสอ้างอิง ${refs.filter((x) => x.caseId).length}/${refs.length} ใบ`
+          + (refs.some((x) => x.caseId) ? ` (${refs.filter((x) => x.caseId).map((x) => `ครั้งที่ ${x.round}: ${refPhotos(x)}`).join(', ')})` : '')
           + (refs.some((x) => x.skipped) ? ` (ข้าม ${refs.filter((x) => x.skipped).map((x) => `ครั้งที่ ${x.round}: ${x.skipped}`).join(', ')})` : '')
         : '';
       setResults((m) => ({ ...m, [k]: { ok: true, text: `ดึงแล้ว → เคส #${d.caseId} (${photos}${warn})${refTxt}`, caseId: d.caseId } }));
