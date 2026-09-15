@@ -6,6 +6,7 @@ import { env } from '../config/env';
 import { caseService } from '../services/case.service';
 import { uploadZipOnly } from '../config/multer';
 import { storage, normalizeKey } from '../config/storage';
+import { CAR_BRANDS_BY_TYPE, BRAND_ALIASES, THAI_BRANDS, CAR_TYPE_LABELS } from '../services/vehicleBrand';
 import { notifyCaseChanged } from '../services/caseEvents';
 import { emcsQueueService } from '../services/emcsQueue.service';
 
@@ -364,6 +365,13 @@ router.get('/cases/:id/photos', integrationAuth, asyncHandler(async (req: Reques
   );
   res.json({ success: true, data: { photos: r.rows } });
 }));
+
+// ลิสต์ยี่ห้อตามประเภทรถของ EMCS + ชื่อเทียบเท่า (15/09/69) — บอทใช้ตรวจก่อนนำเข้าว่ายี่ห้อมีในประเภทรถนั้นจริง
+// (ชุดเดียวกับที่หน้าตรวจใช้ — services/vehicleBrand.ts) · ไม่ผูกกับเคส จึงไม่ต้อง assertApproved
+router.get('/car-brands', integrationAuth, (_req: Request, res: Response) => {
+  res.set('Cache-Control', 'private, max-age=3600');
+  res.json({ success: true, data: { by_type: CAR_BRANDS_BY_TYPE, aliases: BRAND_ALIASES, thai: THAI_BRANDS, type_labels: CAR_TYPE_LABELS } });
+});
 
 // stream ไฟล์รูปตาม file_path จากรายการข้างบน — อ่านผ่านชั้น storage (ดิสก์หรือ S3 ตามโหมด)
 router.get('/files', integrationAuth, asyncHandler(async (req: Request, res: Response) => {

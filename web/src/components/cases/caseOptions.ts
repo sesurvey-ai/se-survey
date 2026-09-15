@@ -124,6 +124,104 @@ export function carBrandOptions(carType?: string | null, current?: string | null
   return ['-- ระบุ --', ...list, ...keep];
 }
 
+// ── ยี่ห้อ ↔ ประเภทรถ ตามกติกา EMCS (15/09/69 เคส #300: เก๋งเอเชีย + MERCEDES-BENZ อนุมัติผ่านแล้วบอทติดที่ EMCS) ──
+// ⚠️ ชุดเดียวกับ backend/src/services/vehicleBrand.ts — contract test ล็อกให้ตรงกัน แก้ที่หนึ่งต้องแก้อีกที่
+export const CAR_TYPE_LABELS: Record<string, string> = {
+  A: 'เก๋งเอเชีย', E: 'เก๋งยุโรป', M: 'รถจักรยานยนต์', O: 'รถอื่นๆ', T: 'กระบะ', V: 'รถตู้', W: 'รถบรรทุก',
+};
+
+/** ชื่อยี่ห้อที่สะกดต่างจากป้าย EMCS (ISURVEY / คนพิมพ์เอง) → ป้าย EMCS · คีย์พิมพ์ใหญ่ */
+export const BRAND_ALIASES: Record<string, string> = {
+  'MERCEDES-BENZ': 'BENZ', 'MERCEDES BENZ': 'BENZ', 'MERCEDESBENZ': 'BENZ', 'MERCEDES': 'BENZ',
+  'MERCEDES-AMG': 'BENZ', 'MERC': 'BENZ',
+  'LAND ROVER': 'LANDROVER', 'LAND-ROVER': 'LANDROVER', 'RANGE ROVER': 'LANDROVER',
+  'ROLLS-ROYCE': 'ROLLSROYCE', 'ROLLS ROYCE': 'ROLLSROYCE',
+  'ASTON MARTIN': 'ASTONMARTIN', 'ASTON-MARTIN': 'ASTONMARTIN',
+  'ALFA ROMEO': 'ALFA', 'ALFA-ROMEO': 'ALFA',
+  'HARLEY-DAVIDSON': 'HARLEY', 'HARLEY DAVIDSON': 'HARLEY',
+  'VW': 'VOLKSWAGEN', 'CHEVY': 'CHEVROLET',
+  'LYNK & CO': 'LYNK CO', 'LYNK&CO': 'LYNK CO', 'MOTO-GUZZI': 'MOTO GUZZI',
+  'ROYAL-ENFIELD': 'ROYAL ENFIELD', 'CAN AM': 'CAN-AM',
+};
+
+/** ยี่ห้อภาษาไทย (แอป/OCR/งานเก่า) → ป้าย EMCS */
+export const THAI_BRANDS: Record<string, string> = {
+  'โตโยต้า': 'TOYOTA', 'โตโยตา': 'TOYOTA', 'ฮอนด้า': 'HONDA', 'ฮอนดา': 'HONDA', 'อีซูซุ': 'ISUZU', 'อิซูซุ': 'ISUZU',
+  'นิสสัน': 'NISSAN', 'มิตซูบิชิ': 'MITSUBISHI', 'มาสด้า': 'MAZDA', 'ซูซูกิ': 'SUZUKI', 'ซูบารุ': 'SUBARU',
+  'ไดฮัทสุ': 'DAIHATSU', 'เลกซัส': 'LEXUS', 'เล็กซัส': 'LEXUS', 'ฮุนได': 'HYUNDAI', 'เกีย': 'KIA', 'เอ็มจี': 'MG',
+  'ฟอร์ด': 'FORD', 'เชฟโรเลต': 'CHEVROLET', 'เชฟโรเล็ต': 'CHEVROLET',
+  'เมอร์เซเดส-เบนซ์': 'BENZ', 'เมอร์เซเดส': 'BENZ', 'เบนซ์': 'BENZ', 'เบนซ': 'BENZ',
+  'บีเอ็มดับเบิลยู': 'BMW', 'บีเอ็มดับบลิว': 'BMW', 'วอลโว่': 'VOLVO', 'ปอร์เช่': 'PORSCHE', 'ออดี้': 'AUDI',
+  'เปอโยต์': 'PEUGEOT', 'โฟล์คสวาเกน': 'VOLKSWAGEN', 'มินิ': 'MINI', 'เทสล่า': 'TESLA', 'บีวายดี': 'BYD',
+  'ยามาฮ่า': 'YAMAHA', 'คาวาซากิ': 'KAWASAKI', 'เวสป้า': 'VESPA', 'ฮีโน่': 'HINO', 'ฟูโซ่': 'FUSO',
+};
+
+const NOT_A_BRAND = new Set(['', 'N/A', 'NA', 'NONE', 'NULL', '0']);
+
+/** ชื่อยี่ห้อ → ป้ายที่ EMCS ใช้ (พิมพ์ใหญ่) · ว่าง/'-'/placeholder → '' */
+export function normalizeBrand(raw: unknown): string {
+  const s = String(raw ?? '').trim();
+  if (!s || s.startsWith('--')) return '';
+  if (NOT_A_BRAND.has(s.toUpperCase().replace(/[-./ ]/g, ''))) return '';
+  const th = THAI_BRANDS[s];
+  if (th) return th;
+  const up = s.toUpperCase().replace(/\s+/g, ' ').trim();
+  return BRAND_ALIASES[up] ?? up;
+}
+
+/** ประเภทรถ (code หรือป้ายไทย) → code · ไม่รู้จัก → '' */
+export function carTypeCode(v: unknown): string {
+  const s = String(v ?? '').trim();
+  if (!s) return '';
+  if (/^[A-Za-z]$/.test(s)) return CAR_TYPE_LABELS[s.toUpperCase()] ? s.toUpperCase() : '';
+  return CAR_TYPE_LABEL_TO_CODE[s] ?? (s === 'เก๋งเอเซีย' ? 'A' : '');
+}
+
+export type BrandTypeIssue = {
+  brand: string; typeCode: string; typeLabel: string; typesWithBrand: string[];
+  /** ประเภทที่ควรเปลี่ยนไป (code) — มีเมื่อชี้ได้แน่ (ยี่ห้อมีประเภทเดียว หรือเก๋งอีกฝั่ง) */
+  suggestion: string | null;
+  message: string;
+};
+
+/** ยี่ห้อกับประเภทรถเข้ากันตามลิสต์ EMCS ไหม — null = ไม่มีปัญหา (รวมกรณีค่าว่าง/ประเภทไม่รู้จัก) */
+export function brandTypeIssue(type: unknown, brand: unknown): BrandTypeIssue | null {
+  const code = carTypeCode(type);
+  const b = normalizeBrand(brand);
+  if (!code || !b) return null;
+  const list = CAR_BRANDS_BY_TYPE[code];
+  if (!list || list.includes(b)) return null;
+  const types = Object.keys(CAR_BRANDS_BY_TYPE).filter((t) => CAR_BRANDS_BY_TYPE[t].includes(b));
+  let suggestion: string | null = null;
+  if (types.length === 1) suggestion = types[0];
+  else if (types.length > 1) {
+    const twin = code === 'A' ? 'E' : code === 'E' ? 'A' : null;   // เก๋งเอเชีย ↔ เก๋งยุโรป
+    if (twin && types.includes(twin)) suggestion = twin;
+  }
+  const message = types.length === 0
+    ? `ยี่ห้อ "${b}" ไม่มีในลิสต์ยี่ห้อของ EMCS เลย — เลือกยี่ห้อใหม่จากลิสต์`
+    : `ยี่ห้อ "${b}" ไม่มีในประเภทรถ ${CAR_TYPE_LABELS[code]} ของ EMCS (มีใน: ${types.map((t) => CAR_TYPE_LABELS[t]).join(' / ')})`;
+  return { brand: b, typeCode: code, typeLabel: CAR_TYPE_LABELS[code], typesWithBrand: types, suggestion, message };
+}
+
+/**
+ * วันที่แบบ วว/ดด/ปปปป (พ.ศ. หรือ ค.ศ.) เป็นวันจริงไหม — "00/00/2569" ผ่านรูปแบบแต่ไม่ใช่วัน
+ * (เคส #299 เคลม 2026013171626: EMCS ปัดตกทั้งไฟล์ "DateTime ... not supported in calendar")
+ * ว่าง = ไม่ตรวจ (ใช้ร่วมกับตัวเช็คช่องบังคับ) · กติกาเดียวกับ parseSe ใน backend xmlExport.service.ts
+ */
+export function isValidSeDate(v: unknown): boolean {
+  const s = String(v ?? '').trim();
+  if (!s) return true;
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/.exec(s.includes('|') ? s.split('|')[0].trim() : s);
+  if (!m) return false;
+  const d = Number(m[1]), mo = Number(m[2]);
+  let y = Number(m[3]);
+  if (y < 100) y += 2500; else if (y < 2400) y += 543;
+  if (mo < 1 || mo > 12 || d < 1 || d > 31 || y < 2400 || y > 2700) return false;
+  const t = new Date(Date.UTC(y - 543, mo - 1, d));
+  return t.getUTCMonth() === mo - 1 && t.getUTCDate() === d;
+}
+
 // sync EMCS master ddlCar_Color (verbatim 55 สี) 2026-07-25
 /**
  * ประเภทประกัน — ชุดเดียวกับตาราง masterPolicyType ของ ISURVEY เป๊ะ ๆ (ดึงสด 30/08/69)

@@ -325,8 +325,13 @@ const districtId = (provinceRaw: unknown, districtRaw: unknown): string => {
   return ''; // หาไม่เจอ = ปล่อยว่าง (เหมือนเดิม) ดีกว่าใส่รหัสผิด
 };
 
+import { brandTypeIssue } from './vehicleBrand';
+
 // se date "dd/mm/yyyy(พ.ศ.)" หรือ "dd/mm/yyyy|HH:mm" หรือแยก date+time → {d,m,yBE,hh,mi}
-function parseSe(dateStr: unknown, timeStr?: unknown): { d: string; m: string; yBE: number; hh: string; mi: string } | null {
+// ⛔ ต้องเป็น "วันจริง" เท่านั้น — "00/00/2569" ผ่าน regex แต่ออกไฟล์เป็น 2026-00-00 แล้ว EMCS ปัดตก**ทั้งไฟล์**
+//    ("The DateTime represented by the string is not supported in calendar GregorianCalendar" — เคส #299 15/09/69)
+//    วันที่ไม่จริง = คืน null (ช่องว่าง) เหมือนไม่มีข้อมูล · export ให้ contract test ใช้
+export function parseSe(dateStr: unknown, timeStr?: unknown): { d: string; m: string; yBE: number; hh: string; mi: string } | null {
   let ds = String(dateStr ?? '').trim();
   let ts = String(timeStr ?? '').trim();
   if (!ds) return null;
@@ -336,6 +341,10 @@ function parseSe(dateStr: unknown, timeStr?: unknown): { d: string; m: string; y
   let yBE = parseInt(dm[3], 10);
   if (yBE < 100) yBE += 2500;          // พ.ศ. ย่อ
   else if (yBE < 2400) yBE += 543;     // เผื่อ input เป็น ค.ศ. → ทำให้เป็น พ.ศ. ฐานเดียว
+  const dd = Number(dm[1]), mo = Number(dm[2]);
+  if (mo < 1 || mo > 12 || dd < 1 || dd > 31 || yBE < 2400 || yBE > 2700) return null;
+  const real = new Date(Date.UTC(yBE - 543, mo - 1, dd));
+  if (real.getUTCMonth() !== mo - 1 || real.getUTCDate() !== dd) return null;   // 31/02, 30/02 ฯลฯ
   // รับนาทีหลักเดียวด้วย (แถวเก่าที่บันทึกไว้ก่อนแก้เรื่องเติมศูนย์ยังมีอยู่ใน DB)
   // ⛔ เดิมบังคับนาที 2 หลัก พอไม่ match จะทิ้ง**ทั้งชั่วโมงและนาที**เป็น 00:00 เงียบ ๆ
   const tm = /^(\d{1,2}):(\d{1,2})/.exec(ts);
@@ -596,9 +605,65 @@ const lenWarn = (out: EmcsNameWarning[], tag: string, label: string, v: unknown)
   out.push({ tag, label, value: s, bad: `ยาว ${s.length} ตัว เกิน ${lim} — จะถูกตัดท้ายทิ้ง` });
 };
 
-/** ตรวจก่อนส่ง: ชื่อคนช่องไหนมีอักขระที่ EMCS จะล้างทิ้ง (ว่าง = ไม่มีปัญหา) */
+/** วันที่ที่คนพิมพ์เอง ต้องเป็นวันจริง — ไม่งั้นตัวนำเข้า XML ของ EMCS ปัดตกทั้งไฟล์ (เคส #299 15/09/69: วันเกิดคู่กรณี 00/00/2569)
+ *  "-" = ไม่ทราบ ปล่อยผ่าน (วันเกิดคู่กรณีว่าง/"-" → export ใช้วันนี้ตามกติกาเดิม) */
+const dateWarn = (out: EmcsNameWarning[], tag: string, label: string, v: unknown) => {
+  const s = String(v ?? '').trim();
+  if (!s || s === '-' || parseSe(s)) return;
+  out.push({ tag, label, value: s, bad: 'ไม่ใช่วันที่จริง (ต้อง วว/ดด/ปปปป) — EMCS ปัดตกไฟล์นำเข้าทั้งไฟล์' });
+};
+
+/** ยี่ห้อไม่มีในลิสต์ของประเภทรถนั้นบน EMCS — บอทเลือกยี่ห้อไม่ได้แล้วหยุดรอคน (เคส #300 15/09/69) */
+const brandWarn = (out: EmcsNameWarning[], tag: string, label: string, type: unknown, brand: unknown) => {
+  const issue = brandTypeIssue(type, brand);
+  if (issue) out.push({ tag, label, value: String(brand ?? '').trim(), bad: issue.message });
+};
+
+/**
+ * ล้างวันที่ที่ไม่ใช่วันจริงออกตั้งแต่ตอนนำเข้า (ISURVEY ส่ง "2569-00-00" → "00/00/2569" มาได้) — เก็บเป็นว่าง
+ * (= ไม่ทราบ) แล้วจดเตือนให้หัวหน้าเติม · เขียนทับ report ในที่ · คืนรายการคำเตือนสำหรับ import_warnings
+ */
+export function sanitizeReportDates(report: Record<string, unknown>): string[] {
+  const notes: string[] = [];
+  const fix = (rec: Record<string, unknown>, key: string, label: string) => {
+    const s = String(rec[key] ?? '').trim();
+    if (!s || s === '-' || parseSe(s)) return;
+    rec[key] = '';
+    notes.push(`${label} "${s}" ไม่ใช่วันที่จริง — ระบบล้างเป็นว่างให้ (ไม่ทราบ = เว้นว่าง) ตรวจสอบก่อนอนุมัติ`);
+  };
+  fix(report, 'driver_birthdate', 'วันเกิดผู้ขับขี่รถประกัน');
+  fix(report, 'driver_license_start', 'ใบขับขี่ผู้ขับขี่รถประกัน ออกให้วันที่');
+  fix(report, 'driver_license_end', 'ใบขับขี่ผู้ขับขี่รถประกัน หมดอายุวันที่');
+  let ops = report.opposing_parties;
+  if (typeof ops === 'string') { try { ops = JSON.parse(ops); } catch { ops = null; } }
+  if (Array.isArray(ops)) {
+    ops.forEach((o, i) => {
+      if (!o || typeof o !== 'object') return;
+      const rec = o as Record<string, unknown>;
+      fix(rec, 'birthdate', `วันเกิดผู้ขับขี่รถคู่กรณีคันที่ ${i + 1}`);
+      fix(rec, 'license_start', `ใบขับขี่คู่กรณีคันที่ ${i + 1} ออกให้วันที่`);
+      fix(rec, 'license_end', `ใบขับขี่คู่กรณีคันที่ ${i + 1} หมดอายุวันที่`);
+    });
+    report.opposing_parties = ops;
+  }
+  return notes;
+}
+
+/** ตรวจก่อนส่ง: ชื่อคนช่องไหนมีอักขระที่ EMCS จะล้างทิ้ง (ว่าง = ไม่มีปัญหา) + วันที่ไม่จริง + ยี่ห้อไม่ตรงประเภทรถ */
 export function emcsNameWarnings(r: Row): EmcsNameWarning[] {
   const out: EmcsNameWarning[] = [];
+  brandWarn(out, 'CMFG', 'ยี่ห้อรถประกัน', r.car_type, r.car_brand);
+  dateWarn(out, 'DRI_BIRTHDAY', 'วันเกิดผู้ขับขี่รถประกัน', r.driver_birthdate);
+  dateWarn(out, 'DRI_DRVDATE_START', 'ใบขับขี่ผู้ขับขี่รถประกัน ออกให้วันที่', r.driver_license_start);
+  dateWarn(out, 'DRI_DRVDATE_END', 'ใบขับขี่ผู้ขับขี่รถประกัน หมดอายุวันที่', r.driver_license_end);
+  dateWarn(out, 'POLICY_START', 'วันเริ่มกรมธรรม์', r.policy_start);
+  dateWarn(out, 'POLICY_END', 'วันสิ้นสุดกรมธรรม์', r.policy_end);
+  parseJsonArr(r.opposing_parties).forEach((o, i) => {
+    brandWarn(out, 'CMFG', `ยี่ห้อรถคู่กรณีคันที่ ${i + 1}`, o.car_type, o.car_brand);
+    dateWarn(out, 'DRI_BIRTHDAY', `วันเกิดผู้ขับขี่รถคู่กรณีคันที่ ${i + 1}`, o.birthdate);
+    dateWarn(out, 'DRI_DRVDATE_START', `ใบขับขี่คู่กรณีคันที่ ${i + 1} ออกให้วันที่`, o.license_start);
+    dateWarn(out, 'DRI_DRVDATE_END', `ใบขับขี่คู่กรณีคันที่ ${i + 1} หมดอายุวันที่`, o.license_end);
+  });
   lenWarn(out, 'ACC_PLACE', 'สถานที่เกิดเหตุ', r.acc_place);
   lenWarn(out, 'ASSURED_NAME', 'ผู้เอาประกันภัย', r.assured_name);
   lenWarn(out, 'POLICE_STATION', 'สถานีตำรวจ', r.acc_police_station);

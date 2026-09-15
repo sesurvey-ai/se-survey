@@ -15,7 +15,8 @@
  * รวมสองตัวไว้ไฟล์เดียวเพราะใช้ layout/primitive ชุดเดียวกัน (การ์ดต่อ 1 ระเบียน + ปุ่มลบ + ปุ่มเพิ่ม)
  */
 import React, { useEffect, useState } from 'react';
-import { PROVINCE_OPTIONS, CAR_COLOR_OPTIONS, EV_TYPE_OPTIONS, POLICY_TYPE_OPTIONS, carBrandOptions } from './caseOptions';
+import { PROVINCE_OPTIONS, CAR_COLOR_OPTIONS, EV_TYPE_OPTIONS, POLICY_TYPE_OPTIONS, carBrandOptions,
+         brandTypeIssue, CAR_TYPE_LABELS, isValidSeDate } from './caseOptions';
 import { districtOptions } from './districtOptions';
 import { insurerOptions, isEmcsInsurer } from './insurerOptions';
 import DamageDialog from './DamageDialog';
@@ -172,14 +173,21 @@ export const cidChecksum = (raw: string): boolean => {
   return (11 - (sum % 11)) % 10 === Number(d[12]);
 };
 
-function Field({ def, value, onChange }: { def: FieldDef; value: string; onChange: (v: string) => void }) {
+function Field({ def, value, onChange, warnOverride, quickFix }: {
+  def: FieldDef; value: string; onChange: (v: string) => void;
+  /** คำเตือนที่คิดจากช่องอื่นในระเบียนเดียวกัน (ยี่ห้อ ↔ ประเภทรถ) — ตัวการ์ดส่งมา */
+  warnOverride?: string;
+  /** ปุ่มแก้ให้ทันที ข้างคำเตือน (เช่น "เปลี่ยนประเภทรถเป็น เก๋งยุโรป") */
+  quickFix?: { label: string; onClick: () => void };
+}) {
   const v = String(value ?? '');
   const badChars = badNameChars(def.k, v);
   const badCid = def.k === 'cid' && v.trim() !== '' && !cidChecksum(v);
   // อายุ/วันที่ต้องเป็นรูปแบบที่ระบบประกันรับ — "-" ในช่องอายุทำ EMCS ปัดตกทั้งไฟล์ XML (เคส #282 10/09/69)
   const badAge = def.k === 'age' && v.trim() !== '' && !/^\d{1,3}$/.test(v.trim());
+  // วันที่ต้องเป็น "วันจริง" ไม่ใช่แค่รูปแบบ — "00/00/2569" ผ่านรูปแบบแต่ EMCS ปัดตกทั้งไฟล์ (เคส #299 15/09/69)
   const badDate = ['birthdate', 'license_start', 'license_end'].includes(def.k)
-    && v.trim() !== '' && !/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(v.trim());
+    && v.trim() !== '' && (v.trim() === '-' || !isValidSeDate(v.trim()));
   /**
    * ชื่อบริษัทที่ไม่มีในลิสต์ของ EMCS — บอทเลือกไม่ได้
    * เกิดกับงานเก่าที่นำเข้ามาก่อนมีลิสต์นี้ และชื่อฝั่ง ISURVEY ที่แปลงอัตโนมัติไม่ได้
@@ -187,18 +195,25 @@ function Field({ def, value, onChange }: { def: FieldDef; value: string; onChang
    *  เดาผิดทีเดียว = เคลมไปผูกกับบริษัทผิด · ให้คนเลือกปลอดภัยกว่า)
    */
   const offList = def.k === 'insurer' && !isEmcsInsurer(v);
-  const warn = badChars ? `EMCS ไม่รับอักขระ ${badChars}`
-    : offList ? 'ชื่อนี้ไม่มีใน EMCS — เลือกใหม่จากลิสต์'
-      : badCid ? 'เลขบัตรไม่ถูกต้อง — EMCS จะไม่ยอมบันทึกทั้งบล็อก'
-        : badAge ? 'อายุต้องเป็นตัวเลข — ใส่ "-" แล้ว EMCS ปัดตกทั้งไฟล์ (ไม่รู้ = เว้นว่าง)'
-          : badDate ? 'ต้องเป็น วว/ดด/ปปปป (พ.ศ.) — ใส่ "-" ไม่ได้ (ไม่รู้ = เว้นว่าง)'
-            : '';
+  const warn = warnOverride ? warnOverride
+    : badChars ? `EMCS ไม่รับอักขระ ${badChars}`
+      : offList ? 'ชื่อนี้ไม่มีใน EMCS — เลือกใหม่จากลิสต์'
+        : badCid ? 'เลขบัตรไม่ถูกต้อง — EMCS จะไม่ยอมบันทึกทั้งบล็อก'
+          : badAge ? 'อายุต้องเป็นตัวเลข — ใส่ "-" แล้ว EMCS ปัดตกทั้งไฟล์ (ไม่รู้ = เว้นว่าง)'
+            : badDate ? 'ต้องเป็นวันที่จริง วว/ดด/ปปปป (พ.ศ.) — 00/00 หรือ "-" ไม่ได้ EMCS ปัดตกทั้งไฟล์ (ไม่รู้ = เว้นว่าง)'
+              : '';
   const c = cls(def, v, warn);
   return (
     <div className={def.wide ? 'col-span-2 md:col-span-4' : ''}>
       <label className="block text-xs text-[var(--md-muted)] mb-0.5">
         <ReqLabel label={def.label} />
         {warn && <span className="ml-1 text-red-600 font-medium">· {warn}</span>}
+        {warn && quickFix && (
+          <button type="button" onClick={quickFix.onClick}
+            className="ml-1 px-1.5 border border-red-300 text-red-700 rounded-none hover:bg-red-50 font-medium">
+            {quickFix.label}
+          </button>
+        )}
       </label>
       {def.options ? (
         <select className={c} value={value} title={warn || undefined}
@@ -437,6 +452,14 @@ export const OPPONENT_REQUIRED = [
 export const opponentMissing = (rec: LooseRecord): string[] => [
   ...OPPONENT_REQUIRED.filter((k) => !String(rec[k] ?? '').trim()),
   ...OPPONENT_FIELDS.filter((f) => f.reqWhen && f.reqWhen(rec) && !chosen(rec[f.k])).map((f) => f.k),
+  // วันที่ที่ไม่ใช่วันจริง (00/00/2569) นับเป็น "ยังไม่ครบ" — ปล่อยอนุมัติแล้ว EMCS ปัดตกไฟล์ทั้งไฟล์ (เคส #299 15/09/69)
+  // "-" = ไม่ทราบ ปล่อยผ่าน (ตัวออก XML ใช้วันนี้แทนตามกติกาเดิม)
+  ...['birthdate', 'license_start', 'license_end'].filter((k) => {
+    const v = String(rec[k] ?? '').trim();
+    return v !== '' && v !== '-' && !isValidSeDate(v);
+  }),
+  // ยี่ห้อไม่มีในลิสต์ของประเภทรถนั้นบน EMCS — บอทเลือกไม่ได้ (เคส #300 15/09/69)
+  ...(brandTypeIssue(rec.car_type, rec.car_brand) ? ['car_brand'] : []),
 ];
 
 /**
@@ -509,14 +532,23 @@ export function OpponentEditor({ items, onChange }: {
               </button>
             </div>
             <div className="p-3 grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-2">
-              {OPPONENT_FIELDS.filter((f) => f.k !== OPPONENT_COST_FIELD.k).map((f) => (
-                <Field
-                  key={f.k}
-                  def={{ ...f, options: f.optionsFrom ? f.optionsFrom(it) : f.options, label: labelFor(f, it) }}
-                  value={String(it[f.k] ?? '')}
-                  onChange={(v) => set(i, f.k, v)}
-                />
-              ))}
+              {OPPONENT_FIELDS.filter((f) => f.k !== OPPONENT_COST_FIELD.k).map((f) => {
+                // ยี่ห้อ ↔ ประเภทรถ ตามลิสต์ EMCS (15/09/69) — เตือนใต้ช่องยี่ห้อ + ปุ่มเปลี่ยนประเภทให้เมื่อชี้ได้แน่
+                const issue = f.k === 'car_brand' ? brandTypeIssue(it.car_type, it.car_brand) : null;
+                return (
+                  <Field
+                    key={f.k}
+                    def={{ ...f, options: f.optionsFrom ? f.optionsFrom(it) : f.options, label: labelFor(f, it) }}
+                    value={String(it[f.k] ?? '')}
+                    onChange={(v) => set(i, f.k, v)}
+                    warnOverride={issue?.message}
+                    quickFix={issue?.suggestion
+                      ? { label: `เปลี่ยนประเภทรถเป็น ${CAR_TYPE_LABELS[issue.suggestion]}`,
+                          onClick: () => set(i, 'car_type', CAR_TYPE_LABELS[issue.suggestion as string]) }
+                      : undefined}
+                  />
+                );
+              })}
             </div>
             {/* ยอดความเสียหายอยู่คู่กับรายการความเสียหาย (เหนือปุ่ม) — user 04/09/69: อยู่ในกริดรถแล้วหาไม่เจอ
                 ค่าจากงาน ISURVEY = Σ(ค่าแรง+ค่าอะไหล่) ของรายการด้านล่างนี้ */}

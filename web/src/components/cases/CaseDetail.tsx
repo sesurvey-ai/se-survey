@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import PhotoGallery from './PhotoGallery';
-import { PROVINCE_OPTIONS, carBrandOptions, CAR_COLOR_OPTIONS, EV_TYPE_OPTIONS, ACC_CAUSE_OPTIONS, ACC_DAMAGE_TYPE_OPTIONS, POLICY_TYPE_OPTIONS, CLAIM_TYPE_LABELS, CLAIM_TYPE_OPTIONS } from './caseOptions';
+import { PROVINCE_OPTIONS, carBrandOptions, CAR_COLOR_OPTIONS, EV_TYPE_OPTIONS, ACC_CAUSE_OPTIONS, ACC_DAMAGE_TYPE_OPTIONS, POLICY_TYPE_OPTIONS, CLAIM_TYPE_LABELS, CLAIM_TYPE_OPTIONS,
+         brandTypeIssue, CAR_TYPE_LABELS, isValidSeDate } from './caseOptions';
 import { districtOptions } from './districtOptions';
 import api from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
@@ -537,6 +538,35 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
   // ประเภทรถ → ตัวเลือกยี่ห้อ (EMCS กรองลิสต์ยี่ห้อตามประเภทรถ; เดิมโชว์ชุดของ
   // 'เก๋งเอเชีย' ชุดเดียวกับทุกประเภท → กระบะ/มอเตอร์ไซค์เลือกยี่ห้อที่ EMCS ไม่รับ)
   const [carType, setCarType] = useState<string>(report.car_type || '0');
+  /**
+   * ยี่ห้อรถประกัน — เตือนสดเมื่อไม่มีในลิสต์ของประเภทรถนั้นบน EMCS และกั้นอนุมัติ (15/09/69 เคส #300)
+   * เดิม select คงค่าที่บันทึกมาไว้เงียบ ๆ แม้ไม่อยู่ในลิสต์ (กันข้อมูลหาย) → "เก๋งเอเชีย + MERCEDES-BENZ"
+   * อนุมัติผ่านแล้วบอทไปเลือกยี่ห้อไม่ได้ที่ EMCS
+   */
+  const [carBrand, setCarBrand] = useState<string>(report.car_brand || '-- ระบุ --');
+  const carBrandIssue = brandTypeIssue(carType, carBrand);
+  /**
+   * วันที่ของผู้ขับขี่รถประกันที่คนพิมพ์เอง ต้องเป็นวันจริง (15/09/69 เคส #299: วันเกิด 00/00/2569
+   * → ไฟล์นำเข้าออกเป็น 2026-00-00 แล้ว EMCS ปัดตกทั้งไฟล์หลังบอทโหลดรูปเสร็จ) · "-" = ไม่ทราบ ปล่อยผ่าน
+   */
+  const [drvDates, setDrvDates] = useState<Record<string, string>>({
+    driver_birthdate: report.driver_birthdate || '',
+    driver_license_start: report.driver_license_start || '',
+    driver_license_end: report.driver_license_end || '',
+  });
+  const DRV_DATE_LABEL: Record<string, string> = {
+    driver_birthdate: 'วันเกิดผู้ขับขี่', driver_license_start: 'ใบขับขี่ ออกให้วันที่', driver_license_end: 'ใบขับขี่ หมดอายุวันที่',
+  };
+  const badDrvDates = Object.keys(drvDates).filter((k) => {
+    const v = drvDates[k].trim();
+    return v !== '' && v !== '-' && !isValidSeDate(v);
+  });
+  const drvDateWarn = (k: string) => (badDrvDates.includes(k) ? 'ไม่ใช่วันที่จริง (วว/ดด/ปปปป พ.ศ.) — EMCS ปัดตกไฟล์นำเข้าทั้งไฟล์' : '');
+  // ⛔ ช่อง input ต้องเขียน name="..." เป็นตัวอักษรตรง ๆ (ไม่ผ่านตัวแปร) — contract test ไล่จับดอกจันกับชื่อช่องจากข้อความ
+  const drvDateCls = (k: string) => `${CTL(d)} ${drvDateWarn(k) ? 'border-red-500 ring-1 ring-red-300' : ''}`;
+  const drvDateChange = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) => setDrvDates({ ...drvDates, [k]: e.target.value });
+  const drvDateWarnEl = (k: string) => (drvDateWarn(k)
+    ? <div className="mt-1 text-[0.6875rem] leading-tight text-red-600">⚠ {drvDateWarn(k)}</div> : null);
   /** หน้าต่างข้อมูลกรมธรรม์ทั้งชุดจาก ISURVEY แท็บ 7 (report.policy_info, migration 053) — user ขอ 07/09/69 */
   const [policyOpen, setPolicyOpen] = useState(false);
   const policyInfo = (report?.policy_info && typeof report.policy_info === 'object') ? report.policy_info as Record<string, string> : null;
@@ -1176,6 +1206,9 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
     ...(missing.length > 0 ? [`ช่องบังคับยังว่าง ${missing.length} ช่อง`] : []),
     ...(claimHl === 'red' ? ['ยังไม่ได้ติ๊ก "การเรียกร้องค่าเสียหายจากคู่กรณี"'] : []),
     ...(oppNoHl === 'red' ? ['ยังไม่ได้กรอก "คู่กรณีคันที่"'] : []),
+    // ยี่ห้อ/วันที่ที่ EMCS ไม่รับ — ปล่อยอนุมัติแล้วบอทไปตาย/ไฟล์ถูกปัดตก (15/09/69 เคส #299 #300)
+    ...(carBrandIssue ? [`ยี่ห้อรถประกัน "${carBrandIssue.brand}" ไม่มีในประเภทรถ ${carBrandIssue.typeLabel} ของ EMCS`] : []),
+    ...badDrvDates.map((k) => `${DRV_DATE_LABEL[k]} ไม่ใช่วันที่จริง (วว/ดด/ปปปป)`),
     ...(payHl === 'red' ? ['ติ๊ก "รับเงินจำนวน" แล้วแต่ยังไม่กรอกยอด'] : []),
     ...(tickHl === 'red' ? ['กรอกยอด "รับเงินจำนวน" แล้วแต่ยังไม่ติ๊กกล่อง'] : []),
     ...(payOver ? ['"รับเงินจำนวน" มากกว่ายอดเรียกร้องทั้งหมด'] : []),
@@ -2494,9 +2527,22 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
             </F>
             {/* EMCS บังคับยี่ห้อรถทุกบริษัท — ว่างแล้วบอทหยุดรอคนไปเลือกเองบนหน้า EMCS */}
             <F label="ยี่ห้อ" req={<Req of="car_brand" />}>
-              <select disabled={d} name="car_brand" defaultValue={report.car_brand || '-- ระบุ --'} className={CTL(d)}>
-                {carBrandOptions(carType, report.car_brand).map(b => <option key={b} value={b}>{b}</option>)}
+              <select disabled={d} name="car_brand" value={carBrand} onChange={e => setCarBrand(e.target.value)}
+                title={carBrandIssue?.message}
+                className={`${CTL(d)} ${carBrandIssue ? 'border-red-500 ring-1 ring-red-300' : ''}`}>
+                {carBrandOptions(carType, carBrand).map(b => <option key={b} value={b}>{b}</option>)}
               </select>
+              {carBrandIssue && (
+                <div className="mt-1 text-[0.6875rem] leading-tight text-red-600">
+                  ⚠ {carBrandIssue.message}
+                  {carBrandIssue.suggestion && !d && (
+                    <button type="button" onClick={() => setCarType(carBrandIssue.suggestion as string)}
+                      className="ml-1 px-1.5 border border-red-300 text-red-700 rounded-none hover:bg-red-50 font-medium">
+                      เปลี่ยนประเภทรถเป็น {CAR_TYPE_LABELS[carBrandIssue.suggestion]}
+                    </button>
+                  )}
+                </div>
+              )}
             </F>
 
             <F label="รุ่น">
@@ -2625,7 +2671,9 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
               </F>
 
               <F label="วันเกิด" req={<Req of="driver_birthdate" />}>
-                <input type="text" disabled={d} name="driver_birthdate" defaultValue={report.driver_birthdate || ''} className={CTL(d)} />
+                <input type="text" disabled={d} name="driver_birthdate" value={drvDates.driver_birthdate} onChange={drvDateChange('driver_birthdate')}
+                  title={drvDateWarn('driver_birthdate') || undefined} className={drvDateCls('driver_birthdate')} />
+                {drvDateWarnEl('driver_birthdate')}
               </F>
               <F label="อายุ" req={<Req of="driver_age" />}>
                 <input type="text" disabled={d} name="driver_age" defaultValue={report.driver_age != null ? report.driver_age : ''} className={CTL(d)} />
@@ -2704,10 +2752,14 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
               </F>
 
               <F label="ใบขับขี่ ออกให้วันที่">
-                <input type="text" disabled={d} name="driver_license_start" defaultValue={report.driver_license_start || ''} className={CTL(d)} />
+                <input type="text" disabled={d} name="driver_license_start" value={drvDates.driver_license_start} onChange={drvDateChange('driver_license_start')}
+                  title={drvDateWarn('driver_license_start') || undefined} className={drvDateCls('driver_license_start')} />
+                {drvDateWarnEl('driver_license_start')}
               </F>
               <F label="ใบขับขี่ หมดอายุวันที่">
-                <input type="text" disabled={d} name="driver_license_end" defaultValue={report.driver_license_end || ''} className={CTL(d)} />
+                <input type="text" disabled={d} name="driver_license_end" value={drvDates.driver_license_end} onChange={drvDateChange('driver_license_end')}
+                  title={drvDateWarn('driver_license_end') || undefined} className={drvDateCls('driver_license_end')} />
+                {drvDateWarnEl('driver_license_end')}
               </F>
               <F label="ความเสียหายประมาณ (บาท)">
                 <input type="text" disabled={d} name="estimated_cost" defaultValue={report.estimated_cost != null ? Number(report.estimated_cost).toFixed(2) : ''} className={CTL(d)} />
