@@ -360,7 +360,8 @@ export function parseSe(dateStr: unknown, timeStr?: unknown): { d: string; m: st
  */
 const xmlAge = (age: unknown, birthdate: unknown, noBirthFallback = ''): string => {
   const m = /\d{1,3}/.exec(String(age ?? ''));
-  if (m) return m[0];
+  // อายุ 0 = ไม่ทราบ (ISURVEY ให้ 0 คู่กับวันเกิด 00/00/00 — เคส #324 15/09/69) ไม่ใช่อายุคนขับจริง และ EMCS ไม่รับ 0 (#282)
+  if (m && Number(m[0]) > 0) return m[0];
   const p = parseSe(birthdate);
   if (!p) return noBirthFallback;
   const now = new Date();
