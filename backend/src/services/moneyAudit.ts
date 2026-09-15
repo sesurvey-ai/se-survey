@@ -14,7 +14,26 @@ import { db } from '../config/database';
  *    → มีการ์ดเทสไล่ว่าทุกที่ที่เขียน 2 ตารางนี้เรียก recordMoneyChanges แล้ว
  */
 
-export type MoneyKind = 'pay' | 'expense';
+export type MoneyKind = 'pay' | 'expense' | 'damage';
+
+/** จำนวนคู่กรณีสูงสุดที่จดประวัติยอดความเสียหาย (opponent_N_cost) — EMCS มีช่องคู่กรณีไม่เกินนี้อยู่แล้ว */
+const MAX_OPPONENTS_AUDITED = 9;
+
+/**
+ * ยอดความเสียหายของรายงาน 1 ชุด → {estimated_cost, opponent_1_cost, …} สำหรับเทียบก่อน-หลัง
+ * (เคส #343 15/09/69: ยอดคู่กรณี 8,000 ทั้งที่ ISURVEY มี 2,500 — ไม่มีประวัติว่าใครแก้)
+ */
+export function damageSnapshot(row: { estimated_cost?: unknown; opposing_parties?: unknown } | null | undefined): Record<string, unknown> {
+  const out: Record<string, unknown> = { estimated_cost: row?.estimated_cost ?? null };
+  let ops = row?.opposing_parties;
+  if (typeof ops === 'string') { try { ops = JSON.parse(ops); } catch { ops = null; } }
+  if (Array.isArray(ops)) {
+    ops.slice(0, MAX_OPPONENTS_AUDITED).forEach((o, i) => {
+      out[`opponent_${i + 1}_cost`] = o && typeof o === 'object' ? (o as Record<string, unknown>).estimated_cost ?? null : null;
+    });
+  }
+  return out;
+}
 
 /** ป้ายชื่อช่องภาษาไทย — ช่องไหนไม่มีในนี้ = ไม่ต้องเก็บประวัติ (เช่น snapshot, เวลา) */
 export const MONEY_LABELS: Record<MoneyKind, Record<string, string>> = {
@@ -38,6 +57,11 @@ export const MONEY_LABELS: Record<MoneyKind, Record<string, string>> = {
     claim_fee_percent: 'ค่าเรียกร้อง (%)', claim_fee_price: 'ค่าเรียกร้อง',
     daily_record_fee: 'ค่าคัดประจำวัน',
     other_fee_detail: 'รายละเอียดค่าอื่นๆ', other_fee_price: 'ค่าใช้จ่ายอื่นๆ',
+  },
+  // ยอดความเสียหาย — ช่อง "ความเสียหายประมาณ (บาท)" ของรถประกัน + "ยอดความเสียหาย" ของคู่กรณีแต่ละคัน (migration 063)
+  damage: {
+    estimated_cost: 'ค่าเสียหายรถประกัน',
+    ...Object.fromEntries(Array.from({ length: 9 }, (_, i) => [`opponent_${i + 1}_cost`, `ค่าเสียหายคู่กรณีคันที่ ${i + 1}`])),
   },
 };
 
@@ -126,7 +150,7 @@ export async function getMoneyAudit(caseId: number) {
   return rows.map((r) => ({
     ...r,
     label: MONEY_LABELS[r.kind as MoneyKind]?.[r.field as string] ?? r.field,
-    side: r.kind === 'pay' ? 'ราคาพนักงาน' : 'ราคาประกัน',
+    side: r.kind === 'pay' ? 'ราคาพนักงาน' : r.kind === 'damage' ? 'ยอดความเสียหาย' : 'ราคาประกัน',
     by_name: String(r.by_name ?? '').trim() || 'ระบบ',
   }));
 }

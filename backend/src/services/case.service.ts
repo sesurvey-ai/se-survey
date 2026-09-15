@@ -14,7 +14,7 @@ import { provinceOf } from './geoProvince';
 import { standardPhotoFee } from './photoFee.service';
 import { tumbonOptions } from './billingRates.service';
 import { districtCentroid } from './geoDistrict';
-import { recordMoneyChanges } from './moneyAudit';
+import { recordMoneyChanges, damageSnapshot } from './moneyAudit';
 import { getIO } from '../socket';
 import { staffGroupService } from './staffGroup.service';
 
@@ -1912,11 +1912,22 @@ export const caseService = {
       fields.push(`updated_by = $${idx++}`);
       params.push(opts.userId ?? null);
 
+      // ประวัติยอดความเสียหาย (รถประกัน + คู่กรณีรายคัน) — จำค่าเดิมก่อน UPDATE เฉพาะเมื่อฟอร์มส่งช่องพวกนี้มา
+      // (เคส #343 15/09/69: ยอดคู่กรณี 8,000 ทั้งที่ ISURVEY มี 2,500 แล้วตอบไม่ได้ว่าใครแก้)
+      const damageSubmitted = rd.estimated_cost !== undefined || rd.opposing_parties !== undefined;
+      const damageBefore = damageSubmitted
+        ? damageSnapshot((await client.query('SELECT estimated_cost, opposing_parties FROM survey_reports WHERE id = $1', [reportId])).rows[0])
+        : null;
+
       let reportUpdated = 0;
       {
         params.push(reportId);
         await client.query(`UPDATE survey_reports SET ${fields.join(', ')} WHERE id = $${idx}`, params);
         reportUpdated = fields.length - 1;   // ไม่นับ updated_by ที่ระบบเติมให้เอง
+      }
+      if (damageSubmitted) {
+        const damageAfter = damageSnapshot((await client.query('SELECT estimated_cost, opposing_parties FROM survey_reports WHERE id = $1', [reportId])).rows[0]);
+        await recordMoneyChanges(client, { caseId, kind: 'damage', userId: opts.userId ?? null, before: damageBefore, after: damageAfter });
       }
       // จังหวะ 6 "ส่งงาน" อยู่บนตาราง cases ไม่ใช่ survey_reports — เขียนใน transaction เดียวกัน
       if (submittedAt !== undefined) {

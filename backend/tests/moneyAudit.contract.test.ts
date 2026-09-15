@@ -27,6 +27,22 @@ check('ลบเคส → ประวัติหายตาม', /REFERENCES
 check('แยกฝั่งเงิน 2 ฝั่ง (จ่ายพนักงาน/เรียกเก็บประกัน)', /CHECK \(kind IN \('pay', 'expense'\)\)/.test(mig));
 check('มี index สำหรับอ่านประวัติของเคส', /ix_money_audit_case/.test(mig));
 
+/** kind ที่ 3 "ยอดความเสียหาย" (migration 063, เคส #343 15/09/69) — รถประกัน + คู่กรณีรายคัน */
+const mig063 = read('src', 'db', 'migrations', '063_money_audit_damage.sql');
+check('063: ขยาย CHECK ให้รับ kind damage', /CHECK \(kind IN \('pay', 'expense', 'damage'\)\)/.test(mig063));
+check('ป้ายไทยฝั่งยอดความเสียหาย: รถประกัน + คู่กรณี 9 คัน',
+  MONEY_LABELS.damage.estimated_cost === 'ค่าเสียหายรถประกัน' && MONEY_LABELS.damage.opponent_1_cost === 'ค่าเสียหายคู่กรณีคันที่ 1'
+  && !!MONEY_LABELS.damage.opponent_9_cost);
+{
+  const { damageSnapshot } = require('../src/services/moneyAudit') as typeof import('../src/services/moneyAudit');
+  const snap = damageSnapshot({ estimated_cost: '4000.00', opposing_parties: JSON.stringify([{ estimated_cost: '8000' }, { estimated_cost: '' }]) });
+  check('damageSnapshot อ่านได้ทั้ง JSON string และ array · คู่กรณีตามลำดับคัน',
+    snap.estimated_cost === '4000.00' && snap.opponent_1_cost === '8000' && snap.opponent_2_cost === '' && !('opponent_3_cost' in snap));
+  const cs = read('src', 'services', 'case.service.ts');
+  check('updateReport จดประวัติยอดความเสียหาย (ก่อน-หลัง UPDATE ใน transaction เดียวกัน)',
+    /const damageBefore = damageSubmitted[\s\S]{0,400}?kind: 'damage'/.test(cs));
+}
+
 /** ป้ายไทยครบทุกช่องที่เก็บ — ไม่มีป้าย = โชว์ชื่อคอลัมน์ดิบให้ผู้ตรวจอ่าน */
 const payFields = Object.keys(MONEY_LABELS.pay);
 const expFields = Object.keys(MONEY_LABELS.expense);
