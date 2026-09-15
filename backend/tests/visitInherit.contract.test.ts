@@ -92,5 +92,32 @@ check('เคสที่คนอนุมัติจริง (ไม่ใ�
 const web = read('..', 'web', 'src', 'app', 'inspector', 'isurvey', 'page.tsx');
 check('หน้าดึงงานบอกจำนวนรูปของแต่ละครั้งก่อนหน้า', web.includes('refPhotos(x)') && web.includes('photos?: { added?: number; error?: string; note?: string } | null }[]'));
 
+/* ── เคสอ้างอิงแก้ข้อมูลตั้งต้นได้โดยไม่ต้องปลดล็อก (user สั่ง 15/09/69 ครั้งที่ 1 ของเคลม 2026013057520) ── */
+console.log('\n── เคสอ้างอิงแก้ได้ ──');
+check('ตัวล็อกอนุมัติมีช่องยกเว้นเคสอ้างอิง (ดู source ด้วย)',
+  /const assertNotApproved = async \(caseId: number, opts: \{ allowReference\?: boolean \} = \{\}\)/.test(svc)
+  && /SELECT status, source FROM cases WHERE id = \$1/.test(svc) && /opts\.allowReference && r\.rows\[0\]\.source === 'isurvey_reference'\) return;/.test(svc));
+check('แก้รายงาน + รูป (เพิ่ม/ลบ/หมุน/โฟลเดอร์) ยอมเคสอ้างอิง',
+  (svc.match(/assertNotApproved\(caseId, \{ allowReference: true \}\)/g) ?? []).length === 5);
+/** เลขเคลม/เลขเซอร์เวย์ของเคสอ้างอิงผูกครั้งที่ไว้ — ยังล็อกเหมือนเดิม (แอดมินแก้ตัวระบุตัวเคสไม่ได้จนกว่าจะปลดล็อก ซึ่งเคสอ้างอิงปลดไม่ได้) */
+check('ตัวระบุตัวเคส (updateCaseIdentity) ยังล็อกเคสอ้างอิง',
+  /async updateCaseIdentity[\s\S]{0,600}?await assertNotApproved\(caseId\);/.test(svc));
+/** ปุ่มบันทึกหน้าเคสยิง /pay ก่อน /report — ถ้าฝั่งยอดเงินยังล็อกเคสอ้างอิง ทั้งหน้าบันทึกไม่ผ่าน (เจอตอนเทส UI 15/09/69) */
+const psvc = read('src', 'services', 'pay.service.ts');
+check('ยอดพนักงาน (/pay) ไม่ล็อกเคสอ้างอิง',
+  /SELECT status, source FROM cases WHERE id = \$1/.test(psvc) && /status === 'reviewed' && r\.rows\[0\]\.source !== 'isurvey_reference'/.test(psvc));
+const rsvc = read('src', 'services', 'review.service.ts');
+check('ปลดล็อกเคสอ้างอิงไม่ได้ (จะพาเข้าคิวอนุมัติ → ส่ง se-billing/ปิด ISURVEY ซ้ำ)',
+  /source === 'isurvey_reference'\) \{\s*throw new ForbiddenError\('เคสอ้างอิงจาก ISURVEY แก้ข้อมูลได้เลย/.test(rsvc)
+  && /SELECT status, source, emcs_imported_at, emcs_submitted_at FROM cases/.test(rsvc));
+const cd = read('..', 'web', 'src', 'components', 'cases', 'CaseDetail.tsx');
+check('หน้าเคส: ล็อกช่องเฉพาะเคสที่คนอนุมัติจริง (locked = approved && !isReference)',
+  cd.includes("const isReference = String(caseData?.source ?? '') === 'isurvey_reference';") && cd.includes('const locked = approved && !isReference;')
+  && cd.includes('<fieldset disabled={locked}') && cd.includes('caseId={locked ? undefined : caseData?.id}') && cd.includes('items={damage} disabled={locked}'));
+check('หน้าเคส: เคสอ้างอิงมีแถบ "แก้ข้อมูลตั้งต้นได้" + ปุ่มบันทึก ไม่มีอนุมัติ/ตีกลับ/ปลดล็อก',
+  /const actionBar = approved && isReference \? \([\s\S]{0,900}?onClick=\{handleSave\}[\s\S]{0,600}?\) : approved \? \(/.test(cd)
+  && cd.includes('อ้างอิง ISURVEY · แก้ข้อมูลตั้งต้นได้'));
+check('ป้ายเคสอ้างอิงบอกว่าแก้ได้ + ครั้งถัดไปที่ดึงใหม่ใช้ข้อมูลนี้', cd.includes('แก้ข้อมูลตั้งต้นได้ที่นี่แล้วกด "บันทึก"'));
+
 console.log(failed === 0 ? '\n✅ ผ่านทั้งหมด\n' : `\n❌ ไม่ผ่าน ${failed} ข้อ\n`);
 process.exit(failed === 0 ? 0 : 1);

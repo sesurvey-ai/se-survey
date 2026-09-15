@@ -79,9 +79,14 @@ export const reviewService = {
    */
   async unlock(caseId: number, adminId: number, reason?: string) {
     const c = await db.query(
-      'SELECT status, emcs_imported_at, emcs_submitted_at FROM cases WHERE id = $1', [caseId]);
+      'SELECT status, source, emcs_imported_at, emcs_submitted_at FROM cases WHERE id = $1', [caseId]);
     if (c.rows.length === 0) throw new NotFoundError('Case not found');
     if (c.rows[0].status !== 'reviewed') throw new ForbiddenError('เคสนี้ยังไม่ได้อนุมัติ ไม่ต้องปลดล็อก');
+    // เคสอ้างอิง (ครั้งก่อนหน้าที่ปิดจบบน ISURVEY แล้ว) แก้ข้อมูลได้เลยโดยไม่ต้องปลดล็อก (15/09/69) — ปลดล็อกจะพาเข้าคิวอนุมัติ
+    // แล้วอนุมัติซ้ำจะส่ง se-billing/ปิด ISURVEY อีกรอบทั้งที่ครั้งนั้นจบไปแล้ว
+    if (c.rows[0].source === 'isurvey_reference') {
+      throw new ForbiddenError('เคสอ้างอิงจาก ISURVEY แก้ข้อมูลได้เลยที่หน้าเคส ไม่ต้องปลดล็อก (ปลดล็อกจะทำให้ต้องอนุมัติซ้ำ)');
+    }
     if (c.rows[0].emcs_submitted_at) {
       throw new ForbiddenError('เคสนี้ส่งงานให้บริษัทประกันไปแล้ว ปลดล็อกไม่ได้ — แก้ที่ EMCS โดยตรง');
     }

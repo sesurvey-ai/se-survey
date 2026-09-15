@@ -114,10 +114,18 @@ const assertSurveyJobNoUnique = async (jobNos: unknown[], excludeCaseId?: number
  * ซึ่งถอยไม่ได้ · ถ้าแก้ข้อมูลได้หลังอนุมัติ สิ่งที่บอทส่งจะไม่ใช่สิ่งที่คนรับรอง
  * ปลดล็อกได้ทางเดียวคือให้แอดมินเรียก POST /api/cases/:id/unlock แล้วอนุมัติใหม่
  */
-const assertNotApproved = async (caseId: number): Promise<void> => {
-  const r = await db.query('SELECT status FROM cases WHERE id = $1', [caseId]);
+/**
+ * อนุมัติแล้ว = ล็อก
+ * ยกเว้น **เคสอ้างอิง** (source='isurvey_reference' — ครั้งก่อนหน้าของเคลมที่ปิดจบบน ISURVEY แล้ว, reviewed ตั้งแต่สร้าง):
+ * user สั่ง 15/09/69 ให้แก้ข้อมูลตั้งต้นของครั้งที่ 1 ได้โดยไม่ต้องปลดล็อก (ปลดล็อกจะพาเข้าคิวอนุมัติ → ส่ง se-billing/
+ * ปิด ISURVEY ซ้ำ) เพราะครั้งที่ 2+ ที่ดึงใหม่สืบทอดข้อมูลจากครั้งที่ 1 (visitInherit) · ผู้เรียกที่ยอมให้แก้เคสอ้างอิง
+ * ส่ง allowReference=true (ข้อมูล + รูป) · ตัวระบุตัวเคส (เลขเคลม/เลขเซอร์เวย์) ยังล็อกเหมือนเดิม
+ */
+const assertNotApproved = async (caseId: number, opts: { allowReference?: boolean } = {}): Promise<void> => {
+  const r = await db.query('SELECT status, source FROM cases WHERE id = $1', [caseId]);
   if (r.rows.length === 0) throw new NotFoundError('Case not found');
   if (r.rows[0].status === 'reviewed') {
+    if (opts.allowReference && r.rows[0].source === 'isurvey_reference') return;
     throw new AppError(423, 'เคสนี้อนุมัติแล้ว — แก้ไม่ได้จนกว่าแอดมินจะปลดล็อก');
   }
 };
@@ -727,7 +735,7 @@ export const caseService = {
     assertCaseAccess(own.rows[0], user);
     // ⛔ รูปคือส่วนหนึ่งของสิ่งที่บอทส่งเข้า EMCS — endpoint นี้ "ลบรูปเดิมแล้วเขียนใหม่"
     // ถ้าแอปที่ค้างฟอร์มไว้ยิงเข้ามาหลังหัวหน้าอนุมัติ ชุดรูปที่บอทส่งจะไม่ใช่ชุดที่ถูกรับรอง
-    await assertNotApproved(caseId);
+    await assertNotApproved(caseId, { allowReference: true });
 
     // โฟลเดอร์เก็บรูปผูกกับ case id (immutable) เท่านั้น — เดิมใช้เลขเคลมจาก DB ซึ่งแก้ไขได้
     // → เลขเปลี่ยนระหว่าง upload กับ submit แล้วรูปหลุดจากรายงานทั้งชุดแบบเงียบ (folderName จาก client ไม่ใช้แล้ว)
@@ -1405,7 +1413,7 @@ export const caseService = {
    */
   async addCasePhotos(caseId: number, files: Express.Multer.File[], category: string) {
     const pathMod = await import('path');
-    await assertNotApproved(caseId);            // อนุมัติแล้ว = ชุดรูปถูกรับรองไปแล้ว ห้ามเติม
+    await assertNotApproved(caseId, { allowReference: true });            // อนุมัติแล้ว = ชุดรูปถูกรับรองไปแล้ว ห้ามเติม
     const rid = await db.query('SELECT id FROM survey_reports WHERE case_id = $1', [caseId]);
     if (rid.rows.length === 0) throw new NotFoundError('Report not found');
     const reportId = rid.rows[0].id;
@@ -1437,7 +1445,7 @@ export const caseService = {
    * แต่ลบได้ **ก่อนอนุมัติ** เท่านั้น หลังอนุมัติชุดรูปถือว่าถูกรับรองไปแล้ว
    */
   async deleteCasePhoto(caseId: number, photoId: number) {
-    await assertNotApproved(caseId);
+    await assertNotApproved(caseId, { allowReference: true });
     // ผูก photo กับ case ใน query เดียว — กันลบรูปของเคสอื่นด้วยการเดา id
     const r = await db.query(
       `SELECT sp.id, sp.file_path FROM survey_photos sp
@@ -1464,7 +1472,7 @@ export const caseService = {
    */
   async rotateCasePhoto(caseId: number, photoId: number, deg: number) {
     if (![90, -90, 180].includes(deg)) throw new AppError(400, 'หมุนได้เฉพาะ 90 / -90 / 180 องศา');
-    await assertNotApproved(caseId);
+    await assertNotApproved(caseId, { allowReference: true });
     const r = await db.query(
       `SELECT sp.id, sp.file_path FROM survey_photos sp
          JOIN survey_reports sr ON sp.report_id = sr.id
@@ -1811,7 +1819,7 @@ export const caseService = {
   ) {
     // ⛔ อนุมัติแล้ว = ล็อก — แก้ต่อไม่ได้จนกว่าแอดมินจะปลดล็อก (POST /api/cases/:id/unlock)
     // ถ้าปล่อยให้แก้หลังอนุมัติ ลายเซ็นผู้อนุมัติจะไม่ได้รับรองข้อมูลชุดที่บอทหยิบไปจริง
-    await assertNotApproved(caseId);
+    await assertNotApproved(caseId, { allowReference: true });
 
     const reportResult = await db.query('SELECT id FROM survey_reports WHERE case_id = $1', [caseId]);
     if (reportResult.rows.length === 0) throw new NotFoundError('Report not found');

@@ -376,9 +376,11 @@ export interface SavePayInput {
  * เหลือด่านเดียวคือ **อนุมัติแล้วห้ามแก้** — ประตูเดียวกับการแก้ข้อมูลส่วนอื่นของเคส
  */
 async function assertPayNotLocked(caseId: number): Promise<void> {
-  const r = await db.query('SELECT status FROM cases WHERE id = $1', [caseId]);
+  const r = await db.query('SELECT status, source FROM cases WHERE id = $1', [caseId]);
   if (r.rows.length === 0) throw new AppError(404, 'ไม่พบเคสนี้');
-  if (r.rows[0].status === 'reviewed') {
+  // เคสอ้างอิง (isurvey_reference) reviewed ตั้งแต่สร้าง แต่แก้ได้โดยไม่ต้องปลดล็อก (15/09/69) — ปุ่มบันทึกหน้าเคส
+  // ยิง /pay ก่อน /report เสมอ ถ้าล็อกที่นี่ทั้งหน้าจะบันทึกไม่ผ่านทั้งที่ข้อมูลหลักแก้ได้แล้ว (เจอตอนเทส 15/09/69)
+  if (r.rows[0].status === 'reviewed' && r.rows[0].source !== 'isurvey_reference') {
     throw new AppError(423, 'เคสนี้อนุมัติแล้ว — แก้ยอดไม่ได้จนกว่าแอดมินจะปลดล็อก');
   }
 }

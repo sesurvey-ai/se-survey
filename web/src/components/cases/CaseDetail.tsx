@@ -770,6 +770,13 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
   //    (reviews มี 1 แถวต่อเคส ใช้ซ้ำเมื่ออนุมัติใหม่) เช็คแบบเดิมทำให้ปลดล็อกแล้วหน้ายังล็อกอยู่
   //    แก้อะไรไม่ได้เลย — เจอจริง 15/08/69 เคส #141
   const approved = caseData?.status === 'reviewed' || review?.status === 'approved';
+  /**
+   * เคสอ้างอิง (ครั้งก่อนหน้าของเคลมที่ปิดจบบน ISURVEY แล้ว) ถูก "อนุมัติ" ตั้งแต่สร้าง แต่ user สั่ง 15/09/69 ให้แก้ข้อมูลตั้งต้น
+   * ของครั้งที่ 1 ได้ที่นี่โดยไม่ต้องปลดล็อก (ครั้งที่ 2+ ที่ดึงใหม่สืบทอดข้อมูลจากครั้งที่ 1) → ล็อกช่องเฉพาะเคสที่คนอนุมัติจริง
+   * `approved` ยังใช้ซ่อนปุ่มอนุมัติ/ตีกลับและป้ายสถานะ · `locked` ใช้กับช่องกรอก/รูป/รายการความเสียหาย
+   */
+  const isReference = String(caseData?.source ?? '') === 'isurvey_reference';
+  const locked = approved && !isReference;
   const isAdmin = user?.role === 'admin';
   /**
    * ที่มาของงานที่ระบบ **เตือน** ว่ายังไม่ได้กรอกยอด — ไม่ใช่ตัวล็อกช่องอีกแล้ว
@@ -1922,7 +1929,19 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
   };
   const bkk16 = (v: unknown) => (v ? new Date(String(v)).toLocaleString('th-TH', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' }) : '');
 
-  const actionBar = approved ? (
+  const actionBar = approved && isReference ? (
+    // เคสอ้างอิง (15/09/69): แก้ข้อมูลตั้งต้นได้โดยไม่ต้องปลดล็อก — ไม่มีอนุมัติ/ตีกลับ/se-billing/ปิด ISURVEY
+    // เพราะครั้งนี้ปิดจบบนระบบเก่าไปแล้ว บันทึกที่นี่มีผลกับเว็บเราและครั้งถัดไปที่ดึงใหม่เท่านั้น
+    <div className="flex items-center gap-2 flex-wrap justify-end">
+      <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-gray-200 text-gray-800 whitespace-nowrap">อ้างอิง ISURVEY · แก้ข้อมูลตั้งต้นได้</span>
+      <span className="text-xs text-gray-600 hidden lg:inline">บันทึกแล้วครั้งถัดไปที่ดึงใหม่จะใช้ข้อมูลนี้ · ไม่ส่งเข้า EMCS/se-billing</span>
+      <button type="button" onClick={handleSave} disabled={saving || previewing}
+        title={previewing ? 'กำลังดูครั้งอื่น — กลับไปครั้งของเคสนี้ก่อน' : ''}
+        className="h-9 px-4 border border-[#2eb593] bg-[var(--md-green)] text-white text-sm font-bold hover:brightness-105 disabled:opacity-40 disabled:cursor-not-allowed transition">
+        {saving ? 'กำลังบันทึก...' : 'บันทึก'}
+      </button>
+    </div>
+  ) : approved ? (
     <div className="flex items-center gap-2 flex-wrap justify-end">
       <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 whitespace-nowrap">อนุมัติแล้ว · ล็อก</span>
       <span className="text-xs text-gray-600 hidden lg:inline">
@@ -2141,7 +2160,7 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
       {/* อนุมัติแล้ว = ปิดทั้งชุดด้วย <fieldset disabled> — ครอบทุกช่องในหน้าทีเดียว
           ไม่ต้องไล่ใส่ disabled ทีละช่อง (มี ~200 ช่อง พลาดช่องเดียวก็รั่ว)
           แถบปุ่มอยู่ *นอก* fieldset เพื่อให้แอดมินยังกด "ปลดล็อก" ได้ตอนถูกล็อก */}
-      <fieldset disabled={approved} className="min-w-0 border-0 p-0 m-0">
+      <fieldset disabled={locked} className="min-w-0 border-0 p-0 m-0">
       {/* ── จอกว้าง (≥ 1500px) = 2 คอลัมน์ ── ค่าใช้จ่ายย้ายไปคอลัมน์ขวา
           หน้านี้ยาวมาก เดิมกรอกยอดทีต้องเลื่อนลงล่างสุดทุกครั้ง แล้วเลื่อนกลับขึ้นมาดูข้อมูล
           จอแคบกว่านั้นกลับไปเรียงลงล่างแบบเดิมเอง (grid-cols-1) — ไม่มีอะไรหายไปจากหน้า
@@ -2156,7 +2175,8 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
             <div className="border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-700">
               <span className="font-semibold">เคสอ้างอิงจาก ISURVEY</span>
               {Number(caseData?.visit_count ?? 0) > 0 ? <> — ครั้งที่ {caseData.visit_count} ของเคลมนี้ (ปิดจบบนระบบเก่าแล้ว)</> : null}
-              <span className="text-gray-500"> · ระบบดึงมาให้เห็นประวัติของเคลมตอนดึงงานครั้งถัดไป อ่านอย่างเดียว ไม่ต้องตรวจ ไม่ส่งเข้า EMCS/se-billing อีก</span>
+              <span className="text-gray-500"> · ระบบดึงมาให้เห็นประวัติของเคลมตอนดึงงานครั้งถัดไป ไม่ต้องตรวจ ไม่ส่งเข้า EMCS/se-billing อีก
+                · <span className="text-gray-700">แก้ข้อมูลตั้งต้นได้ที่นี่แล้วกด "บันทึก"</span> — ครั้งถัดไปที่ดึงใหม่จะใช้ข้อมูลของครั้งที่ 1 เติมช่องที่ใบนั้นไม่มี (ยกเว้นรูป/ผลการดำเนินงาน)</span>
             </div>
           )}
           {/* คำอธิบายดอกจัน — จุดแดงชุดเดียวกับที่ผู้สำรวจเห็นบนแอป (อิงตัวตรวจของระบบประกัน) */}
@@ -2201,7 +2221,8 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
               รายการเดียวกับที่ปุ่ม "อนุมัติ" ใช้ตัดสิน จึงตรงกับตัวเลขบนป้ายเสมอ */}
           {approvalBlockers.length > 0 && (
             <div className="bg-amber-50 border border-amber-300 rounded-none px-4 py-2 text-sm text-amber-900">
-              <span className="font-semibold">ยังอนุมัติไม่ได้ {approvalBlockers.length} ข้อ</span>
+              {/* เคสอ้างอิงไม่มีการอนุมัติ — รายการเดียวกันใช้เป็น "ข้อมูลตั้งต้นที่ยังขาด" ให้คนกรอกครั้งที่ 1 ให้ครบ (15/09/69) */}
+              <span className="font-semibold">{isReference ? `ข้อมูลตั้งต้นที่ยังขาด ${approvalBlockers.length} ข้อ (ครั้งถัดไปจะสืบทอดจากใบนี้)` : `ยังอนุมัติไม่ได้ ${approvalBlockers.length} ข้อ`}</span>
               <ol className="list-decimal ml-5 mt-1 space-y-0.5 text-amber-800">
                 {approvalBlockers.map((b, i) => <li key={i}>{b}</li>)}
               </ol>
@@ -3135,12 +3156,12 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
                   <span className="w-80 shrink-0 text-gray-700">{i + 1}. {row.label}:</span>
                   {row.options.map((o) => (
                     <label key={o.code} className="inline-flex items-center gap-1.5 cursor-pointer">
-                      <input type="radio" disabled={previewing || approved} checked={checklist[row.key] === o.code}
+                      <input type="radio" disabled={previewing || locked} checked={checklist[row.key] === o.code}
                         onChange={() => setChecklist({ ...checklist, [row.key]: o.code })} />
                       <span>{o.label}</span>
                     </label>
                   ))}
-                  {checklist[row.key] && !approved && !previewing && (
+                  {checklist[row.key] && !locked && !previewing && (
                     <button type="button" onClick={() => setChecklist({ ...checklist, [row.key]: '' })}
                       className="text-xs text-gray-400 hover:text-gray-600">ล้าง</button>
                   )}
@@ -3148,7 +3169,7 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
               ))}
               <div className="flex items-start gap-x-6">
                 <span className="w-80 shrink-0 text-gray-700 pt-1">5. อื่นๆ:</span>
-                <textarea disabled={previewing || approved} value={checklist.other} rows={2}
+                <textarea disabled={previewing || locked} value={checklist.other} rows={2}
                   onChange={(e) => setChecklist({ ...checklist, other: e.target.value })}
                   className="flex-1 max-w-xl border border-gray-300 rounded-none px-2 py-1 text-sm" />
               </div>
@@ -3188,7 +3209,7 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
         <div className="p-4">
           {/* onReviewSubmitted = โหลดเคสใหม่ทั้งก้อน — ใช้ซ้ำเพื่อให้รูปที่เพิ่งอัปโผล่ทันที
               (อนุมัติแล้วซ่อนแถบอัป — backend กันซ้ำอีกชั้นด้วย 423) */}
-          <PhotoGallery photos={photos} caseId={approved ? undefined : caseData?.id}
+          <PhotoGallery photos={photos} caseId={locked ? undefined : caseData?.id}
                         onUploaded={onReviewSubmitted} />
         </div>
       </div>
@@ -3735,7 +3756,7 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
         </div>
       )}
 
-      <DamageDialog open={dmgOpen} items={damage} disabled={approved}
+      <DamageDialog open={dmgOpen} items={damage} disabled={locked}
         onClose={() => setDmgOpen(false)} onSave={setDamage} />
 
     </form>
