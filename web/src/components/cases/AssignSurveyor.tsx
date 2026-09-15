@@ -235,11 +235,17 @@ export default function AssignSurveyor({ caseId, onAssigned, listContainer = nul
   };
 
   const handleAssign = async (surveyorUserId: string) => {
+    // บังคับประเภทเคลม (user สั่ง 15/09/69) — ปุ่มถูก disable อยู่แล้ว กันไว้อีกชั้นเผื่อกดจากทางอื่น
+    if (!claimType) {
+      setError('ต้องเลือก "ประเภทเคลม" ก่อนมอบหมายงาน');
+      document.getElementById('claim_type')?.focus();
+      return;
+    }
     setAssigning(surveyorUserId); setError('');
     try {
       const res = await api.post(`/api/cases/${caseIdStr}/assign`, {
         surveyor_id: Number(surveyorUserId),
-        ...(claimType ? { claim_type: claimType } : {}),   // ไม่เลือก = ไม่ส่ง = ไม่ทับของเดิม
+        claim_type: claimType,
       });
       if (res.data.success) {
         loadWorkload();   // คนที่เพิ่งรับงานต้องหลุดจากรายชื่อ "ว่าง" ทันที
@@ -303,8 +309,15 @@ export default function AssignSurveyor({ caseId, onAssigned, listContainer = nul
    *    ถ้าตัดออกจริง คนจ่ายงานจะเจอรายชื่อว่างเปล่าแล้วจ่ายงานไม่ได้เลย
    *    (เหตุผลเดียวกับที่ไม่กรองด้วยพิกัด — ดูคอมเมนต์กลุ่ม "ช่างคนอื่น")
    */
-  const free = sorted.filter(isFree);
-  const busy = sorted.filter((s) => !isFree(s));
+  /** ค้นหารหัส/ชื่อพนักงาน (user ขอ 15/09/69) — กรองก่อนแบ่งกลุ่ม ว่าง/ถืองาน/ในจังหวัด ใช้ได้กับทุกกลุ่ม · ไม่สนตัวพิมพ์ */
+  const [q, setQ] = useState('');
+  const needle = q.trim().toLowerCase();
+  const matchQ = (s: SurveyorLocation) => !needle
+    || [s.code, s.first_name, s.last_name, s.username, `${s.first_name ?? ''} ${s.last_name ?? ''}`]
+      .some((v) => String(v ?? '').toLowerCase().includes(needle));
+  const pool = sorted.filter(matchQ);
+  const free = pool.filter(isFree);
+  const busy = pool.filter((s) => !isFree(s));
 
   const inProvince = !byDistance && incidentProvince ? free.filter((x) => x.province === incidentProvince) : [];
   const others = !byDistance && incidentProvince ? free.filter((x) => x.province !== incidentProvince) : free;
@@ -366,7 +379,9 @@ export default function AssignSurveyor({ caseId, onAssigned, listContainer = nul
             )}
           </p>
         </div>
-        <button type="button" onClick={() => handleAssign(String(s.user_id))} disabled={assigning === String(s.user_id)} className="ml-4 shrink-0 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50">
+        <button type="button" onClick={() => handleAssign(String(s.user_id))} disabled={assigning === String(s.user_id) || !claimType}
+          title={!claimType ? 'เลือกประเภทเคลมก่อน' : ''}
+          className="ml-4 shrink-0 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
           {assigning === String(s.user_id) ? 'กำลังมอบหมาย...' : 'มอบหมาย'}
         </button>
       </div>
@@ -379,19 +394,22 @@ export default function AssignSurveyor({ caseId, onAssigned, listContainer = nul
 
       {/* ประเภทเคลม — คนรับแจ้งรู้ตั้งแต่ต้นสาย จึงเลือกตรงนี้แล้วส่งไปโผล่บนแอปช่าง
           (เดิมมีให้กรอกแค่บนแอปกับหน้าตรวจ = คนที่รู้ก่อนกลับไม่มีที่ให้บอก)
-          ⛔ ไม่บังคับ — ไม่เลือกก็จ่ายงานได้ ช่างเลือกเองบนแอปได้เหมือนเดิม */}
-      <div className="mb-6 p-4 bg-white border border-gray-200 rounded-xl">
-        <label htmlFor="claim_type" className="block text-sm font-semibold text-gray-800 mb-1">ประเภทเคลม</label>
+          ⛔ บังคับเลือกทุกครั้ง (user สั่ง 15/09/69) — ปุ่ม "มอบหมาย" กดไม่ได้จนกว่าจะเลือก · backend กันซ้ำอีกชั้น */}
+      <div className={`mb-6 p-4 bg-white border rounded-xl ${claimType ? 'border-gray-200' : 'border-red-300'}`}>
+        <label htmlFor="claim_type" className="block text-sm font-semibold text-gray-800 mb-1">
+          ประเภทเคลม <span className="text-red-500">*</span>
+        </label>
         <select
           id="claim_type"
           value={claimType}
           onChange={(e) => setClaimType(e.target.value)}
-          className="w-full md:w-72 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className={`w-full md:w-72 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${claimType ? 'border-gray-300' : 'border-red-400 bg-red-50'}`}
         >
-          <option value="">-- ไม่ระบุ --</option>
+          <option value="">-- เลือกประเภทเคลม --</option>
           {CLAIM_TYPE_OPTIONS.map((o) => <option key={o.code} value={o.code}>{o.label}</option>)}
         </select>
         <p className="mt-1.5 text-xs text-gray-500">
+          {!claimType && <span className="text-red-600 font-medium">ต้องเลือกก่อนกด &quot;มอบหมาย&quot; · </span>}
           งานครั้งแรกปกติเป็น <strong>เคลมสด</strong> หรือ <strong>เคลมแห้ง</strong> ·
           งานนัดหมาย/ติดตาม มักเป็นงานครั้งถัดไปของเคลมเดิม ·
           ช่างแก้เองบนแอปได้ถ้าหน้างานไม่ตรง
@@ -459,6 +477,15 @@ export default function AssignSurveyor({ caseId, onAssigned, listContainer = nul
               </span>
             )}
           </h2>
+          {/* ค้นหารหัส/ชื่อพนักงาน (user ขอ 15/09/69) — กรองทุกกลุ่ม (ว่าง/ถืองาน/ในจังหวัด/คนอื่น) */}
+          <div className="relative">
+            <input type="text" value={q} onChange={(e) => setQ(e.target.value)} placeholder="ค้นหา รหัส หรือ ชื่อพนักงาน"
+              className="border border-gray-300 rounded-lg px-3 py-2 pr-8 text-sm w-56 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            {needle && (
+              <button type="button" onClick={() => setQ('')} title="ล้างคำค้น"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-800 text-sm px-1">✕</button>
+            )}
+          </div>
           <button type="button" onClick={handleRequestLocation} disabled={loading}
             title="ขอพิกัดล่าสุดจากเครื่องช่างทุกคน แล้วเรียงรายชื่อตามระยะทาง/จังหวัดที่เกิดเหตุ"
             className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors">
@@ -469,6 +496,11 @@ export default function AssignSurveyor({ caseId, onAssigned, listContainer = nul
           <div className="text-center py-8 text-gray-500">{requestSent ? 'กำลังรอข้อมูลพิกัดจากช่างสำรวจ...' : 'กดปุ่ม "เรียกพิกัด" เพื่อดูรายชื่อช่างสำรวจเรียงตามระยะทาง'}</div>
         ) : (
           <div className="space-y-3 xl:max-h-[calc(100vh-12rem)] xl:overflow-y-auto xl:pr-1">
+            {needle && (
+              <div className="text-xs text-gray-600">
+                ค้นหา &quot;{q.trim()}&quot; — พบ {pool.length} คน{pool.length === 0 ? ' · ลองพิมพ์รหัส (เช่น SE225) หรือบางส่วนของชื่อ' : ''}
+              </div>
+            )}
             {byDistance ? (
               <div className="text-xs text-gray-500">
                 เรียงตามระยะทาง <span className="text-gray-400">โดยประมาณ</span> — ใกล้สุดขึ้นก่อน

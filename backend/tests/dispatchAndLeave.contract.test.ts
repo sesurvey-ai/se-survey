@@ -52,7 +52,8 @@ check('งานที่ส่งแล้วโชว์เป็นข้อ�
  *    ห้ามกรองด้วยพิกัด) · ต้องยุบเก็บให้กดดูได้เท่านั้น
  */
 check('คนที่ถืองานยังกดดูและมอบหมายได้ ไม่ได้หายไป',
-      /const busy = sorted\.filter\(\(s\) => !isFree\(s\)\)/.test(assign)
+      // pool = sorted ที่ผ่านช่องค้นหา (15/09/69) — ยังเป็นทุกคน ไม่ได้ตัดคนถืองานทิ้ง
+      /const busy = pool\.filter\(\(s\) => !isFree\(s\)\)/.test(assign)
       && /showBusy && busy\.map\(row\)/.test(assign));
 check('ไม่มีใครว่างเลย → บอกทางออก ไม่ปล่อยหน้าว่าง', assign.includes('ตอนนี้ไม่มีช่างที่ว่างเลย'));
 /** โหลด workload ไม่สำเร็จ = ไม่รู้ว่าใครถืองาน → ต้องโชว์ทุกคน ไม่ใช่ซ่อนทุกคน */
@@ -109,8 +110,8 @@ check('หน้าแอดมินฟังสัญญาณแล้วโ�
 
   // ⛔ ชุดต้องตรงกับ radio 4 ตัวบน EMCS เป๊ะ — โดยเฉพาะห้ามมี 'เจรจาสินไหม'
   //    (EMCS ไม่มีตัวเลือกนั้น บอทติ๊กให้ไม่ได้ → CLAIM_TYPE_TO_EMCS['4'] = None)
-  check('assign รับ claim_type เฉพาะ 4 รหัสของ EMCS',
-        routes.includes("claim_type: z.enum(['F', 'D', 'A', 'C']).optional()"));
+  check('assign รับ claim_type เฉพาะ 4 รหัสของ EMCS (บังคับส่งตั้งแต่ 15/09/69)',
+        routes.includes("claim_type: z.enum(['F', 'D', 'A', 'C'], { errorMap:") && !routes.includes("claim_type: z.enum(['F', 'D', 'A', 'C']).optional()"));
   const ctBlock = (opts.match(/export const CLAIM_TYPE_OPTIONS[\s\S]*?\];/) || [''])[0];
   const ctCodes = [...ctBlock.matchAll(/\{ code: '([A-Z])'/g)].map((m) => m[1]);
   check('ลิสต์ประเภทเคลมบนเว็บ = 4 รหัสของ EMCS ไม่มีเจรจาสินไหม',
@@ -280,6 +281,17 @@ check('หน้าแอดมินฟังสัญญาณแล้วโ�
         && newPage.includes('listContainer={listEl}') && /<div ref=\{setListEl\} className="min-w-0 xl:sticky xl:top-4" \/>/.test(newPage));
   const assignPage = read('..', 'web', 'src', 'app', 'callcenter', 'cases', '[id]', 'assign', 'page.tsx');
   check('หน้ามอบหมายงานเคสเดิมใช้ผังเดียวกัน', assignPage.includes('listContainer={listEl}') && assignPage.includes('xl:grid-cols-[minmax(0,32rem)_minmax(0,1fr)]'));
+
+  /** user สั่ง 15/09/69 (รอบ 2): บังคับประเภทเคลมทุกครั้ง (เว็บ + backend) · ค้นหารหัส/ชื่อพนักงานในรายชื่อ */
+  check('ประเภทเคลมบังคับ: ปุ่มมอบหมายกดไม่ได้ + handleAssign กัน + backend ปฏิเสธ',
+        assignSrc.includes('disabled={assigning === String(s.user_id) || !claimType}')
+        && /if \(!claimType\) \{\s*setError\('ต้องเลือก "ประเภทเคลม" ก่อนมอบหมายงาน'\);/.test(assignSrc)
+        && assignSrc.includes('claim_type: claimType,') && !assignSrc.includes('...(claimType ? { claim_type: claimType } : {})')
+        && /claim_type: z\.enum\(\['F', 'D', 'A', 'C'\], \{ errorMap: \(\) => \(\{ message: 'ต้องเลือกประเภทเคลมก่อนมอบหมายงาน' \}\) \}\),/.test(
+          read('src', 'routes', 'case.routes.ts')));
+  check('ค้นหารหัส/ชื่อพนักงาน กรองก่อนแบ่งกลุ่ม (ว่าง/ถืองาน/ในจังหวัด)',
+        assignSrc.includes('placeholder="ค้นหา รหัส หรือ ชื่อพนักงาน"') && /const pool = sorted\.filter\(matchQ\);\s*const free = pool\.filter\(isFree\);\s*const busy = pool\.filter/.test(assignSrc)
+        && /\[s\.code, s\.first_name, s\.last_name, s\.username, `\$\{s\.first_name \?\? ''\} \$\{s\.last_name \?\? ''\}`\]/.test(assignSrc));
 }
 
 console.log(failed === 0 ? '\n✅ ผ่านทั้งหมด\n' : `\n❌ ไม่ผ่าน ${failed} ข้อ\n`);
