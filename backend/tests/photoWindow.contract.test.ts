@@ -47,6 +47,23 @@ check('ซูมแล้วเลื่อนดูได้ (ไม่ใช�
 check('เปลี่ยนรูปแล้วกลับไปพอดีจอ', gallery.includes("img.src=it.src;z=1;applyZoom();"));
 /** naturalWidth เป็น 0 ตอนรูปยังโหลดไม่เสร็จ — ซูมค้างไว้แล้วสลับรูปจะได้ความกว้าง 0 */
 check('คำนวณซูมใหม่หลังรูปโหลดเสร็จ', gallery.includes("img.onload=function(){if(z!==1)applyZoom();};"));
+/**
+ * user ทัก 15/09/69: ซูมแล้วต้องเลื่อนจาก scroll bar ล่าง/ขวา → ลากรูปเลื่อนได้ (pointer events ครอบเมาส์+นิ้ว)
+ * ลากแล้วปล่อยต้องไม่นับเป็นคลิก (ไม่งั้นทุกครั้งที่ลากจะเด้งกลับ 100%) · หน้าต่างเปิดครั้งแรกให้เต็มจอ + แถบปุ่มไม่บีบ
+ */
+check('ซูมแล้วลากรูปเพื่อเลื่อนดู (เลื่อน scroll ของ #view ตามระยะลาก)',
+      gallery.includes("img.onpointerdown=function(e){if(z===1||e.button!==0)return;")
+      && gallery.includes('view.scrollLeft=pan.l-dx;view.scrollTop=pan.t-dy;')
+      && gallery.includes('#img.zoomed{cursor:grab;touch-action:none}'));
+check('ลากแล้วปล่อยไม่นับเป็นคลิก (ดักชั้น capture ก่อนถึง img.onclick)',
+      gallery.includes("view.addEventListener('click',function(e){if(dragged){dragged=false;e.stopPropagation();e.preventDefault();}},true);"));
+check('เปิดครั้งแรกขยายเต็มพื้นที่จอ (หน้าต่างที่เปิดค้างไม่ถูกปรับ)',
+      /if \(!\(w as unknown as \{ __seSetPhotos\?: unknown \}\)\.__seSetPhotos\) \{\s*try \{ w\.moveTo\(0, 0\); w\.resizeTo\(window\.screen\.availWidth, window\.screen\.availHeight\); \}/.test(gallery));
+check('แถบปุ่มห่อบรรทัดได้ ปุ่มไม่หด คำบรรยายย่อได้', gallery.includes('#bar{flex:none;display:flex;flex-wrap:wrap;')
+      && /#bar button\{[^}]*white-space:nowrap;flex:none\}/.test(gallery) && /#cap\{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;/.test(gallery));
+check('กล่องทับจอ (ทางถอย): ลากรูปที่ซูมได้ + ใช้ความกว้างจอเกือบเต็ม',
+      gallery.includes('const panBoxRef = useRef<HTMLDivElement>(null);') && /box\.scrollLeft = s\.l - dx; box\.scrollTop = s\.t - dy;/.test(gallery)
+      && gallery.includes('className="relative max-w-[96vw] w-full px-14"'));
 
 console.log('\n── แถบรูปซ้าย · ตัวกรอง · ลบรูป ──');
 const winPart = gallery.split('w.document.write')[1] || '';

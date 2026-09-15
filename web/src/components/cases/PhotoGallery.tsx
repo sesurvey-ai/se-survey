@@ -78,6 +78,10 @@ export default function PhotoGallery(
   const [rev, setRev] = useState<Record<number, number>>({});
 
   const winRef = useRef<Window | null>(null);
+  /** กล่องทับจอ (ทางถอยเมื่อป๊อปอัปถูกบล็อก): ลากรูปที่ซูมเพื่อเลื่อนดู (user ขอ 15/09/69) — เลื่อน scroll ของกล่องตามระยะลาก */
+  const panBoxRef = useRef<HTMLDivElement>(null);
+  const panState = useRef<{ x: number; y: number; l: number; t: number; moved: boolean } | null>(null);
+  const suppressClick = useRef(false);
 
   const catLabelOf = (c?: string | null) => (c && c.trim()) ? c.trim() : 'ไม่ระบุหมวด';
   const srcOf = (p: Photo) => {
@@ -158,6 +162,13 @@ export default function PhotoGallery(
     const w = window.open('', 'se_photo_viewer', 'width=1180,height=920,scrollbars=yes,resizable=yes');
     // เบราว์เซอร์บล็อกป๊อปอัป → ถอยไปใช้กล่องทับจอแบบเดิม ดีกว่ากดแล้วไม่มีอะไรเกิดขึ้น
     if (!w) { setSelected(p); return; }
+    /**
+     * เปิดครั้งแรกให้เต็มพื้นที่จอ (user ทัก 15/09/69: หน้าต่าง 1180×920 บนจอกว้างเหลือที่ข้าง ๆ ปุ่มในแถบถูกบีบ)
+     * — ทำเฉพาะหน้าต่างใหม่ (ยังไม่มี __seSetPhotos) หน้าต่างที่เปิดค้างและผู้ใช้ปรับขนาดเองแล้วไม่ไปยุ่ง
+     */
+    if (!(w as unknown as { __seSetPhotos?: unknown }).__seSetPhotos) {
+      try { w.moveTo(0, 0); w.resizeTo(window.screen.availWidth, window.screen.availHeight); } catch { /* บางเบราว์เซอร์ไม่ให้ปรับ — ใช้ขนาดเดิม */ }
+    }
     winRef.current = w;
 
     /**
@@ -199,21 +210,24 @@ html,body{margin:0;height:100%;background:#111;color:#eee;font-family:system-ui,
 #strip .t:hover{opacity:.85}
 #strip .t.on{opacity:1;border-color:#4da3ff}
 #main{flex:1;min-width:0;display:flex;flex-direction:column}
-#bar{flex:none;display:flex;align-items:center;gap:8px;padding:8px 12px;background:#1c1c1c;font-size:13px}
-#bar button{background:#333;color:#eee;border:0;border-radius:6px;padding:6px 12px;font-size:14px;cursor:pointer}
+/* แถบปุ่ม: ห่อบรรทัดได้ + ปุ่มไม่หด (user ทัก 15/09/69 ปุ่มถูกบีบเมื่อแถบรูปซ้ายกว้าง/หน้าต่างแคบ) */
+#bar{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 12px;background:#1c1c1c;font-size:13px}
+#bar button{background:#333;color:#eee;border:0;border-radius:6px;padding:6px 12px;font-size:14px;cursor:pointer;white-space:nowrap;flex:none}
 #bar button:hover{background:#444}
 #bar button:disabled{opacity:.35;cursor:default}
 #del{background:#a12b1e !important}
 #del:hover{background:#c2321f !important}
-#lgrp,#rgrp{flex:1;display:flex;align-items:center;gap:8px}
+#lgrp,#rgrp{flex:1 1 auto;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 #rgrp{justify-content:flex-end}
-#cap{flex:none;color:#bbb;white-space:nowrap;padding:0 10px}
+#cap{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;color:#bbb;white-space:nowrap;padding:0 10px}
 #view{flex:1;min-height:0;overflow:auto;display:flex;align-items:center;justify-content:center;padding:8px}
 /* ซูมแล้วต้องสลับเป็น block — flex ที่จัดกึ่งกลางจะตัดขอบบน/ซ้ายทิ้ง เลื่อนไปดูไม่ได้ */
 #view.zoomed{display:block;text-align:center}
 #zlab{min-width:44px;text-align:center;color:#bbb}
 #img{max-width:100%;max-height:100%;object-fit:contain;cursor:zoom-in}
-#img.zoomed{cursor:zoom-out}
+/* ซูมแล้วลากรูปเพื่อเลื่อนดูได้ (user ขอ 15/09/69) — touch-action:none ให้นิ้วลากบนจอสัมผัสใช้ตัวลากของเรา ไม่ใช่ scroll ของเบราว์เซอร์ */
+#img.zoomed{cursor:grab;touch-action:none}
+#img.zoomed.panning{cursor:grabbing}
 #empty{color:#888;font-size:14px}
 </style></head><body><div id="wrap">
 <div id="side"><select id="filter"></select><div id="strip"></div></div>
@@ -279,6 +293,18 @@ zout.onclick=function(){setZoom(z-0.25);};
 // คลิกที่รูป = สลับพอดีจอ ↔ 200% (ทางลัด ไม่ต้องกดปุ่มหลายที)
 img.onclick=function(){setZoom(z===1?2:1);};
 img.onload=function(){if(z!==1)applyZoom();};
+// ลากรูปที่ซูมเพื่อเลื่อนดู (user ขอ 15/09/69) — เดิมต้องเลื่อนจาก scroll bar ล่าง/ขวา · ใช้ pointer events ครอบทั้งเมาส์และนิ้ว
+var pan=null,dragged=false;
+img.ondragstart=function(){return false;};
+img.onpointerdown=function(e){if(z===1||e.button!==0)return;
+  pan={x:e.clientX,y:e.clientY,l:view.scrollLeft,t:view.scrollTop};dragged=false;img.className='zoomed panning';
+  try{img.setPointerCapture(e.pointerId);}catch(err){}e.preventDefault();};
+img.onpointermove=function(e){if(!pan)return;var dx=e.clientX-pan.x,dy=e.clientY-pan.y;
+  if(Math.abs(dx)>3||Math.abs(dy)>3)dragged=true;view.scrollLeft=pan.l-dx;view.scrollTop=pan.t-dy;};
+img.onpointerup=img.onpointercancel=function(e){if(!pan)return;pan=null;img.className=z===1?'':'zoomed';
+  try{img.releasePointerCapture(e.pointerId);}catch(err){}};
+// ลากแล้วปล่อยไม่นับเป็นคลิก (คลิกเฉย ๆ ยังสลับ 100%↔200% เหมือนเดิม) — ดักที่ชั้น capture ก่อนถึง img.onclick
+view.addEventListener('click',function(e){if(dragged){dragged=false;e.stopPropagation();e.preventDefault();}},true);
 if(del)del.onclick=function(){
   if(!L.length)return;
   if(!confirm('ลบรูปนี้ออกจากเคส? ลบแล้วกู้คืนไม่ได้'))return;
@@ -362,20 +388,48 @@ buildFilter();applyFilter(ALL.length?ALL[Math.min(i,ALL.length-1)].id:null);
           {/* Zoom controls */}
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
             <button onClick={() => setZoom(z => Math.max(0.5, z - 0.25))} className="text-white bg-black bg-opacity-50 hover:bg-opacity-70 rounded-full w-9 h-9 flex items-center justify-center text-xl font-bold">−</button>
-            <div className="flex flex-col items-center">
-              <span className="text-white text-sm min-w-[3.125rem] text-center">{Math.round(zoom * 100)}%</span>
-              {zoom !== 1 && <button onClick={() => setZoom(1)} className="text-white bg-black bg-opacity-50 hover:bg-opacity-70 rounded-none px-2 py-0.5 text-xs mt-1">รีเซ็ต</button>}
-            </div>
+            {/* ปุ่มเรียงแถวเดียว ไม่ซ้อนกัน (เดิม "รีเซ็ต" ซ้อนใต้เปอร์เซ็นต์ แถบถูกบีบ — user ทัก 15/09/69) */}
+            <span className="text-white text-sm min-w-[3.125rem] text-center whitespace-nowrap">{Math.round(zoom * 100)}%</span>
             <button onClick={() => setZoom(z => Math.min(3, z + 0.25))} className="text-white bg-black bg-opacity-50 hover:bg-opacity-70 rounded-full w-9 h-9 flex items-center justify-center text-xl font-bold">+</button>
+            {zoom !== 1 && <button onClick={() => setZoom(1)} className="text-white bg-black bg-opacity-50 hover:bg-opacity-70 rounded-none px-2 py-1 text-xs whitespace-nowrap">รีเซ็ต 100%</button>}
+            {zoom !== 1 && <span className="text-white/70 text-xs whitespace-nowrap hidden sm:inline">ลากรูปเพื่อเลื่อนดู</span>}
           </div>
-          {/* Main image area */}
-          <div className="flex-1 flex items-center justify-center relative min-h-0 overflow-auto">
+          {/* Main image area — ref ไว้ให้ตัวลากเลื่อน scroll ของกล่องนี้ตอนซูม */}
+          <div ref={panBoxRef} className="flex-1 flex items-center justify-center relative min-h-0 overflow-auto">
             {hasPrev && (
               <button onClick={(e) => { e.stopPropagation(); setSelected(photos[idx - 1]); setZoom(1); }} className="absolute left-4 top-1/2 -translate-y-1/2 text-white text-5xl font-bold hover:text-gray-300 z-10 bg-black bg-opacity-40 rounded-full w-12 h-12 flex items-center justify-center">&lsaquo;</button>
             )}
-            <div className="relative max-w-4xl w-full px-16" onClick={(e) => e.stopPropagation()}>
-              <button onClick={() => { setSelected(null); setZoom(1); }} className="absolute -top-10 right-16 text-white text-3xl font-bold hover:text-gray-300">&times;</button>
-              <img src={getSrc(selected)} alt={`รูปภาพ ${selected.id}`} className="w-full h-auto max-h-[65vh] object-contain rounded-none transition-transform duration-200" style={{ transform: `scale(${zoom})` }} />
+            {/* ใช้ความกว้างจอเกือบเต็ม (เดิม max-w-4xl เหลือที่ข้าง ๆ เปล่า — user ทัก 15/09/69) */}
+            <div className="relative max-w-[96vw] w-full px-14" onClick={(e) => e.stopPropagation()}>
+              <button onClick={() => { setSelected(null); setZoom(1); }} className="absolute -top-10 right-14 text-white text-3xl font-bold hover:text-gray-300">&times;</button>
+              <img src={getSrc(selected)} alt={`รูปภาพ ${selected.id}`} draggable={false}
+                className="w-full h-auto max-h-[82vh] object-contain rounded-none transition-transform duration-200 select-none"
+                style={{ transform: `scale(${zoom})`, cursor: zoom > 1 ? 'grab' : 'default', touchAction: zoom > 1 ? 'none' : 'auto' }}
+                onPointerDown={(e) => {
+                  // ลากรูปที่ซูมเพื่อเลื่อนดู — เลื่อน scroll ของกล่อง (panBoxRef) ตามระยะที่ลาก
+                  const box = panBoxRef.current;
+                  if (zoom <= 1 || !box || e.button !== 0) return;
+                  panState.current = { x: e.clientX, y: e.clientY, l: box.scrollLeft, t: box.scrollTop, moved: false };
+                  (e.currentTarget as HTMLElement).style.cursor = 'grabbing';
+                  try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* ไม่รองรับก็ลากได้ในกรอบ */ }
+                  e.preventDefault();
+                }}
+                onPointerMove={(e) => {
+                  const s = panState.current; const box = panBoxRef.current;
+                  if (!s || !box) return;
+                  const dx = e.clientX - s.x, dy = e.clientY - s.y;
+                  if (Math.abs(dx) > 3 || Math.abs(dy) > 3) s.moved = true;
+                  box.scrollLeft = s.l - dx; box.scrollTop = s.t - dy;
+                }}
+                onPointerUp={(e) => {
+                  const s = panState.current;
+                  if (!s) return;
+                  if (s.moved) suppressClick.current = true;
+                  panState.current = null;
+                  (e.currentTarget as HTMLElement).style.cursor = zoom > 1 ? 'grab' : 'default';
+                }}
+                onPointerCancel={() => { panState.current = null; }}
+                onClickCapture={(e) => { if (suppressClick.current) { suppressClick.current = false; e.stopPropagation(); e.preventDefault(); } }} />
               <div className="text-center text-white text-sm mt-2">
                 <span className="font-semibold">{catLabel(selected.category)}</span> · {idx + 1} / {photos.length}
                 {/* ลบจากจอเต็มด้วย — เคสรูป 40 ใบ คนไล่ดูทีละใบแล้วเจอรูปเสีย
