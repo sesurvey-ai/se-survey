@@ -14,7 +14,7 @@
 import fs from 'fs';
 import path from 'path';
 import {
-  CAR_BRANDS_BY_TYPE, BRAND_ALIASES, THAI_BRANDS, normalizeBrand, brandTypeIssue, normalizeVehicleFields,
+  CAR_BRANDS_BY_TYPE, BRAND_ALIASES, THAI_BRANDS, normalizeBrand, brandTypeIssue, normalizeVehicleFields, normalizeDamageLevels,
 } from '../src/services/vehicleBrand';
 import {
   CAR_BRANDS_BY_TYPE as WEB_BRANDS, BRAND_ALIASES as WEB_ALIASES, THAI_BRANDS as WEB_THAI,
@@ -70,8 +70,29 @@ check('web brandTypeIssue ให้ผลเดียวกับ backend',
   check('นำเข้า: จดเตือน 2 รายการให้หัวหน้าตรวจ', notes.length === 2 && /รถประกัน/.test(notes[0]) && /คู่กรณีคันที่ 1/.test(notes[1]));
   const cs = read('src/services/case.service.ts');
   check('importFromXml เรียก normalizeVehicleFields และเก็บคำเตือนลง import_warnings',
-    /const vehicleNotes = \[\.\.\.normalizeVehicleFields\(report\), \.\.\.sanitizeReportDates\(report\)\]/.test(cs)
+    /const vehicleNotes = \[\.\.\.normalizeVehicleFields\(report\), \.\.\.sanitizeReportDates\(report\), \.\.\.normalizeDamageLevels\(report\)\]/.test(cs)
     && /parsed\.warnings = \[\.\.\.\(parsed\.warnings \?\? \[\]\), \.\.\.vehicleNotes\]/.test(cs));
+}
+
+// 4b) ระดับความเสียหาย (เคส #343)
+{
+  const rep: Record<string, unknown> = {
+    insured_damage: [{ part: 'กันชนหน้า', level: 'แผลเบา' }, { part: 'ประตู', level: 'B' }, { part: 'ไฟหน้า', level: '' }],
+    opposing_parties: [{ damage: [{ part: 'ฝาปิดน้ำมัน', level: 'เปลี่ยน' }, { part: 'กันชนหลัง', level: 'ปานกลางมาก' }] }],
+  };
+  const notes = normalizeDamageLevels(rep);
+  const ins = rep.insured_damage as Record<string, unknown>[];
+  const opp = (rep.opposing_parties as Record<string, unknown>[])[0].damage as Record<string, unknown>[];
+  check('นำเข้า: ระดับ แผลเบา→L · B→M · เปลี่ยน→X (คำแปลก/ว่าง คงไว้)',
+    ins[0].level === 'L' && ins[1].level === 'M' && ins[2].level === '' && opp[0].level === 'X' && opp[1].level === 'ปานกลางมาก');
+  check('นำเข้า: จดเตือนชิ้นที่ยังไม่มีระดับ (รถประกัน 1 · คู่กรณี 1)',
+    notes.length === 2 && /รถประกัน.*ไฟหน้า/.test(notes[0]) && /คู่กรณีคันที่ 1.*กันชนหลัง/.test(notes[1]));
+  const cs = read('src/services/case.service.ts');
+  check('importFromXml เรียก normalizeDamageLevels ด้วย', /normalizeDamageLevels\(report\)/.test(cs));
+  const cd = fs.readFileSync(path.join(__dirname, '..', '..', 'web/src/components/cases/CaseDetail.tsx'), 'utf8');
+  const re = fs.readFileSync(path.join(__dirname, '..', '..', 'web/src/components/cases/RecordEditors.tsx'), 'utf8');
+  check('เว็บ: ประตูอนุมัตินับเฉพาะชิ้นที่ระดับเป็น L/M/H/X + กั้นชิ้นที่ไม่มีระดับ (รถประกัน + คู่กรณี)',
+    /DAMAGE_LEVEL_OK\.has\(x\.level\)/.test(cd) && /badDamageLevels > 0/.test(cd) && /\.map\(\(\) => 'damage_level'\)/.test(re));
 }
 
 // 5) วันที่ต้องเป็นวันจริง

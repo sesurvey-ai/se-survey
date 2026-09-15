@@ -106,6 +106,44 @@ export function brandTypeIssue(type: unknown, brand: unknown): BrandTypeIssue | 
   return { brand: b, typeCode: code, typeLabel: CAR_TYPE_LABELS[code], typesWithBrand: types, suggestion, message };
 }
 
+/** ระดับความเสียหายรายชิ้น — เว็บ/มือถือเก็บ L/M/H/X (ต่ำ/กลาง/สูง/สูงมาก) · ISURVEY ให้ rank A–D หรือคำไทย */
+export const DAMAGE_LEVEL_MAP: Record<string, string> = {
+  L: 'L', M: 'M', H: 'H', X: 'X', A: 'L', B: 'M', C: 'H', D: 'X',
+  'แผลเบา': 'L', 'แผลกลาง': 'M', 'แผลหนัก': 'H', 'เปลี่ยน': 'X', 'เบา': 'L', 'กลาง': 'M', 'หนัก': 'H',
+};
+
+/**
+ * ระดับความเสียหายทุกชิ้น (รถประกัน + คู่กรณี) → L/M/H/X ตั้งแต่ตอนนำเข้า (15/09/69 เคส #343 เคลม 2026013171521:
+ * ISURVEY ส่ง "แผลเบา" → เว็บเก็บทั้งดุ้น → บอทแปลงเป็น rank ไม่ได้ → EMCS "กรุณาเลือก ระดับความเสียหาย" popup ค้าง งานพัง)
+ * แปลงไม่ได้ (ว่าง/คำแปลก) = คงไว้ + จดเตือนให้หัวหน้าเลือกบนหน้าตรวจ (ประตูอนุมัติกั้นอยู่)
+ */
+export function normalizeDamageLevels(report: Record<string, unknown>): string[] {
+  const notes: string[] = [];
+  const fix = (items: unknown, who: string) => {
+    if (!Array.isArray(items)) return;
+    const bad: string[] = [];
+    for (const it of items) {
+      if (!it || typeof it !== 'object') continue;
+      const rec = it as Record<string, unknown>;
+      const raw = String(rec.level ?? '').trim();
+      const mapped = DAMAGE_LEVEL_MAP[raw.toUpperCase()] ?? DAMAGE_LEVEL_MAP[raw];
+      if (mapped) { if (mapped !== raw) rec.level = mapped; continue; }
+      if (String(rec.part ?? '').trim()) bad.push(`${rec.part}${raw ? ` (${raw})` : ''}`);
+    }
+    if (bad.length) notes.push(`${who}: ระดับความเสียหายว่าง/ไม่รู้จัก ${bad.length} ชิ้น (${bad.slice(0, 3).join(', ')}${bad.length > 3 ? '…' : ''}) — EMCS บังคับทุกชิ้น เลือกระดับก่อนอนุมัติ`);
+  };
+  let ins = report.insured_damage;
+  if (typeof ins === 'string') { try { ins = JSON.parse(ins); } catch { ins = null; } }
+  if (Array.isArray(ins)) { fix(ins, 'ความเสียหายรถประกัน'); report.insured_damage = ins; }
+  let ops = report.opposing_parties;
+  if (typeof ops === 'string') { try { ops = JSON.parse(ops); } catch { ops = null; } }
+  if (Array.isArray(ops)) {
+    ops.forEach((o, i) => { if (o && typeof o === 'object') fix((o as Record<string, unknown>).damage, `ความเสียหายคู่กรณีคันที่ ${i + 1}`); });
+    report.opposing_parties = ops;
+  }
+  return notes;
+}
+
 /**
  * ทำให้ยี่ห้อ/ประเภทรถของรายงานตรงกติกา EMCS ตั้งแต่ตอนนำเข้า (ISURVEY สด / ไฟล์ XML) — แก้ในที่
  *  - ยี่ห้อ → ป้าย EMCS (MERCEDES-BENZ → BENZ, ไทย → อังกฤษ)

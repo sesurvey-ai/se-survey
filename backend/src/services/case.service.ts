@@ -5,7 +5,7 @@ import { fcmService } from './fcm.service';
 import { generateSurveyXml, emcsNameWarnings, sanitizeReportDates } from './xmlExport.service';
 import { invalidateCaseOwner } from '../middleware/uploadsAuth';
 import { storage, normalizeKey, contentTypeOf } from '../config/storage';
-import { normalizeVehicleFields } from './vehicleBrand';
+import { normalizeVehicleFields, normalizeDamageLevels } from './vehicleBrand';
 import { isFirebaseReady } from '../config/firebase';
 import type { XmlImportResult } from './xmlImport.service';
 import { assertReportRev } from './reportRev';
@@ -1568,7 +1568,7 @@ export const caseService = {
     // ยี่ห้อ/ประเภทรถให้ตรงกติกา EMCS ตั้งแต่ตอนเข้า (15/09/69 เคส #300: ISURVEY ให้ "เก๋งเอเชีย + MERCEDES-BENZ"
     // → บอทเลือกยี่ห้อไม่ได้) — แปลงป้ายยี่ห้อ + เปลี่ยนประเภทให้เมื่อชี้ได้แน่ แล้วจดเตือนให้หัวหน้าตรวจ
     // วันที่ที่ไม่ใช่วันจริง (ISURVEY ส่ง "00/00/2569" มาได้ — เคส #299) ล้างเป็นว่างตั้งแต่ตอนเข้า ไม่งั้น EMCS ปัดตกทั้งไฟล์
-    const vehicleNotes = [...normalizeVehicleFields(report), ...sanitizeReportDates(report)];
+    const vehicleNotes = [...normalizeVehicleFields(report), ...sanitizeReportDates(report), ...normalizeDamageLevels(report)];
     if (vehicleNotes.length) parsed.warnings = [...(parsed.warnings ?? []), ...vehicleNotes];
     // เพศผู้ขับขี่: มือถือ/เว็บเก็บ 'M'/'F' — XML ให้ 'W' (รหัสหญิงอีกแบบ) และเส้นดึงสดเคยส่ง 'หญิง'
     // → radio หน้าตรวจไม่ติ๊กทั้งที่ข้อมูลมี หัวหน้าเห็น "ยังขาด 1 ช่อง" แต่หาไม่เจอ (เคส #221, 03/09/69)

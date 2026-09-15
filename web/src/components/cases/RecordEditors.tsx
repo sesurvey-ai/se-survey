@@ -460,6 +460,10 @@ export const opponentMissing = (rec: LooseRecord): string[] => [
   }),
   // ยี่ห้อไม่มีในลิสต์ของประเภทรถนั้นบน EMCS — บอทเลือกไม่ได้ (เคส #300 15/09/69)
   ...(brandTypeIssue(rec.car_type, rec.car_brand) ? ['car_brand'] : []),
+  // ความเสียหายทุกชิ้นต้องมีระดับ L/M/H/X — EMCS บังคับ ว่าง/คำไทย ("แผลเบา" จาก ISURVEY) ทำ popup ค้าง (เคส #343 15/09/69)
+  ...((Array.isArray(rec.damage) ? rec.damage : []) as Array<Record<string, unknown>>)
+    .filter((d) => d && String(d.part ?? '').trim() && !['L', 'M', 'H', 'X'].includes(String(d.level ?? '').trim()))
+    .map(() => 'damage_level'),
 ];
 
 /**

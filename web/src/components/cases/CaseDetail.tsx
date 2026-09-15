@@ -1199,7 +1199,10 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
    *    (ไม่มีใน xmlExport และไม่มีในบอททั้ง repo) → พิมพ์อะไรก็ได้ = ปลดล็อกเกต
    *    ทั้งที่รายการจริงยังว่าง แล้วบอทยกเข้า EMCS ด้วยความเสียหาย 0 ชิ้น
    */
-  const damageRows = damage.filter((x) => x.part && x.level).length;
+  // ระดับต้องเป็น L/M/H/X ที่ EMCS รับ — ค่าอื่น (คำไทยจาก ISURVEY เช่น "แผลเบา" ในข้อมูลเก่า) ทำ popup EMCS ค้าง (เคส #343 15/09/69)
+  const DAMAGE_LEVEL_OK = new Set(['L', 'M', 'H', 'X']);
+  const damageRows = damage.filter((x) => x.part && DAMAGE_LEVEL_OK.has(x.level)).length;
+  const badDamageLevels = damage.filter((x) => x.part && !DAMAGE_LEVEL_OK.has(x.level)).length;
 
   const approvalBlockers = [
     ...(finishedWaiting ? ['ช่างเสร็จงานหน้างานแล้วแต่ยังไม่ส่งรายงาน — อนุมัติได้เมื่อช่างกดส่งงาน'] : []),
@@ -1209,6 +1212,7 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
     // ยี่ห้อ/วันที่ที่ EMCS ไม่รับ — ปล่อยอนุมัติแล้วบอทไปตาย/ไฟล์ถูกปัดตก (15/09/69 เคส #299 #300)
     ...(carBrandIssue ? [`ยี่ห้อรถประกัน "${carBrandIssue.brand}" ไม่มีในประเภทรถ ${carBrandIssue.typeLabel} ของ EMCS`] : []),
     ...badDrvDates.map((k) => `${DRV_DATE_LABEL[k]} ไม่ใช่วันที่จริง (วว/ดด/ปปปป)`),
+    ...(badDamageLevels > 0 ? [`รายการความเสียหายรถประกัน ${badDamageLevels} ชิ้นยังไม่ได้เลือกระดับ (L/M/H/X) — EMCS บังคับทุกชิ้น`] : []),
     ...(payHl === 'red' ? ['ติ๊ก "รับเงินจำนวน" แล้วแต่ยังไม่กรอกยอด'] : []),
     ...(tickHl === 'red' ? ['กรอกยอด "รับเงินจำนวน" แล้วแต่ยังไม่ติ๊กกล่อง'] : []),
     ...(payOver ? ['"รับเงินจำนวน" มากกว่ายอดเรียกร้องทั้งหมด'] : []),
