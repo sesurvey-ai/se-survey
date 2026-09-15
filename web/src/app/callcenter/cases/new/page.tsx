@@ -26,6 +26,8 @@ export default function NewCasePage() {
   // หลังสร้างเคสสำเร็จ — แสดงส่วนมอบหมายช่างสำรวจ inline ในหน้าเดียวกัน (ไม่ต้องเปลี่ยนหน้า)
   const [createdCaseId, setCreatedCaseId] = useState<number | null>(null);
   const assignRef = useRef<HTMLDivElement>(null);
+  /** คอลัมน์ขวาของหน้า (15/09/69 user ออกแบบใหม่): รายชื่อช่างสำรวจไป render ในนี้ ส่วนรายละเอียดงานอยู่ซ้าย · ไม่มีแผนที่แล้ว */
+  const [listEl, setListEl] = useState<HTMLDivElement | null>(null);
   useEffect(() => {
     if (createdCaseId !== null) assignRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [createdCaseId]);
@@ -319,7 +321,9 @@ export default function NewCasePage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
+    // ขั้นกรอกข้อมูล: กว้าง 4xl กลางจอ (ฟอร์มอ่านง่าย) · ขั้นมอบหมาย (15/09/69 user ออกแบบใหม่): กางเต็มจอ
+    // ซ้าย = รายละเอียดงาน + ประเภทเคลม · ขวา = รายชื่อช่างสำรวจ · ไม่มีแผนที่ (ซ้ำกับเมนู "พนักงานทั้งหมด")
+    <div className={createdCaseId !== null ? 'max-w-screen-2xl mx-auto' : 'max-w-4xl mx-auto'}>
       <div className="flex items-center mb-6">
         <div className="flex items-center">
           <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium ${createdCaseId !== null ? 'bg-green-500 text-white' : 'bg-blue-600 text-white'}`}>{createdCaseId !== null ? '✓' : '1'}</div>
@@ -332,6 +336,8 @@ export default function NewCasePage() {
         </div>
       </div>
 
+      <div className={createdCaseId !== null ? 'grid grid-cols-1 xl:grid-cols-[minmax(0,52rem)_minmax(0,1fr)] gap-8 items-start' : ''}>
+      <div className="min-w-0">
       <form onSubmit={handleSubmit}>
         {/* หลังสร้างเคสแล้ว ล็อกฟอร์มไว้เป็นข้อมูลอ้างอิง (แก้ไม่ได้) */}
         <fieldset disabled={createdCaseId !== null} className="min-w-0 border-0 p-0 m-0">
@@ -617,9 +623,15 @@ export default function NewCasePage() {
               ข้ามไปก่อน
             </button>
           </div>
-          <AssignSurveyor caseId={createdCaseId} onAssigned={() => router.push('/callcenter')} />
+          <AssignSurveyor caseId={createdCaseId} onAssigned={() => router.push('/callcenter')} listContainer={listEl} />
         </div>
       )}
+      </div>
+      {/* คอลัมน์ขวา: รายชื่อช่างสำรวจ (AssignSurveyor render เข้ามาทาง portal) — ติดขอบบนตอนเลื่อนบนจอกว้าง */}
+      {createdCaseId !== null && (
+        <div ref={setListEl} className="min-w-0 xl:sticky xl:top-4" />
+      )}
+      </div>
     </div>
   );
 }

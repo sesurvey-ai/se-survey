@@ -260,5 +260,27 @@ check('หน้าแอดมินฟังสัญญาณแล้วโ�
         && list.includes('อัปเดตล่าสุด'));
 }
 
+/**
+ * -- ผังหน้ามอบหมาย (user ออกแบบ 15/09/69) --
+ * ซ้าย = รายละเอียดงาน + ประเภทเคลม · ขวา = รายชื่อช่าง (portal จาก AssignSurveyor) · ไม่มีแผนที่ (ซ้ำกับเมนู "พนักงานทั้งหมด")
+ * ปุ่ม "เรียกพิกัด" ยังต้องอยู่ เพราะรายชื่อเรียงตามพิกัดล่าสุด/จังหวัดที่เกิดเหตุ
+ */
+{
+  console.log('\n-- ผังหน้ามอบหมาย: ซ้ายรายละเอียด ขวารายชื่อ ไม่มีแผนที่ --');
+  const assignSrc = read('..', 'web', 'src', 'components', 'cases', 'AssignSurveyor.tsx');
+  check('ไม่มีแผนที่ในส่วนมอบหมายแล้ว', !assignSrc.includes('SurveyorMap') && !assignSrc.includes('แผนที่ตำแหน่งช่างสำรวจ'));
+  check('รายชื่อไป render ในคอลัมน์ขวาที่หน้าส่งมา (portal) · ไม่ส่ง = ต่อท้ายตามเดิม',
+        assignSrc.includes('listContainer?: HTMLElement | null;') && assignSrc.includes('return listContainer ? createPortal(list, listContainer) : list;'));
+  check('ปุ่มเรียกพิกัดยังอยู่ (หัวรายชื่อ) และเรียงตามระยะทางยังทำงาน',
+        /onClick=\{handleRequestLocation\}/.test(assignSrc) && assignSrc.includes("'เรียกพิกัดใหม่' : 'เรียกพิกัด'") && assignSrc.includes('haversineDistance('));
+  const newPage = read('..', 'web', 'src', 'app', 'callcenter', 'cases', 'new', 'page.tsx');
+  check('หน้าสร้างเคส: ขั้นมอบหมายกางเต็มจอ 2 คอลัมน์ · ขั้นกรอกยังกลางจอ 4xl',
+        newPage.includes("createdCaseId !== null ? 'max-w-screen-2xl mx-auto' : 'max-w-4xl mx-auto'")
+        && /createdCaseId !== null \? 'grid grid-cols-1 xl:grid-cols-\[minmax\(0,52rem\)_minmax\(0,1fr\)\] gap-8 items-start' : ''/.test(newPage)
+        && newPage.includes('listContainer={listEl}') && /<div ref=\{setListEl\} className="min-w-0 xl:sticky xl:top-4" \/>/.test(newPage));
+  const assignPage = read('..', 'web', 'src', 'app', 'callcenter', 'cases', '[id]', 'assign', 'page.tsx');
+  check('หน้ามอบหมายงานเคสเดิมใช้ผังเดียวกัน', assignPage.includes('listContainer={listEl}') && assignPage.includes('xl:grid-cols-[minmax(0,32rem)_minmax(0,1fr)]'));
+}
+
 console.log(failed === 0 ? '\n✅ ผ่านทั้งหมด\n' : `\n❌ ไม่ผ่าน ${failed} ข้อ\n`);
 process.exit(failed === 0 ? 0 : 1);

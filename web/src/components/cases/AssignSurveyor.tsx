@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { CLAIM_TYPE_OPTIONS } from './caseOptions';
 import { useRouter } from 'next/navigation';
-import dynamic from 'next/dynamic';
 import { useSocket } from '@/hooks/useSocket';
 import api from '@/lib/api';
 
-const SurveyorMap = dynamic(() => import('@/components/map/SurveyorMap'), { ssr: false, loading: () => <div className="w-full flex items-center justify-center bg-gray-100 rounded-lg" style={{ height: '400px' }}><p className="text-gray-500">กำลังโหลดแผนที่...</p></div> });
+// 15/09/69 user ออกแบบใหม่: **ไม่มีแผนที่** ในหน้ามอบหมายแล้ว (ซ้ำกับเมนู "พนักงานทั้งหมด" ที่มีแผนที่สดอยู่)
+// เหลือรายชื่อที่เรียงตามระยะทาง/จังหวัดจากพิกัดเดิม — ปุ่ม "เรียกพิกัด" ยังอยู่เพราะรายชื่อต้องใช้พิกัดล่าสุด
 
 interface SurveyorLocation {
   user_id: string;
@@ -39,10 +40,16 @@ interface AssignSurveyorProps {
   caseId: number | string;
   /** เรียกหลังมอบหมายสำเร็จ — ถ้าไม่ส่ง จะ router.push('/callcenter') */
   onAssigned?: (surveyorId: number) => void;
+  /**
+   * กล่องปลายทางของ "รายชื่อช่างสำรวจ" (15/09/69 user ออกแบบใหม่): หน้าที่ฝังตัวนี้วางรายละเอียดงานไว้ซ้าย
+   * แล้วให้รายชื่ออยู่คอลัมน์ขวาของหน้า — ส่ง element ของคอลัมน์ขวามา รายชื่อจะไป render ในนั้น (portal)
+   * ไม่ส่ง = รายชื่อต่อท้ายส่วนควบคุมตามปกติ
+   */
+  listContainer?: HTMLElement | null;
 }
 
-/** ส่วน "มอบหมายช่างสำรวจ" (แผนที่ + รายชื่อ + ปุ่มเรียกพิกัด) ใช้ซ้ำได้ทั้งหน้า standalone และ inline ในหน้าสร้างเคส */
-export default function AssignSurveyor({ caseId, onAssigned }: AssignSurveyorProps) {
+/** ส่วน "มอบหมายช่างสำรวจ" (ประเภทเคลม + ปุ่มเรียกพิกัด + รายชื่อ) ใช้ซ้ำได้ทั้งหน้า standalone และ inline ในหน้าสร้างเคส */
+export default function AssignSurveyor({ caseId, onAssigned, listContainer = null }: AssignSurveyorProps) {
   const router = useRouter();
   const { socket } = useSocket();
   const caseIdStr = String(caseId);
@@ -435,37 +442,33 @@ export default function AssignSurveyor({ caseId, onAssigned }: AssignSurveyorPro
         </div>
       )}
 
-      <div className="mb-6">
-        <button type="button" onClick={handleRequestLocation} disabled={loading} className="px-6 py-3 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors">
-          {loading ? 'กำลังเรียกพิกัด...' : 'เรียกพิกัด'}
-        </button>
-      </div>
-
       {/**
-        * แผนที่ซ้าย รายชื่อขวา — เดิมวางซ้อนกัน ต้องเลื่อนผ่านแผนที่ทั้งจอกว่าจะเห็นรายชื่อ
-        * และเห็นทีละ 4-5 คนจากทั้งหมด 35 คน
-        * แยก 2 คอลัมน์เฉพาะจอกว้าง (xl ขึ้นไป) — หน้าสร้างเคสฝังตัวนี้ไว้ในคอลัมน์แคบ
-        * ถ้าแยกตลอดจะบีบจนอ่านไม่ออก
+        * รายชื่อช่างสำรวจ (15/09/69 user ออกแบบใหม่): ไม่มีแผนที่แล้ว — รายละเอียดงานอยู่คอลัมน์ซ้ายของหน้า
+        * รายชื่ออยู่คอลัมน์ขวา (portal ไป listContainer ที่หน้าส่งมา) · ปุ่ม "เรียกพิกัด" ย้ายมาอยู่หัวรายชื่อ
+        * เพราะรายชื่อเรียงตามพิกัดล่าสุด/จังหวัดที่ช่างอยู่ ต้องมีพิกัดก่อนถึงจะเห็นรายชื่อ
         */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+      {(() => {
+        const list = (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">แผนที่ตำแหน่งช่างสำรวจ</h2>
-          <SurveyorMap surveyors={sorted} incidentLat={incidentLat} incidentLng={incidentLng} height="520px" />
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+          <h2 className="text-lg font-semibold text-gray-800">
+            รายชื่อช่างสำรวจ
+            {sorted.length > 0 && (
+              <span className="ml-2 text-sm font-normal text-gray-400">
+                {workload ? `ว่าง ${free.length} จาก ${sorted.length} คน` : `${sorted.length} คน`}
+              </span>
+            )}
+          </h2>
+          <button type="button" onClick={handleRequestLocation} disabled={loading}
+            title="ขอพิกัดล่าสุดจากเครื่องช่างทุกคน แล้วเรียงรายชื่อตามระยะทาง/จังหวัดที่เกิดเหตุ"
+            className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors">
+            {loading ? 'กำลังเรียกพิกัด...' : sorted.length > 0 ? 'เรียกพิกัดใหม่' : 'เรียกพิกัด'}
+          </button>
         </div>
-
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">
-          รายชื่อช่างสำรวจ
-          {sorted.length > 0 && (
-            <span className="ml-2 text-sm font-normal text-gray-400">
-              {workload ? `ว่าง ${free.length} จาก ${sorted.length} คน` : `${sorted.length} คน`}
-            </span>
-          )}
-        </h2>
         {sorted.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">{requestSent ? 'กำลังรอข้อมูลพิกัดจากช่างสำรวจ...' : 'กดปุ่ม "เรียกพิกัด" เพื่อดูตำแหน่งช่างสำรวจ'}</div>
+          <div className="text-center py-8 text-gray-500">{requestSent ? 'กำลังรอข้อมูลพิกัดจากช่างสำรวจ...' : 'กดปุ่ม "เรียกพิกัด" เพื่อดูรายชื่อช่างสำรวจเรียงตามระยะทาง'}</div>
         ) : (
-          <div className="space-y-3 xl:max-h-[520px] xl:overflow-y-auto xl:pr-1">
+          <div className="space-y-3 xl:max-h-[calc(100vh-12rem)] xl:overflow-y-auto xl:pr-1">
             {byDistance ? (
               <div className="text-xs text-gray-500">
                 เรียงตามระยะทาง <span className="text-gray-400">โดยประมาณ</span> — ใกล้สุดขึ้นก่อน
@@ -517,7 +520,9 @@ export default function AssignSurveyor({ caseId, onAssigned }: AssignSurveyorPro
           </div>
         )}
         </div>
-      </div>
+        );
+        return listContainer ? createPortal(list, listContainer) : list;
+      })()}
     </div>
   );
 }
