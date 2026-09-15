@@ -87,6 +87,10 @@ check('เลิกก๊อปข้อมูลครั้งที่ 1 ต�
 const routes = read('src', 'routes', 'integration.routes.ts');
 check('บอทอ่าน report ผ่าน getEffectiveReport (ชุดเดียวกับหน้าเคส)',
   /const eff = await caseService\.getEffectiveReport\(caseId\);[\s\S]{0,200}?data: \{ \.\.\.eff\.report, main_from: eff\.main_from \}/.test(routes));
+/** การ์ดบอทโชว์ "ครั้งที่ N/M" (user ขอ 15/09/69) — รายการนำเข้าต้องส่ง visit_no (สูตรเดียวกับหน้าเคส) + visit_total ของเคลม */
+check('รายการเคสสำหรับบอทส่ง visit_no + visit_total',
+  /COALESCE\(c\.visit_no,\s*\(SELECT COUNT\(\*\)::int FROM cases c2 JOIN survey_reports s2 ON s2\.case_id = c2\.id\s*WHERE s2\.claim_no = sr\.claim_no AND c2\.created_at <= c\.created_at\)\)::int AS visit_no/.test(routes)
+  && /WHERE s3\.claim_no = sr\.claim_no\) AS visit_total/.test(routes));
 check('photos-zip รับเคสอ้างอิง (isurvey_reference) ทั้งที่ reviewed · เคสที่คนอนุมัติจริงยังล็อก',
   /const isReference = c\.rows\[0\]\.source === 'isurvey_reference'/.test(routes) && /status === 'reviewed' && !isReference/.test(routes)
   && routes.includes('อนุมัติแล้ว — เพิ่มรูปไม่ได้จนกว่าแอดมินจะปลดล็อก'));

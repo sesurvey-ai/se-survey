@@ -247,7 +247,14 @@ router.get('/cases', integrationAuth, asyncHandler(async (_req: Request, res: Re
             c.emcs_esurvey_no, c.emcs_status_text,
             to_char(rv.reviewed_at, 'YYYY-MM-DD HH24:MI') AS approved_at,
             COALESCE(NULLIF(rv.inspector_name, ''), ck.first_name || ' ' || ck.last_name) AS approved_by,
-            c.created_at
+            c.created_at,
+            -- "ครั้งที่" ของงานในเคลม (user ขอโชว์บนการ์ดบอท 15/09/69): เลขที่เก็บไว้ ไม่มีก็นับจากลำดับสร้าง (สูตรเดียวกับหน้าเคส)
+            -- + จำนวนครั้งทั้งหมดของเคลมในเว็บ (รวมเคสอ้างอิง) → บอทโชว์ "ครั้งที่ 4/4" และรู้ว่าเป็นงานต่อเนื่อง
+            COALESCE(c.visit_no,
+              (SELECT COUNT(*)::int FROM cases c2 JOIN survey_reports s2 ON s2.case_id = c2.id
+                WHERE s2.claim_no = sr.claim_no AND c2.created_at <= c.created_at))::int AS visit_no,
+            (SELECT COUNT(*)::int FROM cases c3 JOIN survey_reports s3 ON s3.case_id = c3.id
+              WHERE s3.claim_no = sr.claim_no) AS visit_total
        FROM cases c
        LEFT JOIN survey_reports sr ON sr.case_id = c.id
        LEFT JOIN users u ON u.id = c.assigned_to
