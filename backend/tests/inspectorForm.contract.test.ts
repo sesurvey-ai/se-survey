@@ -366,7 +366,10 @@ check('โหลดใหม่แล้วไม่ถอดทั้งหน�
  * — ทุกอย่างรวมรูป/ปุ่มอนุมัติตามครั้งโดยอัตโนมัติ · ก่อนออกจากหน้าถามก่อนถ้าพิมพ์ค้าง
  */
 check('เลือกครั้งที่ = ไปหน้าของครั้งนั้น', /onChange=\{\(e\) => switchVisit\(e\.target\.value\)\}/.test(src));
-check('ไปครั้งอื่นถามก่อนถ้ายังไม่ได้บันทึกร่าง', /const switchVisit = \(id: string\) => \{[\s\S]{0,400}?window\.confirm\(msg\)/.test(src));
+/** user สั่ง 15/09/69: เปลี่ยนครั้งไม่ต้องถาม (งานครั้งก่อนไม่แก้แล้ว) — ของพิมพ์ค้างจริงให้เบราว์เซอร์ถามเองผ่าน beforeunload */
+check('เปลี่ยนครั้งไม่มีกล่องถาม แต่ยังมี beforeunload กันของพิมพ์ค้าง',
+      /const switchVisit = \(id: string\) => \{\s*if \(!id \|\| Number\(id\) === Number\(caseData\?\.id\)\) return;\s*window\.location\.href = `\/inspector\/cases\/\$\{id\}`;\s*\};/.test(src)
+      && !src.includes('เปิดเคสของครั้งที่เลือก?') && /window\.addEventListener\('beforeunload', warn\)/.test(src));
 check('ช่อง "ค่าคัดประจำวัน" รับค่าที่โหลดมาทีหลังได้', /key=\{`dc-\$\{String\(payV/.test(src));
 
 /**

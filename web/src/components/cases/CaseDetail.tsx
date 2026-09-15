@@ -675,11 +675,12 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
    * สลับ "ครั้งที่" = เปิดเคสของครั้งนั้นแทน (คนละเคสกัน — ดูหมายเหตุที่หัวการ์ดค่าใช้จ่าย)
    * เตือนก่อนถ้ายังไม่ได้บันทึก เพราะออกจากหน้าไปแล้วสิ่งที่พิมพ์ค้างไว้หาย
    */
+  /**
+   * ไปหน้าของครั้งที่เลือก — **ไม่ถาม** (user สั่ง 15/09/69: งานครั้งก่อน ๆ ไม่ต้องแก้แล้ว งานที่อนุมัติแล้วถ้าจะแก้ให้แจ้งแอดมิน
+   * กล่องถามทุกครั้งจึงรบกวนเปล่า) · ถ้ามีของพิมพ์ค้างจริง เบราว์เซอร์ถามเองผ่าน beforeunload (dirtyRef) ซึ่งขึ้นเฉพาะตอนแก้ค้างเท่านั้น
+   */
   const switchVisit = (id: string) => {
     if (!id || Number(id) === Number(caseData?.id)) return;
-    const msg = 'เปิดเคสของครั้งที่เลือก?' + String.fromCharCode(10)
-      + 'ถ้ายังไม่ได้กด "บันทึกร่าง" สิ่งที่แก้ค้างไว้จะหาย';
-    if (!window.confirm(msg)) return;
     window.location.href = `/inspector/cases/${id}`;
   };
   const [dmgOpen, setDmgOpen] = useState(false);
