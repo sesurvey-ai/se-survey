@@ -12,7 +12,7 @@
  *
  * รัน: npm test   (backend/)
  */
-import { parseIsurveyXml } from '../src/services/xmlImport.service';
+import { parseIsurveyXml, zeroDash } from '../src/services/xmlImport.service';
 
 let failed = 0;
 function check(name: string, cond: boolean, detail = '') {
@@ -51,6 +51,18 @@ check('ไฟล์ ISURVEY: ข้อความแม่แบบบริษ
 check('ไฟล์ ISURVEY: ผลการดำเนินงาน/ความเห็นผู้ตรวจสอบ ว่าง (XML ไม่ส่งบันทึกหัวหน้างานมา — กรอกบนเว็บ)',
   r.survey_result === '' && r.review_comment === '',
   JSON.stringify([r.survey_result, r.review_comment]));
+
+// กรมธรรม์/เลขเคลมคู่กรณี "ศูนย์ล้วน" = ช่างไม่ทราบ → '-' (user เคาะ 16/09/69 — ชุดเดียวกับตัวแปลง ISURVEY และบอท)
+{
+  const car = (type: string, pol: string, clm: string) =>
+    `<TXN_SURV_CAR><TYPE>${type}</TYPE><POLICYNO>${pol}</POLICYNO><CLAIMNO>${clm}</CLAIMNO></TXN_SURV_CAR>`;
+  const withCars = xml().replace('</INSERT_SURV_REPORT_XML>',
+    car('0', '525013111407', '2026013071573') + car('1', '00', '000000') + car('1', '-0', 'K123') + '</INSERT_SURV_REPORT_XML>');
+  const opp = (parseIsurveyXml(withCars).report as { opposing_parties: Array<Record<string, string>> }).opposing_parties;
+  check('นำเข้า XML: คู่กรณี POLICYNO 00 / CLAIMNO 000000 → "-"', opp?.[0]?.policy_no === '-' && opp?.[0]?.claim_no === '-', JSON.stringify(opp?.[0] && [opp[0].policy_no, opp[0].claim_no]));
+  check('นำเข้า XML: -0 → "-" แต่ค่าจริงคงเดิม', opp?.[1]?.policy_no === '-' && opp?.[1]?.claim_no === 'K123', JSON.stringify(opp?.[1] && [opp[1].policy_no, opp[1].claim_no]));
+  check('นำเข้า XML: zeroDash ไม่แตะค่าที่มีตัวอื่นปน/ว่าง', zeroDash('0A') === '0A' && zeroDash('') === '' && zeroDash('100') === '100' && zeroDash(' 00 ') === '-');
+}
 
 // ไฟล์ที่ emcs_dump.py สกัดจาก EMCS — ข้อมูลอยู่ในกติกาเดิมของ EMCS แล้ว → จับคู่ตรงชื่อ
 const ext = parseIsurveyXml(xml('<!-- SOURCE=EMCS_EXTRACT -->\n'));

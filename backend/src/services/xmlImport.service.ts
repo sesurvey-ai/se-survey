@@ -57,6 +57,11 @@ function blocks(xml: string, name: string): string[] {
 }
 
 /** ค่าของ tag ในบล็อก — " " (ค่าว่างของ el()) และ "-" คืนเป็น '' */
+/** กรมธรรม์/เลขเคลมคู่กรณีที่เป็น "ศูนย์ล้วน" (0 / 00 / 000000 / -0) = ไม่ทราบ → '-' */
+export function zeroDash(s: string): string {
+  return s && /^[\s0-]*0[\s0-]*$/.test(s) ? '-' : s;
+}
+
 function txt(block: string, tag: string): string {
   const m = block.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`));
   if (!m) return '';
@@ -454,8 +459,9 @@ export function parseIsurveyXml(xml: string): XmlImportResult {
       owner_name: txt(c, 'OPO_NAME'),
       owner_address: txt(c, 'DRI_ADDRESS'),
       insurer,
-      policy_no: txt(c, 'POLICYNO'),
-      claim_no: txt(c, 'CLAIMNO'),
+      // ศูนย์ล้วน (00 / 000000 / -0) = ช่างไม่ทราบ → '-' (user เคาะ 16/09/69 — ชุดเดียวกับตัวแปลง ISURVEY และบอท)
+      policy_no: zeroDash(txt(c, 'POLICYNO')),
+      claim_no: zeroDash(txt(c, 'CLAIMNO')),
       policy_type: txt(c, 'INSURE_TYPE'),
       license_no: txt(c, 'DRI_DRVID'),
       license_type: LICENSE_BY_CODE[txt(c, 'DRI_DRVTYPE')] ?? '',
