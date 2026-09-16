@@ -2,9 +2,10 @@
  * Contract test — ตารางค่าสำรวจที่เขียนกลับ ISURVEY ตอนอนุมัติ (services/isurveyPull.service.ts buildIsurveyRates)
  *
  * ล็อกกติกา (user สั่ง 16/09/69 หลังเห็นเคส #337: นอกเวลา 200 โผล่เป็น "ค่าใช้จ่ายอื่นๆ" บน ISURVEY):
- *  1) ฝั่งพนักงาน (sur) "อื่น ๆ" = ช่อง "ค่าใช้จ่ายอื่นๆ" บนเว็บเท่านั้น — **ไม่บวกนอกพื้นที่/นอกเวลา**
- *     (ISURVEY ไม่มีแถวสำหรับสองตัวนี้ รู้แค่ธง ใน/นอกเวลา + นอกพื้นที่ ซึ่ง service คงค่าเดิมไว้)
- *  2) se-billing ยังรวมนอกพื้นที่/นอกเวลาเข้าเงินพนักงานตามสูตรเดิม (คนละท่อ ห้ามเปลี่ยนตามข้อ 1)
+ *  1) ฝั่งพนักงาน (sur) "อื่น ๆ" = ช่อง "ค่าใช้จ่ายอื่นๆ" บนเว็บเท่านั้น — นอกพื้นที่/นอกเวลา **บวกเข้า "ค่าบริการ"** แทน
+ *     (ISURVEY ไม่มีแถวสำหรับสองตัวนี้ รู้แค่ธง ใน/นอกเวลา + นอกพื้นที่ ซึ่ง service คงค่าเดิมไว้ · user ต้องการให้ยอดรวมเซอร์เวย์
+ *     บน ISURVEY = ยอดพนักงานบน se-survey เช่น 400 + 200 → ค่าบริการเสนอ 600) · ค่าตั้งต้นเมื่อติ๊กแต่ไม่ใส่เลข = 50/100 เหมือน pay.service
+ *  2) se-billing ยังรวมนอกพื้นที่/นอกเวลาเข้าเงินพนักงานตามสูตรเดิมแยกรายการ (คนละท่อ ห้ามเปลี่ยนตามข้อ 1)
  *  3) ฝั่งประกัน (ins) = ราคาต่อหน่วย × จำนวน · "อื่น ๆ" = other_fee_price + คำอธิบาย
  *
  * รัน: npm test   (backend/)
@@ -26,8 +27,12 @@ const read = (p: string) => fs.readFileSync(path.join(__dirname, '..', p), 'utf8
   const fn = svc.slice(i, svc.indexOf('\n}\n', i));
   check('มี buildIsurveyRates', i > 0 && fn.length > 100);
   const sur = fn.slice(fn.indexOf('out.sur = {'), fn.indexOf('};', fn.indexOf('out.sur = {')));
-  check('sur.other = other_fee อย่างเดียว (ไม่บวกนอกพื้นที่/นอกเวลา)',
-    /other:\s*num\(r\.other_fee\)\s*,/.test(sur) && !/out_of_area|out_of_hours|\boa\b|\boh\b/.test(fn));
+  check('sur.other = other_fee อย่างเดียว (ไม่บวกนอกพื้นที่/นอกเวลา)', /other:\s*num\(r\.other_fee\)\s*,/.test(sur));
+  check('sur.invest = service_fee + นอกพื้นที่ + นอกเวลา (ยอดรวมเซอร์เวย์บน ISURVEY = ยอดพนักงานบนเว็บ)',
+    /invest:\s*num\(r\.service_fee\)\s*\+\s*oa\s*\+\s*oh\s*,/.test(sur));
+  check('ค่าตั้งต้นติ๊กแต่ไม่ใส่เลข = นอกพื้นที่ 50 · นอกเวลา 100 (ชุดเดียวกับ pay.service)',
+    /out_of_area_amt == null \? 50/.test(fn) && /out_of_hours_amt == null \? 100/.test(fn)
+    && /out_of_area_amt\)\s*\?\?\s*50/.test(read('src/services/pay.service.ts')) && /out_of_hours_amt\)\s*\?\?\s*100/.test(read('src/services/pay.service.ts')));
   check('sur ยังส่งครบ: invest/trans/photo/tel/insure/claim/daily/deduct',
     ['invest:', 'trans:', 'photo:', 'tel:', 'insure:', 'claim:', 'daily:', 'deduct: Math.abs('].every((k) => sur.includes(k)));
   const ins = fn.slice(fn.indexOf('out.ins = {'), fn.indexOf('};', fn.indexOf('out.ins = {')));

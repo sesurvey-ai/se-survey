@@ -55,8 +55,9 @@ async function callService<T>(path: string, body: Record<string, unknown>, timeo
 /**
  * ตารางค่าสำรวจที่จะเขียนลง ISURVEY แท็บ 1 — ยอดรวมของแต่ละแถว (ไม่ใช่ราคาต่อหน่วย)
  *   sur (ฝั่งพนักงาน) ← survey_pay · "อื่น ๆ" = ช่อง "ค่าใช้จ่ายอื่นๆ" บนเว็บเท่านั้น
- *     ⛔ ไม่รวมนอกพื้นที่/นอกเวลา (user สั่ง 16/09/69 เคส #337: 200 นอกเวลาโผล่เป็น "ค่าใช้จ่ายอื่นๆ" บน ISURVEY) —
- *     ISURVEY ไม่มีแถวสำหรับสองตัวนี้ รู้แค่ธง ใน/นอกเวลา + นอกพื้นที่ ซึ่งคงค่าเดิมไว้อยู่แล้ว · เงินพนักงานส่วนนี้ยังไป se-billing ตามสูตรเดิม
+ *     นอกพื้นที่/นอกเวลา **บวกเข้า "ค่าบริการ"** (user เคาะ 16/09/69 หลังเคส #337: เดิมไปโผล่เป็น "ค่าใช้จ่ายอื่นๆ" 200 บน ISURVEY) —
+ *     ISURVEY ไม่มีแถวสำหรับสองตัวนี้ (รู้แค่ธง ใน/นอกเวลา + นอกพื้นที่ ซึ่งคงค่าเดิมไว้) แต่ user ต้องการให้ยอดรวมเซอร์เวย์บน ISURVEY
+ *     = ยอดพนักงานบน se-survey (ตัวอย่าง ค่าบริการ 400 + นอกเวลา 200 → ISURVEY ค่าบริการเสนอ 600) · se-billing ยังได้แยกรายการตามสูตรเดิม
  *   ins (ฝั่งประกัน) ← survey_expenses · ราคาต่อหน่วย × จำนวน (ค่ารูป 5 × 10 = 50 ตรงกับที่ ISURVEY เก็บเป็นยอดรวม)
  * ไม่มีข้อมูลฝั่งไหน = ไม่ส่งฝั่งนั้น (service คงค่าเดิมของ ISURVEY ไว้) · ไม่มีทั้งคู่ = undefined
  */
@@ -64,8 +65,11 @@ function buildIsurveyRates(r: Record<string, unknown>): Record<string, Record<st
   const num = (v: unknown): number => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
   const out: Record<string, Record<string, unknown>> = {};
   if (r.pay_case_id) {
+    // ค่าตั้งต้นเมื่อติ๊กแต่ไม่ใส่เลข (นอกพื้นที่ 50 · นอกเวลา 100) = ชุดเดียวกับ pay.service ตอนคิดยอดรวม
+    const oa = r.out_of_area ? (r.out_of_area_amt == null ? 50 : num(r.out_of_area_amt)) : 0;
+    const oh = r.out_of_hours ? (r.out_of_hours_amt == null ? 100 : num(r.out_of_hours_amt)) : 0;
     out.sur = {
-      invest: num(r.service_fee), trans: num(r.travel_fee), photo: num(r.photo_fee), tel: num(r.phone_fee),
+      invest: num(r.service_fee) + oa + oh, trans: num(r.travel_fee), photo: num(r.photo_fee), tel: num(r.phone_fee),
       insure: num(r.bail_fee), claim: num(r.claim_fee), daily: num(r.daily_fee),
       other: num(r.other_fee), deduct: Math.abs(num(r.deduct_fee)),
     };
