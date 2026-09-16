@@ -659,6 +659,7 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
   const [driverDist, setDriverDist] = useState<string>(report.driver_district || '-- เขต --');
   // ตำบลของที่อยู่ผู้ขับขี่ (16/09/69): รายการตามจังหวัด/อำเภอจาก /api/geo/tumbons · ค่าที่บันทึกไว้แต่ไม่อยู่ในรายการยังโชว์
   const [driverTumbon, setDriverTumbon] = useState<string>(report.driver_subdistrict || '');
+  const [driverMoo, setDriverMoo] = useState<string>(report.driver_moo || '');   // ควบคุมค่าเพื่อโชว์คำว่า "ม." หน้าเลขเมื่อมีค่า
   const [driverTumbons, setDriverTumbons] = useState<string[]>([]);
   useEffect(() => {
     if (!driverProv || driverProv === '0' || !driverDist || driverDist.startsWith('--')) { setDriverTumbons([]); return; }
@@ -2809,13 +2810,19 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
               </F>
 
               {/* ที่อยู่ + จังหวัด + เขต/อำเภอ บังคับทั้ง 3 ช่อง (เจอสดตอนเทส 2026-08-01) */}
-              {/* 16/09/69: ที่อยู่ · หมู่ (ไม่บังคับ) · จังหวัด · อำเภอ · ตำบล เรียงตามนี้ (user เคาะ) — ออก EMCS/XML เป็น "46/23 ม.7 ต.ท้ายบ้าน" จังหวัด/อำเภอไป dropdown
-                  ดอกจันแดงแยกช่องใครช่องมัน (จังหวัด/อำเภอ/ตำบลบังคับ) */}
+              {/* 16/09/69 (user เคาะ): แถวเดียว ที่อยู่+หมู่ | จังหวัด | อำเภอ | ตำบล — ออก EMCS/XML เป็น "46/23 ม.7 ต.ท้ายบ้าน" จังหวัด/อำเภอไป dropdown
+                  ที่อยู่กับหมู่อยู่ช่องเดียวกันแบบ บัตรประชาชน+คนไทย · หมู่ไม่บังคับ ไม่มี placeholder — พิมพ์แล้วขึ้น "ม." หน้าเลขให้เอง
+                  ดอกจันแดงแยกช่องใครช่องมัน (ที่อยู่/จังหวัด/อำเภอ/ตำบลบังคับ) */}
               <F label="ที่อยู่ปัจจุบัน (บ้านเลขที่ / ถนน)" req={<Req of="driver_address" />}>
-                <input type="text" disabled={d} name="driver_address" defaultValue={report.driver_address || ''} className={CTL(d)} placeholder="บ้านเลขที่ / ถนน / ซอย" />
-              </F>
-              <F label="หมู่">
-                <input type="text" disabled={d} name="driver_moo" defaultValue={report.driver_moo || ''} className={CTL(d)} placeholder="ม." title="หมู่ที่ (ไม่บังคับ)" />
+                <div className="flex items-center gap-1">
+                  <input type="text" disabled={d} name="driver_address" defaultValue={report.driver_address || ''} placeholder="บ้านเลขที่ / ถนน / ซอย"
+                    className={`flex-1 min-w-0 border border-gray-300 rounded-none h-9 px-2.5 text-gray-800 ${d ? 'bg-gray-100' : 'bg-white'} text-sm`} />
+                  <div className="relative w-[5.25rem] shrink-0" title="หมู่ที่ (ไม่บังคับ)">
+                    {driverMoo ? <span className="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-gray-500 pointer-events-none">ม.</span> : null}
+                    <input type="text" disabled={d} name="driver_moo" value={driverMoo} onChange={e => setDriverMoo(e.target.value)}
+                      className={`w-full border border-gray-300 rounded-none h-9 ${driverMoo ? 'pl-7 pr-2.5' : 'px-2.5'} text-gray-800 ${d ? 'bg-gray-100' : 'bg-white'} text-sm`} />
+                  </div>
+                </div>
               </F>
               <F label="จังหวัด" req={<Req of="driver_province" />}>
                 <select disabled={d} name="driver_province" value={driverProv} onChange={e => { setDriverProv(e.target.value); setDriverDist('-- เขต --'); setDriverTumbon(''); }} className={CTL(d)}>
