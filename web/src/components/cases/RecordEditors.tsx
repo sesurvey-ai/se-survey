@@ -514,7 +514,7 @@ function OwnerNameCell({ it, set }: { it: LooseRecord; set: (k: string, v: strin
 function AddressMooCell({ it, set }: { it: LooseRecord; set: (k: string, v: string) => void }) {
   const box = `border rounded-none h-9 text-sm text-gray-800 ${OK_CLS}`;
   return (
-    <div>
+    <div className="md:col-start-1">{/* ขึ้นแถวใหม่เสมอ → ที่อยู่+หมู่ | จังหวัด | อำเภอ | ตำบล อยู่แถวเดียวกัน (แบบเดียวกับผู้ขับขี่รถประกัน) */}
       <label className="block text-xs text-[var(--md-muted)] mb-0.5">ที่อยู่ผู้ขับขี่ (บ้านเลขที่ / ถนน)</label>
       <div className="flex items-center gap-1">
         <input type="text" className={`${box} flex-1 min-w-0 px-3`} value={String(it.address ?? '')} placeholder="บ้านเลขที่ / ถนน / ซอย"
