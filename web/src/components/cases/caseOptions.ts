@@ -116,12 +116,18 @@ const CAR_TYPE_LABEL_TO_CODE: Record<string, string> = {
 /** ตัวเลือกยี่ห้อของประเภทรถนี้ — รับได้ทั้ง code (A/E/M/O/T/V/W) และป้ายไทย
  *  current: ค่าที่บันทึกไว้แล้ว ถ้าไม่อยู่ในลิสต์ (ข้อมูลเก่าเป็นไทย เช่น 'เอ็มจี')
  *  ให้คงไว้เป็นตัวเลือก ไม่งั้น select จะเด้งไป '-- ระบุ --' แล้วเซฟทับค่าเดิมทิ้ง */
+/** ยี่ห้อ "-ALL-" = ตัวเลือกจริงใน ddlCMFG ของ EMCS ทุกประเภทรถ ยกเว้น รถอื่นๆ (user พบ 16/09/69) — ใช้ตอน "รอตรวจสอบ"/ไม่ทราบยี่ห้อ
+ *  ไม่อยู่ในตาราง CAR_BRANDS_BY_TYPE (ตารางนั้น sync จาก EMCS และล็อก backend=web) จึงเติมให้ตรงนี้ · ชุดเดียวกับแอป (survey_master.dart kAllBrand) */
+export const ALL_BRAND = '-ALL-';
+
 export function carBrandOptions(carType?: string | null, current?: string | null): string[] {
   const raw = (carType || '').trim();
-  const list = CAR_BRANDS_BY_TYPE[CAR_TYPE_LABEL_TO_CODE[raw] ?? raw] ?? [];
+  const code = CAR_TYPE_LABEL_TO_CODE[raw] ?? raw;
+  const list = CAR_BRANDS_BY_TYPE[code] ?? [];
+  const all = list.length && code !== 'O' ? [ALL_BRAND] : [];
   const cur = (current || '').trim();
-  const keep = cur && cur !== '-- ระบุ --' && !list.includes(cur) ? [cur] : [];
-  return ['-- ระบุ --', ...list, ...keep];
+  const keep = cur && cur !== '-- ระบุ --' && !list.includes(cur) && !all.includes(cur) ? [cur] : [];
+  return ['-- ระบุ --', ...all, ...list, ...keep];
 }
 
 // ── ยี่ห้อ ↔ ประเภทรถ ตามกติกา EMCS (15/09/69 เคส #300: เก๋งเอเชีย + MERCEDES-BENZ อนุมัติผ่านแล้วบอทติดที่ EMCS) ──
@@ -189,6 +195,11 @@ export function brandTypeIssue(type: unknown, brand: unknown): BrandTypeIssue | 
   const code = carTypeCode(type);
   const b = normalizeBrand(brand);
   if (!code || !b) return null;
+  // "-ALL-" = ตัวเลือกจริงใน ddlCMFG ของ EMCS ทุกประเภทรถ ยกเว้น รถอื่นๆ — ใช้ตอน "รอตรวจสอบ"/ไม่ทราบยี่ห้อ (user พบ 16/09/69)
+  if (b === ALL_BRAND) {
+    return code === 'O' ? { brand: b, typeCode: code, typeLabel: CAR_TYPE_LABELS[code], typesWithBrand: ['A', 'E', 'M', 'T', 'V', 'W'], suggestion: null,
+      message: 'ยี่ห้อ "-ALL-" ไม่มีในประเภทรถ รถอื่นๆ ของ EMCS — เลือกยี่ห้อจริง หรือเปลี่ยนประเภทรถ' } : null;
+  }
   const list = CAR_BRANDS_BY_TYPE[code];
   if (!list || list.includes(b)) return null;
   const types = Object.keys(CAR_BRANDS_BY_TYPE).filter((t) => CAR_BRANDS_BY_TYPE[t].includes(b));

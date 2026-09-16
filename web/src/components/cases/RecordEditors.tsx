@@ -17,7 +17,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import api from '@/lib/api';
 import { PROVINCE_OPTIONS, CAR_COLOR_OPTIONS, EV_TYPE_OPTIONS, POLICY_TYPE_OPTIONS, carBrandOptions,
-         brandTypeIssue, CAR_TYPE_LABELS, isValidSeDate } from './caseOptions';
+         brandTypeIssue, CAR_TYPE_LABELS, isValidSeDate, carTypeCode, ALL_BRAND } from './caseOptions';
 import { districtOptions } from './districtOptions';
 import { insurerOptions, isEmcsInsurer } from './insurerOptions';
 import DamageDialog from './DamageDialog';
@@ -562,7 +562,7 @@ export function OpponentEditor({ items, onChange }: {
 
   /** "รอตรวจสอบ" (คู่กรณีหลบหนี / ยังไม่มีรายละเอียด) — สถานะเดียวกับแอป (`pending`, user สั่ง 16/09/69)
    *  ติ๊กแล้วเติมช่องบังคับที่ยังว่างด้วยค่าที่ EMCS ยอมรับ ชุดเดียวกับ OpponentEditor._applyPending ของแอป
-   *  (ข้อความ = "รอตรวจสอบ" · ประเภทรถ รถอื่นๆ · จังหวัด อื่นๆ · ประกัน อื่นๆ · เพศ ชาย · คำนำหน้า นาย · วันเกิด 01/01/2525 + อายุ)
+   *  (ข้อความ = "รอตรวจสอบ" · ประเภทรถ เก๋งเอเชีย + ยี่ห้อ "-ALL-" (ตัวเลือกจริงของ EMCS ยกเว้นรถอื่นๆ) · จังหวัด อื่นๆ · ประกัน อื่นๆ · เพศ ชาย · คำนำหน้า นาย · วันเกิด 01/01/2525 + อายุ)
    *  + กรมธรรม์ "รอตรวจสอบ" (เว็บบังคับช่องนี้ แอปไม่) · ของที่กรอกไว้แล้วไม่ทับ · เอาติ๊กออกไม่ล้างค่า
    *  ที่อยู่: ว่าง/"รอตรวจสอบ" = ไม่บังคับ 3 ช่อง (opponentHasAddress) · บอทออก EMCS เป็น "รอตรวจสอบ" ตามค่าในช่อง */
   const setPending = (i: number, on: boolean) =>
@@ -572,7 +572,9 @@ export function OpponentEditor({ items, onChange }: {
       if (!on) return next;
       const fill = (k: string, v: string) => { if (!chosen(next[k])) next[k] = v; };
       for (const k of ['owner_name', 'plate', 'first_name', 'last_name', 'address', 'cid']) fill(k, PENDING_TEXT);
-      fill('car_type', 'รถอื่นๆ'); fill('province', 'อื่นๆ'); fill('insurer', 'อื่นๆ'); fill('gender', 'ชาย'); fill('title', 'นาย');
+      // ประเภทรถไม่รู้ → เก๋งเอเชีย (ประเภทที่ EMCS มียี่ห้อ "-ALL-" ให้เลือก; รถอื่นๆ ไม่มี) · ยี่ห้อว่าง → "-ALL-" (user พบ 16/09/69)
+      fill('car_type', 'เก๋งเอเชีย'); fill('province', 'อื่นๆ'); fill('insurer', 'อื่นๆ'); fill('gender', 'ชาย'); fill('title', 'นาย');
+      if (!chosen(next.car_brand) && carTypeCode(next.car_type) !== 'O') next.car_brand = ALL_BRAND;
       fill('birthdate', '01/01/2525');
       if (!chosen(next.age)) {
         const y = Number(String(next.birthdate ?? '').split('/')[2]);

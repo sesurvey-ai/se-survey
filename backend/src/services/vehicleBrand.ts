@@ -87,10 +87,18 @@ export type BrandTypeIssue = {
 };
 
 /** ยี่ห้อกับประเภทรถเข้ากันตามลิสต์ EMCS ไหม — null = ไม่มีปัญหา (รวมกรณีค่าว่าง/ประเภทไม่รู้จัก) */
+/** ยี่ห้อ "-ALL-" = ตัวเลือกจริงใน ddlCMFG ของ EMCS ทุกประเภทรถ ยกเว้น รถอื่นๆ (user พบ 16/09/69) — เว็บ/แอปใช้ตอน "รอตรวจสอบ" · ชุดเดียวกับ web caseOptions ALL_BRAND */
+export const ALL_BRAND = '-ALL-';
+
 export function brandTypeIssue(type: unknown, brand: unknown): BrandTypeIssue | null {
   const code = carTypeCode(type);
   const b = normalizeBrand(brand);
   if (!code || !b) return null;
+  // "-ALL-" = ตัวเลือกจริงใน ddlCMFG ของ EMCS ทุกประเภทรถ ยกเว้น รถอื่นๆ — ใช้ตอน "รอตรวจสอบ"/ไม่ทราบยี่ห้อ (user พบ 16/09/69)
+  if (b === ALL_BRAND) {
+    return code === 'O' ? { brand: b, typeCode: code, typeLabel: CAR_TYPE_LABELS[code], typesWithBrand: ['A', 'E', 'M', 'T', 'V', 'W'], suggestion: null,
+      message: 'ยี่ห้อ "-ALL-" ไม่มีในประเภทรถ รถอื่นๆ ของ EMCS — เลือกยี่ห้อจริง หรือเปลี่ยนประเภทรถ' } : null;
+  }
   const list = CAR_BRANDS_BY_TYPE[code];
   if (!list || list.includes(b)) return null;
   const types = brandTypesFor(b);

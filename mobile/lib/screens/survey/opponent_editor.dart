@@ -203,7 +203,10 @@ class _OpponentEditorState extends State<OpponentEditor> {
       fill(k);
     }
     // ช่องบังคับชนิดตัวเลือก/วันที่/ตัวเลข → ใส่ "รอตรวจสอบ" ไม่ได้ ต้องเป็นค่าที่มีจริงในลิสต์
-    if (_carType.isEmpty) _carType = 'รถอื่นๆ';
+    // ประเภทรถไม่รู้ → เก๋งเอเชีย (ประเภทที่ EMCS มียี่ห้อ "-ALL-"; รถอื่นๆ ไม่มี) · ยี่ห้อว่าง → "-ALL-" (user พบ 16/09/69)
+    // เดิมใส่ รถอื่นๆ แล้วยี่ห้อค้างว่าง → เว็บกั้นอนุมัติ/บอทหยุดถามยี่ห้อ
+    if (_carType.isEmpty) _carType = 'เก๋งเอเชีย';
+    if (_carBrand.isEmpty && _carType != 'รถอื่นๆ') _carBrand = kAllBrand;
     if (_province.isEmpty) _province = 'อื่นๆ';
     if (_insurer.isEmpty) _insurer = 'อื่นๆ';       // = มีประกันกับบริษัทนอกลิสต์ (ช่องกรมธรรม์จึงไม่โผล่)
     if (_gender.isEmpty) _gender = 'ชาย';

@@ -130,10 +130,16 @@ const Map<String, String> kCarTypeCodeToLabel = {
   'T': 'กระบะ', 'V': 'รถตู้', 'W': 'รถบรรทุก',
 };
 
-/// ยี่ห้อที่เลือกได้ของประเภทรถนี้ — รับได้ทั้ง code ('A') และป้าย ('เก๋งเอเชีย')
+/// ยี่ห้อ "-ALL-" = ตัวเลือกจริงใน ddlCMFG ของ EMCS ทุกประเภทรถ ยกเว้น รถอื่นๆ (user พบ 16/09/69)
+/// ใช้ตอน "รอตรวจสอบ"/ไม่ทราบยี่ห้อ · ไม่อยู่ในตาราง kCarBrandsByType (sync จาก EMCS) จึงเติมให้ที่ carBrandsFor · ชุดเดียวกับเว็บ (caseOptions ALL_BRAND)
+const String kAllBrand = '-ALL-';
+
+/// ยี่ห้อที่เลือกได้ของประเภทรถนี้ — รับได้ทั้ง code ('A') และป้าย ('เก๋งเอเชีย') · "-ALL-" อยู่หัวลิสต์ (ยกเว้นรถอื่นๆ)
 List<String> carBrandsFor(String carType) {
   final k = kCarTypeCodeToLabel[carType] ?? carType;
-  return kCarBrandsByType[k] ?? const <String>[];
+  final list = kCarBrandsByType[k] ?? const <String>[];
+  if (list.isEmpty || k == 'รถอื่นๆ') return list;
+  return [kAllBrand, ...list];
 }
 
 // สีรถ — sync EMCS master ddlCar_Color (verbatim ตามลำดับ value) 2026-07-25

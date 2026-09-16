@@ -18,7 +18,7 @@ import {
 } from '../src/services/vehicleBrand';
 import {
   CAR_BRANDS_BY_TYPE as WEB_BRANDS, BRAND_ALIASES as WEB_ALIASES, THAI_BRANDS as WEB_THAI,
-  brandTypeIssue as webBrandTypeIssue, isValidSeDate,
+  brandTypeIssue as webBrandTypeIssue, isValidSeDate, carBrandOptions as webCarBrandOptions,
 } from '../../web/src/components/cases/caseOptions';
 import { parseSe, emcsNameWarnings } from '../src/services/xmlExport.service';
 
@@ -55,6 +55,18 @@ check('ยี่ห้อที่ไม่มีในลิสต์ไหน�
 check('web brandTypeIssue ให้ผลเดียวกับ backend',
   JSON.stringify(webBrandTypeIssue('เก๋งเอเชีย', 'MERCEDES-BENZ')) === JSON.stringify(iss)
   && webBrandTypeIssue('A', 'TOYOTA') === null);
+// "-ALL-" = ตัวเลือกจริงของ EMCS ทุกประเภท ยกเว้น รถอื่นๆ — ใช้ตอน "รอตรวจสอบ" (user พบ 16/09/69)
+check('"-ALL-": ทุกประเภทไม่มีปัญหา ยกเว้นรถอื่นๆ (เตือน ไม่มีข้อเสนอ) · web = backend · normalizeBrand คงค่า',
+  ['A', 'E', 'M', 'T', 'V', 'W'].every((c) => brandTypeIssue(c, '-ALL-') === null && webBrandTypeIssue(c, '-ALL-') === null)
+  && !!brandTypeIssue('O', '-ALL-') && /รถอื่นๆ/.test(brandTypeIssue('O', '-ALL-')!.message) && brandTypeIssue('O', '-ALL-')!.suggestion === null
+  && JSON.stringify(webBrandTypeIssue('รถอื่นๆ', '-ALL-')) === JSON.stringify(brandTypeIssue('O', '-ALL-')) && normalizeBrand('-ALL-') === '-ALL-');
+check('เว็บ/แอป: "-ALL-" อยู่หัวลิสต์ยี่ห้อทุกประเภทยกเว้นรถอื่นๆ · รอตรวจสอบ = เก๋งเอเชีย + -ALL- · บอทไม่ตัดทิ้ง',
+  webCarBrandOptions('เก๋งเอเชีย')[1] === '-ALL-' && webCarBrandOptions('T')[1] === '-ALL-' && !webCarBrandOptions('รถอื่นๆ').includes('-ALL-') && !webCarBrandOptions('').includes('-ALL-')
+  && webCarBrandOptions('เก๋งเอเชีย', '-ALL-').filter((x) => x === '-ALL-').length === 1
+  && read('../mobile/lib/data/survey_master.dart').includes('return [kAllBrand, ...list];') && read('../mobile/lib/data/survey_master.dart').includes("if (list.isEmpty || k == 'รถอื่นๆ') return list;")
+  && read('../mobile/lib/screens/survey/opponent_editor.dart').includes("if (_carBrand.isEmpty && _carType != 'รถอื่นๆ') _carBrand = kAllBrand;")
+  && (!fs.existsSync(path.join(__dirname, '..', '..', '..', 'se-autokey', 'autokey', 'car_brand.py'))
+      || fs.readFileSync(path.join(__dirname, '..', '..', '..', 'se-autokey', 'autokey', 'car_brand.py'), 'utf8').includes('if s.upper() == "-ALL-":')));
 
 // 4) normalizeVehicleFields
 {
