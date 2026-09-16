@@ -2831,7 +2831,7 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
                   {districtOptions(driverProv, driverProv === report.driver_province ? report.driver_district : '').map(dt => <option key={dt} value={dt}>{dt}</option>)}
                 </select>
               </F>
-              <F label="ตำบล / แขวง">
+              <F label="ตำบล / แขวง" req={<Req of="driver_subdistrict" />}>
                 <select disabled={d} name="driver_subdistrict" value={driverTumbon} onChange={e => setDriverTumbon(e.target.value)} className={CTL(d)}>
                   <option value="">-- ตำบล --</option>
                   {[...(driverTumbon && !driverTumbons.includes(driverTumbon) ? [driverTumbon] : []), ...driverTumbons].map(t => <option key={t} value={t}>{t}</option>)}

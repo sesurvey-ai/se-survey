@@ -2885,6 +2885,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
           ['ที่อยู่ปัจจุบัน', has(_driverAddressCtl)],
           ['จังหวัดผู้ขับขี่', has(_driverProvinceCtl)],
           ['เขต/อำเภอผู้ขับขี่', has(_driverDistrictCtl)],
+          ['ตำบล/แขวงผู้ขับขี่', has(_driverSubdistrictCtl)],   // บังคับ (user สั่ง 16/09/69) — หมู่ไม่บังคับ
         ]);
         // เลขใบขับขี่บังคับเฉพาะเมื่อ "มีใบขับขี่" (ปิดสวิตช์ = ไม่มี ไม่นับว่าขาด)
         if (_driverHasLicense) s3.addAll(miss([['เลขใบขับขี่', has(_driverLicenseNoCtl)]]));
@@ -3401,7 +3402,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
         _ocrField('driver_district', _districtDropdown()),
         // 16/09/69: ตำบล (เลือกตามอำเภอ) + หมู่ (พิมพ์ ไม่บังคับ) — EMCS ไม่มีช่องแยก ระบบประกอบเป็น "46/23 ม.7 ต.ท้ายบ้าน" ตอนออก EMCS/XML
         _tumbonDropdown(),
-        _txt(_driverMooCtl, 'หมู่ที่ (ม.) — ไม่บังคับ', keyboardType: TextInputType.text),
+        _txt(_driverMooCtl, 'หมู่ที่ (ม.) — ไม่บังคับ', keyboardType: TextInputType.text),   // หมู่ไม่บังคับ (บ้านในเมืองไม่มีหมู่)
         // ── ใบขับขี่ (เปิด/ปิด — บางเคสไม่มีใบขับขี่) ──
         _switchRow('มีใบขับขี่', _driverHasLicense, (v) => setState(() {
               _driverHasLicense = v;
@@ -4498,14 +4499,14 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
         hint: 'เลือกเขต/อำเภอ', req: true, key: ValueKey('dd_${_driverProvinceCtl.text}_${_driverDistrictCtl.text}'));
   }
 
-  /// ตำบล/แขวง ตามจังหวัด+อำเภอที่เลือก (16/09/69) — ค่าที่เคยบันทึกแต่ไม่อยู่ในรายการ (เคสเก่า/สะกดต่าง) ยังโชว์ ไม่ล้างทิ้ง · ไม่บังคับ
+  /// ตำบล/แขวง ตามจังหวัด+อำเภอที่เลือก (16/09/69) — ค่าที่เคยบันทึกแต่ไม่อยู่ในรายการ (เคสเก่า/สะกดต่าง) ยังโชว์ ไม่ล้างทิ้ง · บังคับ (จุดแดง เหมือนจังหวัด/อำเภอ)
   Widget _tumbonDropdown() {
     final tumbons = _tumbonsData[_driverProvinceCtl.text]?[_driverDistrictCtl.text] ?? const <String>[];
     final cur = _driverSubdistrictCtl.text;
     final items = (cur.isNotEmpty && !tumbons.contains(cur)) ? <String>[cur, ...tumbons] : tumbons;
     return _dd('ตำบล / แขวง', cur, items,
         (v) => setState(() { _driverSubdistrictCtl.text = v ?? ''; }),
-        hint: 'เลือกตำบล/แขวง', key: ValueKey('dt_${_driverProvinceCtl.text}_${_driverDistrictCtl.text}_$cur'));
+        hint: 'เลือกตำบล/แขวง', req: true, key: ValueKey('dt_${_driverProvinceCtl.text}_${_driverDistrictCtl.text}_$cur'));
   }
 
   Widget _licenseTypeDropdown() {

@@ -80,6 +80,7 @@ const read = (p: string) => fs.readFileSync(path.join(ROOT, p), 'utf8');
 // ── 4) หน้าจอ ──
 {
   const web = read('web/src/components/cases/CaseDetail.tsx');
+  check('เว็บ: ตำบลบังคับ (จุดแดง Req of=driver_subdistrict) · หมู่ไม่บังคับ', web.includes('<F label="ตำบล / แขวง" req={<Req of="driver_subdistrict" />}>') && !/Req of="[^"]*driver_moo/.test(web));
   check('เว็บ: ช่อง driver_moo + select driver_subdistrict โหลดจาก /api/geo/tumbons · เปลี่ยนจังหวัด/อำเภอแล้วล้างตำบล',
     web.includes('name="driver_moo"') && web.includes('name="driver_subdistrict"') && web.includes("api.get('/api/geo/tumbons'")
     && (web.match(/setDriverTumbon\(''\)/g) ?? []).length >= 2);
@@ -88,6 +89,8 @@ const read = (p: string) => fs.readFileSync(path.join(ROOT, p), 'utf8');
     dart.includes('_driverMooCtl') && dart.includes("_driverMooCtl: 'driver_moo'") && dart.includes("'driver_subdistrict': _driverSubdistrictCtl.text.trim()")
     && dart.includes('Widget _tumbonDropdown()') && dart.includes("loadString('assets/thai_tumbons.json')")
     && (dart.match(/_driverSubdistrictCtl\.text = ''/g) ?? []).length >= 2);
+  check('มือถือ: ตำบลบังคับ (req + อยู่ในรายการช่องบังคับหมวด 3) · หมู่ไม่บังคับ',
+    dart.includes("hint: 'เลือกตำบล/แขวง', req: true") && dart.includes("['ตำบล/แขวงผู้ขับขี่', has(_driverSubdistrictCtl)]") && !dart.includes("has(_driverMooCtl)"));
 }
 
 // ── ฝั่งบอท (se-autokey ข้าง ๆ — ข้ามถ้าไม่มี) ──
