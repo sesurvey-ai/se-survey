@@ -13,7 +13,7 @@
  */
 
 import { EMCS_DISTRICTS } from '../data/emcsDistricts';
-import { driverAddressLine } from './driverAddress';
+import { driverAddressLine, opponentAddressLine, withTitle } from './driverAddress';
 
 // ── SE Survey identity ในพอร์ทัล (คงที่ต่อบริษัท; override ได้ผ่าน env) ──
 const SURVEY_ID = process.env.PORTAL_SURVEY_ID || '5684';
@@ -446,7 +446,8 @@ function buildCar(c: Row, type: number, insured: boolean): string {
 
   return '<TXN_SURV_CAR>' +
     el('TYPE', type) +
-    el('OPO_NAME', insured ? '' : c.owner_name) +
+    // เจ้าของรถคู่กรณี: คำนำหน้า + ชื่อ "นาย บุญเลี้ยง ชงสุวรรณ" (16/09/69) — เคสเก่าไม่มี owner_title = ชื่อตามเดิม
+    el('OPO_NAME', insured ? '' : withTitle(c.owner_title, c.owner_name)) +
     el('OPO_ADDRESS', insured ? '' : c.owner_address) +
     el('OPO_TYPE', insured ? 'รถประกัน' : 'รถคู่กรณี') +
     el('CAR_REGNO', insured ? c.license_plate : c.plate) +
@@ -465,7 +466,8 @@ function buildCar(c: Row, type: number, insured: boolean): string {
     el('DRI_AGE', insured ? xmlAge(c.driver_age, c.driver_birthdate) : xmlAge(c.age, c.birthdate, '1')) +
     el('DRI_RELATION', lookup(RELATION, insured ? c.driver_relation : c.relation)) +
     // ผู้ขับขี่รถประกัน: บ้านเลขที่ + ม.<หมู่> + ต.<ตำบล> ในช่องเดียว (16/09/69) — จังหวัด/อำเภอไป DRI_PROVINCEID/DRI_DISTRICTID
-    el('DRI_ADDRESS', insured ? driverAddressLine(c.driver_address, c.driver_moo, c.driver_subdistrict) : c.address) +
+    // คู่กรณี: บล็อกคู่กรณีของ EMCS มีช่องข้อความเดียว (dropdown ซ่อน) → ต่อ อ./จ. ด้วย "46/23 ม.7 ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ" (16/09/69)
+    el('DRI_ADDRESS', insured ? driverAddressLine(c.driver_address, c.driver_moo, c.driver_subdistrict) : opponentAddressLine(c.address, c.moo, c.subdistrict, c.district, c.home_province)) +
     // คู่กรณีไม่มีช่องอำเภอในแอป (มีแต่ที่อยู่) → ปล่อยว่างเฉพาะคู่กรณี
     // คู่กรณีมีช่องอำเภอแล้ว (opposing_parties[].district cascade จากจังหวัด) → ddlDri_DistrictID ของคู่กรณี
     // ภูมิลำเนาผู้ขับขี่ (จากบัตรประชาชน/ทะเบียนบ้าน) — คนละช่องกับ CAR_PROVINCE ที่เป็น

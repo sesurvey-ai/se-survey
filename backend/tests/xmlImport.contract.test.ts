@@ -64,6 +64,20 @@ check('ไฟล์ ISURVEY: ผลการดำเนินงาน/คว�
   check('นำเข้า XML: zeroDash ไม่แตะค่าที่มีตัวอื่นปน/ว่าง', zeroDash('0A') === '0A' && zeroDash('') === '' && zeroDash('100') === '100' && zeroDash(' 00 ') === '-');
 }
 
+// เจ้าของรถคู่กรณี: คำนำหน้าแยกช่อง + หมู่แยกจากบ้านเลขที่ (16/09/69)
+{
+  const car = (name: string, addr: string) =>
+    `<TXN_SURV_CAR><TYPE>1</TYPE><OPO_NAME>${name}</OPO_NAME><DRI_ADDRESS>${addr}</DRI_ADDRESS></TXN_SURV_CAR>`;
+  const withCars = xml().replace('</INSERT_SURV_REPORT_XML>',
+    car('นางลัดดาวรรณ วิปัดทุม', '46/23 หมู่ที่ 7,ท้ายบ้าน,เมืองสมุทรปราการ,สมุทรปราการ') + car('บริษัทเจเคไทย จำกัด', '74 ม.1')
+    + car('น.ส.จินตนา สุขเอี่ยม', 'คุณากร') + car('นายิกา สุข', '') + '</INSERT_SURV_REPORT_XML>');
+  const opp = (parseIsurveyXml(withCars).report as { opposing_parties: Array<Record<string, string>> }).opposing_parties;
+  check('นำเข้า XML: OPO_NAME "นางลัดดาวรรณ วิปัดทุม" → owner_title นาง + owner_name', opp?.[0]?.owner_title === 'นาง' && opp?.[0]?.owner_name === 'ลัดดาวรรณ วิปัดทุม', JSON.stringify(opp?.[0] && [opp[0].owner_title, opp[0].owner_name]));
+  check('นำเข้า XML: DRI_ADDRESS คู่กรณี แยกหมู่ → address + moo · subdistrict ว่าง', opp?.[0]?.address === '46/23,ท้ายบ้าน,เมืองสมุทรปราการ,สมุทรปราการ' && opp?.[0]?.moo === '7' && opp?.[0]?.subdistrict === '', JSON.stringify(opp?.[0] && [opp[0].address, opp[0].moo]));
+  check('นำเข้า XML: บริษัท = ไม่มีคำนำหน้า · น.ส. → นางสาว · นายิกา = ชื่อจริง', opp?.[1]?.owner_title === '' && opp?.[1]?.owner_name === 'บริษัทเจเคไทย จำกัด' && opp?.[1]?.moo === '1'
+    && opp?.[2]?.owner_title === 'นางสาว' && opp?.[2]?.owner_name === 'จินตนา สุขเอี่ยม' && opp?.[3]?.owner_title === '' && opp?.[3]?.owner_name === 'นายิกา สุข', JSON.stringify(opp?.map((o) => [o.owner_title, o.owner_name])));
+}
+
 // ไฟล์ที่ emcs_dump.py สกัดจาก EMCS — ข้อมูลอยู่ในกติกาเดิมของ EMCS แล้ว → จับคู่ตรงชื่อ
 const ext = parseIsurveyXml(xml('<!-- SOURCE=EMCS_EXTRACT -->\n'));
 const e = ext.report as Record<string, string>;

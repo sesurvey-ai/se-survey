@@ -8,13 +8,14 @@ class OpponentEditor extends StatefulWidget {
   final Map<String, dynamic> data;
   final List<String> provinces;
   final Map<String, List<String>> provincesData; // จังหวัด → รายการอำเภอ (cascade เขต/อำเภอคู่กรณี)
+  final Map<String, Map<String, List<String>>> tumbonsData; // จังหวัด → อำเภอ → รายการตำบล (ที่อยู่ผู้ขับขี่คู่กรณี 16/09/69)
   final int number; // คันที่ (1-based)
   final bool isNew;
   // สแกนเอกสาร (kind = idcard | license) → คืน fields (parent จัดการถ่าย+เก็บรูป+OCR)
   final Future<Map<String, dynamic>?> Function(String kind)? onScan;
   // เรียกทันทีหลังสแกน OCR สำเร็จ → ส่ง snapshot ปัจจุบันให้ parent เซฟ draft (กันข้อมูลหายถ้าถูก kill ก่อนกด "บันทึก")
   final void Function(Map<String, dynamic> data)? onDraft;
-  const OpponentEditor({super.key, required this.data, required this.provinces, this.provincesData = const {}, required this.number, this.isNew = false, this.onScan, this.onDraft});
+  const OpponentEditor({super.key, required this.data, required this.provinces, this.provincesData = const {}, this.tumbonsData = const {}, required this.number, this.isNew = false, this.onScan, this.onDraft});
 
   @override
   State<OpponentEditor> createState() => _OpponentEditorState();
@@ -25,6 +26,7 @@ class _OpponentEditorState extends State<OpponentEditor> {
   final _damage = <Map<String, String>>[];
   String _evType = '';
   String _carType = '', _carBrand = '', _carColor = '', _province = '', _homeProvince = '', _district = '', _gender = '', _title = '', _relation = '', _insurer = '', _licenseType = '', _policyType = '';
+  String _ownerTitle = '', _subdistrict = '';   // คำนำหน้าเจ้าของรถ · ตำบล/แขวงที่อยู่ผู้ขับขี่คู่กรณี (16/09/69)
   bool _kfk = false;
   bool _pending = false;  // "รอตรวจสอบ" — คู่กรณีหลบหนี / ยังไม่มีรายละเอียด
   bool _cidThai = true;   // true = คนไทย (13 หลัก+checksum) / false = ต่างชาติ
@@ -38,7 +40,7 @@ class _OpponentEditorState extends State<OpponentEditor> {
     _c = {};
     for (final k in ['owner_name', 'owner_address', 'car_model', 'plate', 'reg_year', 'mileage', 'vin',
       'first_name', 'last_name', 'birthdate', 'age', 'phone', 'address', 'cid', 'license_no', 'license_place', 'license_start', 'license_end',
-      'policy_no', 'claim_no', 'estimated_cost']) {
+      'policy_no', 'claim_no', 'estimated_cost', 'moo']) {
       _c[k] = TextEditingController(text: (widget.data[k] ?? '').toString());
     }
     _policyType = (widget.data['policy_type'] ?? '').toString();
@@ -48,6 +50,8 @@ class _OpponentEditorState extends State<OpponentEditor> {
     _province = (widget.data['province'] ?? '').toString();
     _homeProvince = (widget.data['home_province'] ?? '').toString();
     _district = (widget.data['district'] ?? '').toString();
+    _subdistrict = (widget.data['subdistrict'] ?? '').toString();
+    _ownerTitle = (widget.data['owner_title'] ?? '').toString();
     _evType = (widget.data['ev_type'] ?? '').toString();
     _gender = (widget.data['gender'] ?? '').toString();
     _title = (widget.data['title'] ?? '').toString();
@@ -78,6 +82,7 @@ class _OpponentEditorState extends State<OpponentEditor> {
   bool get _noInsurance => _insurer == 'ไม่มีบริษัทประกันภัย'; // "อื่นๆ" = มีประกัน (บริษัทนอกลิสต์) ห้ามล้างค่า
 
   Map<String, dynamic> _collect() => {
+        'owner_title': _ownerTitle,   // คำนำหน้าเจ้าของรถ (16/09/69) → บอทรวมเป็น "นาย บุญเลี้ยง ชงสุวรรณ" บน EMCS
         'owner_name': _ctl('owner_name').text.trim(),
         'owner_address': _ctl('owner_address').text.trim(),
         'car_type': _carType,
@@ -86,11 +91,13 @@ class _OpponentEditorState extends State<OpponentEditor> {
         'car_color': _carColor,
         'plate': _ctl('plate').text.trim(),
         'province': _province,
-        // ภูมิลำเนาผู้ขับขี่ (บัตร ปชช./ทะเบียนบ้าน) — ไม่มีช่องให้กรอกในแอป เพราะ EMCS ซ่อน
-        // ddlDri_ProvinceID ของบล็อกคู่กรณีไว้ ส่งผ่านเฉย ๆ เพื่อไม่ทับค่าที่นำเข้าจาก XML ของ
-        // ISURVEY (ไฟล์นั้นมี DRI_PROVINCEID จริง); ว่าง → xmlExport ใช้ province (ป้ายทะเบียน) แทน
+        // จังหวัด/อำเภอ/ตำบล/หมู่ ของ "ที่อยู่ปัจจุบันผู้ขับขี่" (มีช่องให้กรอกตั้งแต่ 16/09/69) — EMCS ซ่อน dropdown
+        // ของบล็อกคู่กรณี บอทจึงประกอบเป็นข้อความเดียว "46/23 ม.7 ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ"
+        // (XML: DRI_PROVINCEID/DISTRICTID ยังใส่จาก home_province/district · ว่าง → province ป้ายทะเบียน)
         'home_province': _homeProvince,
         'district': _district,
+        'subdistrict': _subdistrict,
+        'moo': _ctl('moo').text.trim(),
         'ev_type': _evType,   // → dtlOpo_ctlNN_wuOpo_ddlEv_Type (บอทเดินสายรออยู่แล้ว)
         'reg_year': _ctl('reg_year').text.trim(),
         'mileage': _ctl('mileage').text.trim(),
@@ -171,7 +178,7 @@ class _OpponentEditorState extends State<OpponentEditor> {
         if (_ctl('plate').text.trim().isEmpty) 'ทะเบียน',
         if (_province.trim().isEmpty) 'จังหวัด',
         // เจ้าของรถ (txtOpo_Name) — EMCS บังคับ แต่เดิมไม่มีใครตรวจ บอทเลยยัด '-' ให้ทุกใบ
-        if (_ctl('owner_name').text.trim().isEmpty) 'เจ้าของรถ',
+        if (_ctl('owner_name').text.trim().isEmpty) 'เจ้าของรถคู่กรณี',
         if (_gender.trim().isEmpty) 'เพศผู้ขับขี่',
         if (_ctl('birthdate').text.trim().isEmpty) 'วันเกิด',
         if (_ctl('age').text.trim().isEmpty) 'อายุ',
@@ -302,7 +309,12 @@ class _OpponentEditorState extends State<OpponentEditor> {
       children: [
         _pendingToggle(),
         kSubhead('เจ้าของ / รถ'),
-        kText(_ctl('owner_name'), 'เจ้าของคู่กรณี', req: true),
+        // 16/09/69 (user สั่ง): "เจ้าของรถคู่กรณี" + คำนำหน้า (ไม่บังคับ — เจ้าของเป็นบริษัทได้) → บอทรวมเป็น "นาย บุญเลี้ยง ชงสุวรรณ" บน EMCS
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          SizedBox(width: 118, child: KPickerField(label: 'คำนำหน้า', value: _ownerTitle, options: kTitles, onSelected: (v) => setState(() => _ownerTitle = v))),
+          const SizedBox(width: 10),
+          Expanded(child: kText(_ctl('owner_name'), 'เจ้าของรถคู่กรณี', req: true)),
+        ]),
         kText(_ctl('owner_address'), 'ที่อยู่เจ้าของรถ', maxLines: 2),
         kRow2(
           // เปลี่ยนประเภทรถ → ล้างยี่ห้อ (ลิสต์ยี่ห้อของ EMCS ผูกกับประเภทรถ)
@@ -323,11 +335,8 @@ class _OpponentEditorState extends State<OpponentEditor> {
           // จังหวัด "ป้ายทะเบียน" ของรถคู่กรณี → ddlCar_Province บน EMCS (บังคับ)
           KPickerField(label: 'จังหวัด', value: _province, options: widget.provinces, req: true, onSelected: (v) => setState(() => _province = v)),
         ),
-        // ⛔ เอาช่อง "เขต/อำเภอ" ออก 2026-07-27: EMCS ไม่มีที่ให้ลงเลย —
-        // ddlDri_ProvinceID/DistrictID/Sub_DistrictID ของบล็อกคู่กรณีถูก display:none
-        // + ไม่มี option ครบทั้ง 20 แผง (ยืนยันทั้งหน้าที่พนักงานกรอกเองและ draft จริง)
-        // ที่อยู่คู่กรณีของ EMCS เป็นช่องข้อความเดียว → ให้พิมพ์อำเภอ/จังหวัดในช่อง "ที่อยู่" แทน
-        // (ยังเก็บค่าเดิมใน _collect เพื่อไม่ให้ข้อมูลที่เคยกรอกไว้หาย)
+        // เขต/อำเภอ/ตำบล/หมู่ ของที่อยู่ผู้ขับขี่คู่กรณี อยู่ใต้ "ที่อยู่ปัจจุบัน" ในหมวดผู้ขับขี่ (16/09/69) —
+        // EMCS ยังมีช่องข้อความเดียว (dropdown ของบล็อกคู่กรณี display:none) บอทประกอบให้เป็นข้อความ
         // ⚠️ 'เลข กม.' กับ 'ออกให้วันที่' มีดอกจันแดงบน EMCS แต่ **ไม่ได้บังคับจริง** —
         // vlidOpoCar() ตรวจ txtKm_No เฉพาะบริษัทรหัส 2 และไม่แตะ wuCale_Dri_DrvDate_Start เลย
         // (ยืนยัน 2026-08-01: ว่างไว้ก็กดบันทึกผ่าน) → ห้ามตั้ง req ไม่งั้นบล็อกพนักงานฟรี ๆ
@@ -338,10 +347,8 @@ class _OpponentEditorState extends State<OpponentEditor> {
             onSelected: (v) => setState(() => _evType = v)),
         kText(_ctl('vin'), 'หมายเลขตัวถัง (VIN)'),
         kSubhead('ผู้ขับขี่'),
-        // ⛔ ไม่มีช่อง "จังหวัดภูมิลำเนา" (ddlDri_ProvinceID) เพราะบล็อกคู่กรณีของ EMCS ซ่อนไว้ —
-        // หน้าจริงมีแค่ "ที่อยู่ปัจจุบันผู้ขับขี่" เป็นกล่องข้อความเดี่ยว (ยืนยันจากหน้าจอจริง 2026-08-01)
-        // ค่ายังส่งผ่าน _collect เพื่อไม่ทับของที่นำเข้ามาจากไฟล์ XML ของ ISURVEY (ไฟล์นั้นมี
-        // DRI_PROVINCEID จริง และ xmlExport ใช้ home_province ถ้ามี ไม่มีค่อย fallback เป็น province)
+        // จังหวัด/อำเภอ/ตำบล ของที่อยู่ผู้ขับขี่คู่กรณี: EMCS ซ่อน dropdown (ddlDri_ProvinceID) ไว้ หน้าจริงมีแค่
+        // "ที่อยู่ปัจจุบันผู้ขับขี่" กล่องเดียว → บอทประกอบ "46/23 ม.7 ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ" (16/09/69)
         _scanBtns(),
         // เพศ = radio บังคับบน EMCS (ผู้ขับขี่คู่กรณี *) — เดิมไม่มีป้าย ไม่มีจุดแดง
         kFieldLabel('เพศผู้ขับขี่', req: true),
@@ -363,7 +370,20 @@ class _OpponentEditorState extends State<OpponentEditor> {
           kNum(_ctl('age'), 'อายุ', req: true),
         ),
         kPhone(_ctl('phone'), 'โทรศัพท์', req: true),
-        kText(_ctl('address'), 'ที่อยู่ปัจจุบัน', req: true, maxLines: 2),
+        // ที่อยู่ปัจจุบันผู้ขับขี่คู่กรณี (16/09/69 user สั่ง): บ้านเลขที่/ถนน + หมู่ · จังหวัด · เขต/อำเภอ · ตำบล/แขวง
+        // EMCS มีช่องข้อความเดียว → บอทประกอบ "46/23 ม.7 ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ" (หมู่/จังหวัด/อำเภอ/ตำบล ไม่บังคับ)
+        kText(_ctl('address'), 'ที่อยู่ปัจจุบัน (บ้านเลขที่ / ถนน)', req: true, maxLines: 2),
+        kRow2(
+          kText(_ctl('moo'), 'หมู่', keyboardType: TextInputType.number),
+          KPickerField(label: 'จังหวัด (ที่อยู่)', value: _homeProvince, options: widget.provinces,
+              onSelected: (v) => setState(() { if (v != _homeProvince) { _district = ''; _subdistrict = ''; } _homeProvince = v; })),
+        ),
+        kRow2(
+          KPickerField(label: 'เขต / อำเภอ', value: _district, options: widget.provincesData[_homeProvince] ?? const <String>[],
+              onSelected: (v) => setState(() { if (v != _district) _subdistrict = ''; _district = v; })),
+          KPickerField(label: 'ตำบล / แขวง', value: _subdistrict, options: widget.tumbonsData[_homeProvince]?[_district] ?? const <String>[],
+              onSelected: (v) => setState(() => _subdistrict = v)),
+        ),
         _cidField(),
         // ── ใบขับขี่ (เปิด/ปิด — บางเคสไม่มีใบขับขี่) ──
         kSwitch('มีใบขับขี่', _hasLicense, (v) => setState(() {

@@ -49,6 +49,8 @@ const row: Record<string, unknown> = {
     cid: '9876543210987', license_no: 'OPPLIC', license_type: 'ใบขับขี่รถจักรยานยนต์ส่วนบุคคล',
     insurer: 'ไอโออิกรุงเทพประกันภัย',
     policy_no: 'OPPPOL', claim_no: 'OPPCLAIM', policy_type: '1',
+    // 16/09/69: คำนำหน้าเจ้าของรถ + ที่อยู่ผู้ขับขี่คู่กรณีแยกส่วน (home_province = จังหวัดเดียวกับป้าย → DRI_PROVINCEID ไม่เปลี่ยน)
+    owner_title: 'นาย', owner_name: 'บุญเลี้ยง ชงสุวรรณ', moo: '12', subdistrict: 'บางด้วน', home_province: 'กรุงเทพ ฯ',
   }],
   injured_persons: [{
     name: 'ผู้บาดเจ็บ ทดสอบ', age: 25, cid: '1111111111111', occupation: 'พนักงาน', car_reg: 'ษข9066',
@@ -71,6 +73,10 @@ const row: Record<string, unknown> = {
 const xml = generateSurveyXml(row as never);
 const has = (tag: string, val: string) => xml.includes(`<${tag}>${val}</${tag}>`);
 const tag = (t: string) => new RegExp(`<${t}>`).test(xml);
+
+// คู่กรณี (16/09/69): OPO_NAME = คำนำหน้า + ชื่อ เว้นวรรค · DRI_ADDRESS คู่กรณีประกอบ 5 ส่วน (กรุงเทพ = แขวง/เขต/กรุงเทพฯ ไม่มี จ.)
+check('OPO_NAME = "นาย บุญเลี้ยง ชงสุวรรณ"', has('OPO_NAME', 'นาย บุญเลี้ยง ชงสุวรรณ'));
+check('DRI_ADDRESS คู่กรณี = ที่อยู่ ม.12 แขวงบางด้วน เขตตลิ่งชัน กรุงเทพฯ', has('DRI_ADDRESS', 'ที่อยู่คู่กรณี ม.12 แขวงบางด้วน เขตตลิ่งชัน กรุงเทพฯ'));
 
 // โครงหลัก
 check('root INSERT_SURV_REPORT_XML', xml.startsWith('<?xml') && xml.includes('<INSERT_SURV_REPORT_XML>'));

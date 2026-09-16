@@ -14,7 +14,8 @@
  *
  * รวมสองตัวไว้ไฟล์เดียวเพราะใช้ layout/primitive ชุดเดียวกัน (การ์ดต่อ 1 ระเบียน + ปุ่มลบ + ปุ่มเพิ่ม)
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import api from '@/lib/api';
 import { PROVINCE_OPTIONS, CAR_COLOR_OPTIONS, EV_TYPE_OPTIONS, POLICY_TYPE_OPTIONS, carBrandOptions,
          brandTypeIssue, CAR_TYPE_LABELS, isValidSeDate } from './caseOptions';
 import { districtOptions } from './districtOptions';
@@ -376,6 +377,9 @@ const OPPONENT_FIELDS: FieldDef[] = [
   //   แถว 4 มีประกันภัยที่ · เลขกรมธรรม์ · ประเภทประกัน (ช่องที่ 4 ว่าง)
   //   แถว 5 ที่อยู่เจ้าของรถ เต็มแถว — ที่เหลือลำดับเดิม
   // ⛔ user ตัดสินไม่เพิ่มช่องที่แอปมีแต่เว็บไม่มี (ชนิดบัตร · รายละเอียดความเสียหาย · รอตรวจสอบ) เพราะ EMCS ไม่มีช่องรับ
+  // 16/09/69 (user สั่ง): คำนำหน้าเจ้าของรถ (ไม่บังคับ — เจ้าของเป็นบริษัทได้) วาดรวมในช่องเดียวกับชื่อ (OwnerNameCell)
+  // → EMCS/XML รวมเป็น "นาย บุญเลี้ยง ชงสุวรรณ" (backend services/driverAddress.ts withTitle · บอท with_title)
+  { k: 'owner_title', label: 'คำนำหน้า', options: TITLES },
   { k: 'owner_name', label: 'เจ้าของรถคู่กรณี *' },
   { k: 'car_type', label: 'ประเภทรถ *', optionsFrom: (r) => withCurrentOption(OPO_CAR_TYPES, r.car_type) },
   { k: 'plate', label: 'ทะเบียน *' },
@@ -426,10 +430,15 @@ const OPPONENT_FIELDS: FieldDef[] = [
   // (export: DRI_PROVINCEID = home_province || province) แต่เว็บไม่มีช่องนี้ ทำให้อำเภอที่ตัวดึงงาน ISURVEY
   // ใส่มาจากภูมิลำเนาไม่โผล่ในลิสต์เมื่อป้ายทะเบียนเป็นคนละจังหวัด (audit 03/09/69 เคลม 2026013058298:
   // ป้าย กทม. / ภูมิลำเนา ศรีสะเกษ → อำเภอปรางค์กู่หายจากลิสต์)
+  // ที่อยู่ปัจจุบันผู้ขับขี่คู่กรณี (user สั่ง 16/09/69): บ้านเลขที่+หมู่ (ช่องเดียวกัน — AddressMooCell) · จังหวัด · เขต/อำเภอ · ตำบล/แขวง แถวเดียวกัน
+  // EMCS มีช่องข้อความเดียว (dropdown ของบล็อกคู่กรณีซ่อน) → บอท/XML ประกอบ "46/23 ม.7 ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ"
+  // (backend services/driverAddress.ts opponentAddressLine) · ทั้ง 4 ช่องใหม่ไม่บังคับ — EMCS บังคับแค่ช่องข้อความ ซึ่งบอทใส่ "-" ให้ถ้าว่าง
+  { k: 'address', label: 'ที่อยู่ผู้ขับขี่ (บ้านเลขที่ / ถนน)' },
+  { k: 'moo', label: 'หมู่' },
   { k: 'home_province', label: 'จังหวัด (ที่อยู่ผู้ขับขี่)', options: PROVINCE_OPTIONS },
   { k: 'district', label: 'เขต/อำเภอ (ที่อยู่)',
     optionsFrom: (r) => districtOptions(String(r.home_province || r.province || ''), String(r.district ?? '')) },
-  { k: 'address', label: 'ที่อยู่ผู้ขับขี่', wide: true },
+  { k: 'subdistrict', label: 'ตำบล/แขวง (ที่อยู่)' },   // ตัวเลือกจาก /api/geo/tumbons ตามจังหวัด+อำเภอ (tumbonOptions ใน OpponentEditor)
 ];
 
 /** คีย์ที่ editor นี้ดูแล — ใช้ตัดสินว่าการ์ด "ว่างทั้งใบ" ไหม โดยไม่นับ damage/kfk */
@@ -475,6 +484,49 @@ const reqKeys = (defs: FieldDef[]) => defs.filter((f) => f.label.trim().endsWith
 export const INJURED_REQUIRED = reqKeys(INJURED_FIELDS);
 export const PROPERTY_REQUIRED = reqKeys(PROPERTY_FIELDS);
 
+/** เจ้าของรถคู่กรณี: คำนำหน้า (เลือก ไม่บังคับ — เจ้าของเป็นบริษัทได้) + ชื่อ ในช่องเดียว (16/09/69) → EMCS/XML รวมเป็น "นาย บุญเลี้ยง ชงสุวรรณ" */
+function OwnerNameCell({ it, set }: { it: LooseRecord; set: (k: string, v: string) => void }) {
+  const name = String(it.owner_name ?? '');
+  const title = String(it.owner_title ?? '');
+  const bad = emcsBadChars(name);
+  const box = 'border rounded-none h-9 text-sm text-gray-800';
+  return (
+    <div>
+      <label className="block text-xs text-[var(--md-muted)] mb-0.5">
+        <ReqLabel label="เจ้าของรถคู่กรณี *" />
+        {bad && <span className="ml-1 text-red-600 font-medium">· EMCS ไม่รับอักขระ {bad}</span>}
+      </label>
+      <div className="flex items-center gap-1">
+        <select className={`${box} ${OK_CLS} w-[5.5rem] shrink-0 px-1`} value={title} title="คำนำหน้าเจ้าของรถ (ไม่บังคับ)"
+                onChange={(e) => set('owner_title', e.target.value)}>
+          <option value="">คำนำหน้า</option>
+          {withCurrentOption(TITLES, title).map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+        <input type="text" className={`${box} ${bad || !name.trim() ? REQ_CLS : OK_CLS} flex-1 min-w-0 px-3`} value={name}
+               title={bad ? `EMCS จะล้างชื่อทั้งช่องทิ้งเพราะมีอักขระ: ${bad}` : undefined}
+               onChange={(e) => set('owner_name', e.target.value)} />
+      </div>
+    </div>
+  );
+}
+
+/** ที่อยู่ผู้ขับขี่คู่กรณี: บ้านเลขที่/ถนน + หมู่ ในช่องเดียว (แบบเดียวกับผู้ขับขี่รถประกันในหน้าเคส) — ทั้งคู่ไม่บังคับ */
+function AddressMooCell({ it, set }: { it: LooseRecord; set: (k: string, v: string) => void }) {
+  const box = `border rounded-none h-9 text-sm text-gray-800 ${OK_CLS}`;
+  return (
+    <div>
+      <label className="block text-xs text-[var(--md-muted)] mb-0.5">ที่อยู่ผู้ขับขี่ (บ้านเลขที่ / ถนน)</label>
+      <div className="flex items-center gap-1">
+        <input type="text" className={`${box} flex-1 min-w-0 px-3`} value={String(it.address ?? '')} placeholder="บ้านเลขที่ / ถนน / ซอย"
+               onChange={(e) => set('address', e.target.value)} />
+        <span className="text-sm text-gray-600 shrink-0 pl-1">หมู่</span>
+        <input type="text" className={`${box} w-14 shrink-0 px-2`} value={String(it.moo ?? '')} title="หมู่ที่ (ไม่บังคับ)"
+               onChange={(e) => set('moo', e.target.value)} />
+      </div>
+    </div>
+  );
+}
+
 export function OpponentEditor({ items, onChange }: {
   items: LooseRecord[]; onChange: (next: LooseRecord[]) => void;
 }) {
@@ -483,6 +535,9 @@ export function OpponentEditor({ items, onChange }: {
     onChange(items.map((it, idx) => {
       if (idx !== i) return it;
       const next: LooseRecord = { ...it, [k]: v };
+      // ที่อยู่ผู้ขับขี่: เปลี่ยนจังหวัด → ล้างอำเภอ+ตำบล · เปลี่ยนอำเภอ → ล้างตำบล (รายการตำบลผูกกับคู่จังหวัด/อำเภอ)
+      if (k === 'home_province' && v !== String(it.home_province ?? '')) { next.district = ''; next.subdistrict = ''; }
+      if (k === 'district' && v !== String(it.district ?? '')) next.subdistrict = '';
       // "ไม่มีบริษัทประกันภัย" → เลขกรมธรรม์ "-" ให้เอง (EMCS บังคับช่องนี้ทุกบริษัท · กติกาช่องบังคับไม่มีข้อมูล = "-")
       // เปลี่ยนกลับเป็นบริษัทจริงแล้วยังเป็น "-" อยู่ → ล้างให้กรอกเลขจริง (user ขอ 10/09/69)
       if (k === 'insurer') {
@@ -499,6 +554,28 @@ export function OpponentEditor({ items, onChange }: {
       String(it.insurer ?? '') === NO_INSURER && !String(it.policy_no ?? '').trim() ? { ...it, policy_no: '-' } : it);
     if (fixed.some((x, i) => x !== items[i])) onChange(fixed);
   }, [items, onChange]);
+
+  /** ตำบล/แขวง ตามจังหวัด+อำเภอของที่อยู่ผู้ขับขี่ — โหลดจาก /api/geo/tumbons ครั้งเดียวต่อคู่ (แคชในหน้า)
+   *  ค่าที่บันทึกไว้แต่ไม่อยู่ในรายการยังโชว์ · จังหวัดใช้ home_province (เคสเก่าไม่มี → จังหวัดป้ายทะเบียน ตามที่ลิสต์อำเภอใช้) */
+  const [tumbons, setTumbons] = useState<Record<string, string[]>>({});
+  const pendingRef = useRef<Set<string>>(new Set());
+  const tumbonKey = (it: LooseRecord): string => {
+    const p = String(it.home_province || it.province || '').trim();
+    const d = String(it.district ?? '').trim();
+    return p && d && !p.startsWith('--') && !d.startsWith('--') ? `${p}|${d}` : '';
+  };
+  useEffect(() => {
+    for (const key of Array.from(new Set(items.map(tumbonKey)))) {
+      if (!key || key in tumbons || pendingRef.current.has(key)) continue;
+      pendingRef.current.add(key);
+      const [province, district] = key.split('|');
+      api.get('/api/geo/tumbons', { params: { province, district } })
+        .then((res) => setTumbons((prev) => ({ ...prev, [key]: Array.isArray(res.data?.data) ? (res.data.data as string[]) : [] })))
+        .catch(() => setTumbons((prev) => ({ ...prev, [key]: [] })))
+        .finally(() => pendingRef.current.delete(key));
+    }
+  }, [items, tumbons]);
+  const tumbonOptions = (it: LooseRecord): string[] => withCurrentOption(tumbons[tumbonKey(it)] ?? [], it.subdistrict);
 
   /** หน้าต่าง "ข้อมูลความเสียหาย" ของคู่กรณีคันที่เปิดอยู่ (null = ปิด)
    *  เดิมความเสียหายคู่กรณีแก้ได้เฉพาะในแอป หน้าตรวจเห็นแค่ตัวเลข → หัวหน้าตรวจไม่ได้
@@ -537,12 +614,17 @@ export function OpponentEditor({ items, onChange }: {
             </div>
             <div className="p-3 grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-2">
               {OPPONENT_FIELDS.filter((f) => f.k !== OPPONENT_COST_FIELD.k).map((f) => {
+                // คำนำหน้าเจ้าของรถ / หมู่ วาดรวมในช่องของ ชื่อเจ้าของรถ / ที่อยู่ (16/09/69)
+                if (f.k === 'owner_title' || f.k === 'moo') return null;
+                if (f.k === 'owner_name') return <OwnerNameCell key={f.k} it={it} set={(k, v) => set(i, k, v)} />;
+                if (f.k === 'address') return <AddressMooCell key={f.k} it={it} set={(k, v) => set(i, k, v)} />;
                 // ยี่ห้อ ↔ ประเภทรถ ตามลิสต์ EMCS (15/09/69) — เตือนใต้ช่องยี่ห้อ + ปุ่มเปลี่ยนประเภทให้เมื่อชี้ได้แน่
                 const issue = f.k === 'car_brand' ? brandTypeIssue(it.car_type, it.car_brand) : null;
+                const options = f.k === 'subdistrict' ? tumbonOptions(it) : (f.optionsFrom ? f.optionsFrom(it) : f.options);
                 return (
                   <Field
                     key={f.k}
-                    def={{ ...f, options: f.optionsFrom ? f.optionsFrom(it) : f.options, label: labelFor(f, it) }}
+                    def={{ ...f, options, label: labelFor(f, it) }}
                     value={String(it[f.k] ?? '')}
                     onChange={(v) => set(i, f.k, v)}
                     warnOverride={issue?.message}

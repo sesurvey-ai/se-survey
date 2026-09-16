@@ -3032,7 +3032,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
     //     มีจริง — ปล่อยให้บอทใส่ '-' ตามกติกา _dash ต่อไป)
     checkItems('6. คู่กรณี', _hasOpponents, _opponents, 'คู่กรณี', const {
       'car_type': 'ประเภทรถ', 'plate': 'ทะเบียน', 'province': 'จังหวัด',
-      'owner_name': 'เจ้าของรถ',
+      'owner_name': 'เจ้าของรถคู่กรณี',
       'gender': 'เพศผู้ขับขี่', 'birthdate': 'วันเกิด', 'age': 'อายุ',
       'insurer': 'มีประกันภัยที่',
     }, unit: 'คันที่');
@@ -3740,7 +3740,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
   Future<void> _addOpponent() async {
     if (_opponents.length >= 20) { _snack('เพิ่มคู่กรณีได้สูงสุด 20 คัน'); return; }
     final res = await _openRecordEditor('opponent', null, (onDraft) => OpponentEditor(
-        data: const {}, provinces: _provinceNames, provincesData: _provincesData, number: _opponents.length + 1, isNew: true, onScan: _captureRetainOcr, onDraft: onDraft));
+        data: const {}, provinces: _provinceNames, provincesData: _provincesData, tumbonsData: _tumbonsData, number: _opponents.length + 1, isNew: true, onScan: _captureRetainOcr, onDraft: onDraft));
     if (res == null || res['action'] != 'save') return;
     setState(() { _opponents.add(Map<String, dynamic>.from(res['data'] as Map)); _hasOpponents = true; });
     _autosave();
@@ -3748,7 +3748,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
 
   Future<void> _editOpponent(int i) async {
     final res = await _openRecordEditor('opponent', i, (onDraft) => OpponentEditor(
-        data: _opponents[i], provinces: _provinceNames, provincesData: _provincesData, number: i + 1, onScan: _captureRetainOcr, onDraft: onDraft));
+        data: _opponents[i], provinces: _provinceNames, provincesData: _provincesData, tumbonsData: _tumbonsData, number: i + 1, onScan: _captureRetainOcr, onDraft: onDraft));
     if (res == null) return;
     setState(() {
       if (res['action'] == 'save') {

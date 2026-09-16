@@ -30,6 +30,7 @@
 import { EMCS_DISTRICTS } from '../data/emcsDistricts';
 import { CAUSE, RELATION, LICENSE_TYPE } from './xmlExport.service';
 import { EMCS_REQUIRED } from '../data/emcsRequired';
+import { splitMoo } from './driverAddress';
 
 // ───────────────────────── parser ขนาดเล็ก ─────────────────────────
 // XML ของ SURV_REPORT เป็น flat มาก (ไม่มี attribute/namespace/nested ซ้อนลึก)
@@ -58,6 +59,22 @@ function blocks(xml: string, name: string): string[] {
 
 /** ค่าของ tag ในบล็อก — " " (ค่าว่างของ el()) และ "-" คืนเป็น '' */
 /** กรมธรรม์/เลขเคลมคู่กรณีที่เป็น "ศูนย์ล้วน" (0 / 00 / 000000 / -0) = ไม่ทราบ → '-' */
+/** คำนำหน้าเจ้าของรถคู่กรณีจาก OPO_NAME (16/09/69): "นางลัดดาวรรณ วิปัดทุม" → ['นาง', 'ลัดดาวรรณ วิปัดทุม'] · น.ส./นส. → นางสาว
+ *  บริษัท/ไม่มีคำนำหน้า → ['', ชื่อเดิม] · "คุณ" ต้องเว้นวรรค (คุณากร = ชื่อ) · ตัวถัดไปเป็นสระ/วรรณยุกต์ (นายิกา) = ชื่อจริง ไม่ตัด */
+export function splitOwnerTitle(full: string): [string, string] {
+  const f = String(full ?? '').trim();
+  const table: Array<[string, string]> = [['นางสาว', 'นางสาว'], ['น.ส.', 'นางสาว'], ['นส.', 'นางสาว'], ['นาง', 'นาง'], ['นาย', 'นาย'],
+    ['ด.ช.', 'ด.ช.'], ['ด.ญ.', 'ด.ญ.'], ['เด็กชาย', 'ด.ช.'], ['เด็กหญิง', 'ด.ญ.'], ['คุณ', 'คุณ']];
+  for (const [t, canon] of table) {
+    if (!f.startsWith(t)) continue;
+    const rest = f.slice(t.length);
+    if (t === 'คุณ' && !/^\s/.test(rest)) continue;
+    if (rest && /^[\u0E30-\u0E3A\u0E45\u0E47-\u0E4E]/u.test(rest)) continue;
+    return [canon, rest.trim()];
+  }
+  return ['', f];
+}
+
 export function zeroDash(s: string): string {
   return s && /^[\s0-]*0[\s0-]*$/.test(s) ? '-' : s;
 }
@@ -426,6 +443,10 @@ export function parseIsurveyXml(xml: string): XmlImportResult {
     const parts = full.split(/\s+/).filter(Boolean);
     const title = ['นาย', 'นางสาว', 'นาง', 'ด.ช.', 'ด.ญ.', 'คุณ'].find((x) => full.startsWith(x)) ?? '';
     const rest = title ? full.slice(title.length).trim().split(/\s+/).filter(Boolean) : parts;
+    // เจ้าของรถ: คำนำหน้าแยกช่อง (16/09/69) — บอท/XML รวมกลับเป็น "นาง ลัดดาวรรณ วิปัดทุม"
+    const [ownerTitle, ownerName] = splitOwnerTitle(txt(c, 'OPO_NAME'));
+    // ที่อยู่ผู้ขับขี่คู่กรณี: หมู่ที่ปนในบ้านเลขที่แยกไปช่องหมู่ ("46/23 หมู่ที่ 7,ท้ายบ้าน,…" → 46/23,… + หมู่ 7) · ตำบลยังไม่แยกจากข้อความคั่นจุลภาค
+    const driAddr = splitMoo(txt(c, 'DRI_ADDRESS'));
     // HAVE_INSURANCE: ISURVEY ใส่ชื่อบริษัท / se-survey ใส่ flag '1' → ตัวเลขล้วน = flag
     const haveIns = txt(c, 'HAVE_INSURANCE');
     const insurer = /^\d+$/.test(haveIns) ? '' : haveIns;
@@ -440,7 +461,9 @@ export function parseIsurveyXml(xml: string): XmlImportResult {
       birthdate: dateOnly(txt(c, 'DRI_BIRTHDAY')),
       cid: txt(c, 'DRI_CARDID'),
       phone: txt(c, 'DRI_TELNO'),
-      address: txt(c, 'DRI_ADDRESS'),
+      address: driAddr.address,
+      moo: driAddr.moo,
+      subdistrict: '',
       // ⚠️ 2 จังหวัดคนละความหมาย — EMCS ก็แยก dropdown จริง:
       //   province      = จังหวัดป้ายทะเบียน (→ ddlCar_Province)
       //   home_province = ภูมิลำเนาจากบัตรประชาชน/ทะเบียนบ้าน (→ ddlDri_ProvinceID)
@@ -456,7 +479,8 @@ export function parseIsurveyXml(xml: string): XmlImportResult {
       reg_year: txt(c, 'CAR_REGNO_YEAR'),
       mileage: txt(c, 'KM_NO'),
       vin: txt(c, 'CHASSISNO'),
-      owner_name: txt(c, 'OPO_NAME'),
+      owner_title: ownerTitle,
+      owner_name: ownerName,
       owner_address: txt(c, 'DRI_ADDRESS'),
       insurer,
       // ศูนย์ล้วน (00 / 000000 / -0) = ช่างไม่ทราบ → '-' (user เคาะ 16/09/69 — ชุดเดียวกับตัวแปลง ISURVEY และบอท)

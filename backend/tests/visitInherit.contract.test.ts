@@ -86,7 +86,7 @@ check('เลิกก๊อปข้อมูลครั้งที่ 1 ต�
   !svc.includes('inheritFromFirstVisit') && svc.includes('**ไม่ก๊อป** ข้อมูลหลักของครั้งที่ 1'));
 const routes = read('src', 'routes', 'integration.routes.ts');
 check('บอทอ่าน report ผ่าน getEffectiveReport (ชุดเดียวกับหน้าเคส)',
-  /const eff = await caseService\.getEffectiveReport\(caseId\);[\s\S]{0,300}?data: \{ \.\.\.eff\.report, main_from: eff\.main_from[,\s}]/.test(routes));   // 16/09/69 มี driver_address_emcs ต่อท้ายได้
+  /const eff = await caseService\.getEffectiveReport\(caseId\);[\s\S]{0,900}?data: \{ \.\.\.eff\.report, main_from: eff\.main_from[,\s}]/.test(routes));   // 16/09/69 มี driver_address_emcs ต่อท้ายได้
 /** การ์ดบอทโชว์ "ครั้งที่ N/M" (user ขอ 15/09/69) — รายการนำเข้าต้องส่ง visit_no (สูตรเดียวกับหน้าเคส) + visit_total ของเคลม */
 check('รายการเคสสำหรับบอทส่ง visit_no + visit_total',
   /COALESCE\(c\.visit_no,\s*\(SELECT COUNT\(\*\)::int FROM cases c2 JOIN survey_reports s2 ON s2\.case_id = c2\.id\s*WHERE s2\.claim_no = sr\.claim_no AND c2\.created_at <= c\.created_at\)\)::int AS visit_no/.test(routes)

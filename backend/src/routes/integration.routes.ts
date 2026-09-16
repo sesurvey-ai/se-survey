@@ -10,7 +10,7 @@ import { CAR_BRANDS_BY_TYPE, BRAND_ALIASES, THAI_BRANDS, CAR_TYPE_LABELS } from 
 import { notifyCaseChanged } from '../services/caseEvents';
 import { emcsQueueService } from '../services/emcsQueue.service';
 import { botReleaseKeys, BOT_VERSION_RE } from '../services/botRelease';
-import { driverAddressLine } from '../services/driverAddress';
+import { driverAddressLine, opponentAddressLine, withTitle } from '../services/driverAddress';
 
 // ── routes สำหรับเครื่องมือภายใน (se-autokey) — auth ด้วย service token ไม่ผูกบัญชีพนักงาน ──
 // เปิดใช้โดยตั้ง env INTEGRATION_TOKEN (ยาว ≥24 ตัว); ไม่ตั้ง = ทุก route ตอบ 401
@@ -366,7 +366,14 @@ router.get('/cases/:id/report', integrationAuth, asyncHandler(async (req: Reques
   if (!eff) { res.status(404).json({ success: false, message: 'report not found' }); return; }
   // driver_address_emcs = ที่อยู่ผู้ขับขี่ประกอบแล้ว "46/23 ม.7 ต.ท้ายบ้าน" (16/09/69) — บอทกรอก txtDri_Address ตรง ๆ
   const r = eff.report as Record<string, unknown>;
-  res.json({ success: true, data: { ...eff.report, main_from: eff.main_from,
+  // คู่กรณี (16/09/69): owner_name_emcs = "นาย บุญเลี้ยง ชงสุวรรณ" · address_emcs = "46/23 ม.7 ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ"
+  // — บอทกรอก txtOpo_Name / txtDri_Adrress ของบล็อกคู่กรณีตรง ๆ (สูตรอยู่ที่ services/driverAddress.ts ที่เดียว)
+  const opposing = Array.isArray(r.opposing_parties)
+    ? (r.opposing_parties as Record<string, unknown>[]).map((o) => (o && typeof o === 'object' ? { ...o,
+        owner_name_emcs: withTitle(o.owner_title, o.owner_name),
+        address_emcs: opponentAddressLine(o.address, o.moo, o.subdistrict, o.district, o.home_province) } : o))
+    : r.opposing_parties;
+  res.json({ success: true, data: { ...eff.report, main_from: eff.main_from, opposing_parties: opposing,
     driver_address_emcs: driverAddressLine(r.driver_address, r.driver_moo, r.driver_subdistrict) } });
 }));
 
