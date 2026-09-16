@@ -81,8 +81,8 @@ const read = (p: string) => fs.readFileSync(path.join(ROOT, p), 'utf8');
 {
   const web = read('web/src/components/cases/CaseDetail.tsx');
   check('เว็บ: ตำบลบังคับ (จุดแดง Req of=driver_subdistrict) · หมู่ไม่บังคับ', web.includes('<F label="ตำบล / แขวง" req={<Req of="driver_subdistrict" />}>') && !/Req of="[^"]*driver_moo/.test(web));
-  check('เว็บ: หมู่อยู่ในช่องเดียวกับที่อยู่ (แบบบัตรประชาชน+คนไทย) ไม่มี placeholder ม. · โชว์ "ม." เมื่อมีค่า · ไม่มี F แยกของหมู่',
-    !/name="driver_moo"[^>]*placeholder=/.test(web) && web.includes("{driverMoo ? <span") && !web.includes('<F label="หมู่">')
+  check('เว็บ: หมู่อยู่ในช่องเดียวกับที่อยู่ (แบบบัตรประชาชน+คนไทย) ไม่มี placeholder · มีคำว่า "หมู่" คั่นหน้าช่อง · ไม่มี F แยกของหมู่',
+    !/name="driver_moo"[^>]*placeholder=/.test(web) && web.includes('shrink-0 pl-1">หมู่</span>') && !web.includes('<F label="หมู่">')
     && /<F label="ที่อยู่ปัจจุบัน \(บ้านเลขที่ \/ ถนน\)" req=\{<Req of="driver_address" \/>\}>[\s\S]{0,900}?name="driver_moo"/.test(web));
   check('เว็บ: ช่อง driver_moo + select driver_subdistrict โหลดจาก /api/geo/tumbons · เปลี่ยนจังหวัด/อำเภอแล้วล้างตำบล',
     web.includes('name="driver_moo"') && web.includes('name="driver_subdistrict"') && web.includes("api.get('/api/geo/tumbons'")
