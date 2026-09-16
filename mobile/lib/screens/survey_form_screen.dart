@@ -101,6 +101,8 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
   Set<int>? _imgSel; // โหมดเลือกหลายรูป (null = ปิด)
   List<String> _provinceNames = [];
   Map<String, List<String>> _provincesData = {};
+  // ตำบลตามจังหวัด/อำเภอ (assets/thai_tumbons.json — generate จาก backend genThaiTumbonsAsset.ts, 16/09/69)
+  Map<String, Map<String, List<String>>> _tumbonsData = {};
   List<Map<String, dynamic>> _caseImages = [];
   bool _showImageSheet = false;
   // มุมมองปัจจุบันของ Hub-and-Spoke (เริ่มที่แดชบอร์ด)
@@ -669,6 +671,16 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
         _provinceNames = _provincesData.keys.toList()..sort();
       });
     } catch (_) {}
+    // ตำบล (ไฟล์แยก 247 KB) — โหลดไม่ได้ก็แค่ dropdown ตำบลว่าง ไม่กระทบส่วนอื่น
+    try {
+      final rawT = await DefaultAssetBundle.of(context).loadString('assets/thai_tumbons.json');
+      final parsedT = Map<String, dynamic>.from(jsonDecode(rawT));
+      if (!mounted) return;
+      setState(() {
+        _tumbonsData = parsedT.map((p, d) => MapEntry(p,
+            Map<String, dynamic>.from(d as Map).map((k, v) => MapEntry(k, List<String>.from(v as List)))));
+      });
+    } catch (_) {}
   }
 
   void _showBuddhistDatePicker(TextEditingController target, {String title = 'เลือกวันที่', int defaultYearsAgo = 0, int yearsAhead = 5}) {
@@ -984,6 +996,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
       _driverLicenseStartCtl: 'driver_license_start', _driverLicenseEndCtl: 'driver_license_end',
       _driverRelationCtl: 'driver_relation',
       _driverProvinceCtl: 'driver_province', _driverDistrictCtl: 'driver_district',
+      _driverMooCtl: 'driver_moo', _driverSubdistrictCtl: 'driver_subdistrict',
       _damageDescCtl: 'damage_description', _estimatedCostCtl: 'estimated_cost',
       _accDateCtl: 'acc_date', _accTimeCtl: 'acc_time', _accPlaceCtl: 'acc_place',
       _accProvinceCtl: 'acc_province', _accDistrictCtl: 'acc_district',
@@ -1191,6 +1204,8 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
   final _driverRelationCtl = TextEditingController();
   final _driverProvinceCtl = TextEditingController();
   final _driverDistrictCtl = TextEditingController();
+  final _driverMooCtl = TextEditingController();          // หมู่ (16/09/69) ไม่บังคับ
+  final _driverSubdistrictCtl = TextEditingController();  // ตำบล/แขวง (เลือกตามอำเภอ)
 
   // === ความเสียหาย ===
   final _damageDescCtl = TextEditingController();
@@ -1335,7 +1350,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
       _driverNameCtl, _driverLastnameCtl, _driverAgeCtl, _driverBirthdateCtl,
       _driverPhoneCtl, _driverAddressCtl, _driverIdCardCtl, _driverLicenseNoCtl,
       _driverLicenseTypeCtl, _driverLicensePlaceCtl, _driverLicenseStartCtl, _driverLicenseEndCtl,
-      _driverRelationCtl, _driverProvinceCtl, _driverDistrictCtl,
+      _driverRelationCtl, _driverProvinceCtl, _driverDistrictCtl, _driverMooCtl, _driverSubdistrictCtl,
       _damageDescCtl, _estimatedCostCtl,
       _accDateCtl, _accTimeCtl, _accPlaceCtl, _accProvinceCtl, _accDistrictCtl,
       _survPlaceCtl, _survProvinceCtl, _survDistrictCtl,
@@ -2191,6 +2206,8 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
       'driver_relation': _driverRelationCtl.text.trim(),
       'driver_province': _driverProvinceCtl.text.trim(),
       'driver_district': _driverDistrictCtl.text.trim(),
+      'driver_moo': _driverMooCtl.text.trim(),
+      'driver_subdistrict': _driverSubdistrictCtl.text.trim(),
       'damage_description': _damageDescCtl.text.trim(),
       // แผนภาพความเสียหายรถประกัน (structured) → JSONB คอลัมน์ insured_damage (ตัดแถวเปล่า)
       'insured_damage': _filledDamageItems(),
@@ -3379,9 +3396,12 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
         _ocrField('driver_id_card', _driverCidField()),
         _ocrField('driver_address', _txt(_driverAddressCtl, 'ที่อยู่ปัจจุบัน', req: true, ocrKey: 'driver_address', maxLines: 2)),
         _ocrField('driver_province', _dd('จังหวัด', _driverProvinceCtl.text, _provinceNames,
-            (v) => setState(() { _driverProvinceCtl.text = v ?? ''; _driverDistrictCtl.text = ''; _ocrConf.remove('driver_province'); _ocrConf.remove('driver_district'); }),
+            (v) => setState(() { _driverProvinceCtl.text = v ?? ''; _driverDistrictCtl.text = ''; _driverSubdistrictCtl.text = ''; _ocrConf.remove('driver_province'); _ocrConf.remove('driver_district'); }),
             hint: 'เลือกจังหวัด', req: true, key: ValueKey('dp_${_driverProvinceCtl.text}'))),
         _ocrField('driver_district', _districtDropdown()),
+        // 16/09/69: ตำบล (เลือกตามอำเภอ) + หมู่ (พิมพ์ ไม่บังคับ) — EMCS ไม่มีช่องแยก ระบบประกอบเป็น "46/23 ม.7 ต.ท้ายบ้าน" ตอนออก EMCS/XML
+        _tumbonDropdown(),
+        _txt(_driverMooCtl, 'หมู่ที่ (ม.) — ไม่บังคับ', keyboardType: TextInputType.text),
         // ── ใบขับขี่ (เปิด/ปิด — บางเคสไม่มีใบขับขี่) ──
         _switchRow('มีใบขับขี่', _driverHasLicense, (v) => setState(() {
               _driverHasLicense = v;
@@ -4474,8 +4494,18 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
         : <String>[];
     // req: EMCS บังคับ ddlDri_DistrictID ใน vlidSurvey (เดิมไม่มีจุดแดง → ปล่อยว่างแล้วส่งได้)
     return _dd('เขต/อำเภอ', _driverDistrictCtl.text, districts,
-        (v) => setState(() { _driverDistrictCtl.text = v ?? ''; _ocrConf.remove('driver_district'); }),
+        (v) => setState(() { _driverDistrictCtl.text = v ?? ''; _driverSubdistrictCtl.text = ''; _ocrConf.remove('driver_district'); }),
         hint: 'เลือกเขต/อำเภอ', req: true, key: ValueKey('dd_${_driverProvinceCtl.text}_${_driverDistrictCtl.text}'));
+  }
+
+  /// ตำบล/แขวง ตามจังหวัด+อำเภอที่เลือก (16/09/69) — ค่าที่เคยบันทึกแต่ไม่อยู่ในรายการ (เคสเก่า/สะกดต่าง) ยังโชว์ ไม่ล้างทิ้ง · ไม่บังคับ
+  Widget _tumbonDropdown() {
+    final tumbons = _tumbonsData[_driverProvinceCtl.text]?[_driverDistrictCtl.text] ?? const <String>[];
+    final cur = _driverSubdistrictCtl.text;
+    final items = (cur.isNotEmpty && !tumbons.contains(cur)) ? <String>[cur, ...tumbons] : tumbons;
+    return _dd('ตำบล / แขวง', cur, items,
+        (v) => setState(() { _driverSubdistrictCtl.text = v ?? ''; }),
+        hint: 'เลือกตำบล/แขวง', key: ValueKey('dt_${_driverProvinceCtl.text}_${_driverDistrictCtl.text}_$cur'));
   }
 
   Widget _licenseTypeDropdown() {

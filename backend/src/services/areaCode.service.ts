@@ -61,12 +61,24 @@ export function amphurCode(province?: string | null, district?: string | null): 
     if (!code.startsWith(pc)) continue;
     const have = norm(name);
     if (have === want) return code;
-    // 'อำเภอเมือง' (แอป) ↔ 'เมืองชลบุรี' (ตาราง)
-    if (want === 'เมือง' && have.startsWith('เมือง')) muang = code;
+    // 'อำเภอเมือง' (แอป) ↔ 'เมืองชลบุรี' (ตาราง) — เอาตัวแรก (รหัสหลัก xx01) ไม่ทับด้วยสาขาอำเภอที่ตามมา
+    // (3651 'เมืองชัยภูมิ (สาขาตำบลโนนสำราญ)*' / 9251 'อำเภอเมืองตรัง(สาขาคลองเต็ง)**' เคยชนะแล้วได้ตำบล 0 — 16/09/69)
+    if (!muang && want === 'เมือง' && have.startsWith('เมือง')) muang = code;
     // บางจังหวัดแอปเขียนอำเภอเมืองด้วยชื่อจังหวัดเลย: 'อำเภอบึงกาฬ' ↔ 'เมืองบึงกาฬ'
-    if (have === `เมือง${want}`) muang = code;
+    if (!muang && have === `เมือง${want}`) muang = code;
   }
   return muang;
+}
+
+/** รายชื่อตำบลทั้งหมดในอำเภอ (ชื่อจังหวัด/อำเภอตามที่แอปเขียน) — dropdown ตำบลของที่อยู่ผู้ขับขี่ (16/09/69) · หาอำเภอไม่เจอ = [] */
+export function tumbonNames(province?: string | null, district?: string | null): string[] {
+  const ac = amphurCode(province, district);
+  if (!ac) return [];
+  const names: string[] = [];
+  for (const [code, name] of Object.entries(TH_TUMBONS)) {
+    if (code.startsWith(ac) && name) names.push(name.replace(/^\*+/, '').trim());   // ชุดข้อมูลบางตำบลมี * นำหน้า
+  }
+  return [...new Set(names)].sort((a, b) => a.localeCompare(b, 'th'));
 }
 
 /** ตำบล — ใช้เฉพาะตอนเช็คว่าเป็นตำบลที่จ่ายไม่เท่าอำเภอแม่หรือเปล่า */

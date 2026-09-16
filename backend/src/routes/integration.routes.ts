@@ -10,6 +10,7 @@ import { CAR_BRANDS_BY_TYPE, BRAND_ALIASES, THAI_BRANDS, CAR_TYPE_LABELS } from 
 import { notifyCaseChanged } from '../services/caseEvents';
 import { emcsQueueService } from '../services/emcsQueue.service';
 import { botReleaseKeys, BOT_VERSION_RE } from '../services/botRelease';
+import { driverAddressLine } from '../services/driverAddress';
 
 // ── routes สำหรับเครื่องมือภายใน (se-autokey) — auth ด้วย service token ไม่ผูกบัญชีพนักงาน ──
 // เปิดใช้โดยตั้ง env INTEGRATION_TOKEN (ยาว ≥24 ตัว); ไม่ตั้ง = ทุก route ตอบ 401
@@ -363,7 +364,10 @@ router.get('/cases/:id/report', integrationAuth, asyncHandler(async (req: Reques
   // ครั้งที่ 2+ (15/09/69 แบบ EMCS): ข้อมูลหลักจากครั้งที่ 1 สด + ของครั้งนั้น — ชุดเดียวกับหน้าเคส/XML (main_from บอกว่ามาจากใบไหน)
   const eff = await caseService.getEffectiveReport(caseId);
   if (!eff) { res.status(404).json({ success: false, message: 'report not found' }); return; }
-  res.json({ success: true, data: { ...eff.report, main_from: eff.main_from } });
+  // driver_address_emcs = ที่อยู่ผู้ขับขี่ประกอบแล้ว "46/23 ม.7 ต.ท้ายบ้าน" (16/09/69) — บอทกรอก txtDri_Address ตรง ๆ
+  const r = eff.report as Record<string, unknown>;
+  res.json({ success: true, data: { ...eff.report, main_from: eff.main_from,
+    driver_address_emcs: driverAddressLine(r.driver_address, r.driver_moo, r.driver_subdistrict) } });
 }));
 
 // รายการรูปของเคส (survey_photos ที่ผูกกับ report) — SE-AutoKey ใช้โหลดไปอัปเข้า EMCS

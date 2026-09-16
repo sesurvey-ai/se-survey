@@ -163,6 +163,8 @@ const submitSurveySchema = z.object({
   driver_address: optStr,
   driver_province: optStr,
   driver_district: optStr,
+  driver_moo: optStr,          // หมู่ (16/09/69) — ออก EMCS เป็น "ม.<หมู่>" ต่อท้ายที่อยู่
+  driver_subdistrict: optStr,  // ตำบล (16/09/69) — "ต.<ตำบล>" · จังหวัด/อำเภอยังไป dropdown
   driver_id_card: optStr,
   driver_id_type: optStr,   // 'thai' | 'foreign' — คุมการตรวจ 13 หลักฝั่งแอป
   driver_license_no: optStr,

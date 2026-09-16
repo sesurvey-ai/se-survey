@@ -657,6 +657,17 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
     .map((t) => t.tumbon);
   const [driverProv, setDriverProv] = useState<string>(report.driver_province || '0');
   const [driverDist, setDriverDist] = useState<string>(report.driver_district || '-- เขต --');
+  // ตำบลของที่อยู่ผู้ขับขี่ (16/09/69): รายการตามจังหวัด/อำเภอจาก /api/geo/tumbons · ค่าที่บันทึกไว้แต่ไม่อยู่ในรายการยังโชว์
+  const [driverTumbon, setDriverTumbon] = useState<string>(report.driver_subdistrict || '');
+  const [driverTumbons, setDriverTumbons] = useState<string[]>([]);
+  useEffect(() => {
+    if (!driverProv || driverProv === '0' || !driverDist || driverDist.startsWith('--')) { setDriverTumbons([]); return; }
+    let alive = true;
+    api.get('/api/geo/tumbons', { params: { province: driverProv, district: driverDist } })
+      .then(res => { if (alive) setDriverTumbons(Array.isArray(res.data?.data) ? (res.data.data as string[]) : []); })
+      .catch(() => { if (alive) setDriverTumbons([]); });
+    return () => { alive = false; };
+  }, [driverProv, driverDist]);
   /**
    * ทุกช่องพิมพ์ได้ทันที ไม่ต้องกด "แก้ไขทั้งหมด" ก่อน (user เคาะ 17/08/69)
    *
@@ -2798,17 +2809,27 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
               </F>
 
               {/* ที่อยู่ + จังหวัด + เขต/อำเภอ บังคับทั้ง 3 ช่อง (เจอสดตอนเทส 2026-08-01) */}
-              <F label="ที่อยู่ปัจจุบัน" req={<Req of="driver_address,driver_province,driver_district" />} span={2}>
-                <input type="text" disabled={d} name="driver_address" defaultValue={report.driver_address || ''} className={CTL(d)} />
+              {/* 16/09/69: + หมู่ (พิมพ์ ไม่บังคับ) + ตำบล (เลือกตามอำเภอ) — ออก EMCS/XML เป็น "46/23 ม.7 ต.ท้ายบ้าน" จังหวัด/อำเภอไป dropdown */}
+              <F label="ที่อยู่ปัจจุบัน (บ้านเลขที่ / ถนน) · หมู่" req={<Req of="driver_address,driver_province,driver_district" />} span={2}>
+                <div className="flex gap-2">
+                  <input type="text" disabled={d} name="driver_address" defaultValue={report.driver_address || ''} className={CTL(d) + ' flex-1 min-w-0'} placeholder="บ้านเลขที่ / ถนน / ซอย" />
+                  <input type="text" disabled={d} name="driver_moo" defaultValue={report.driver_moo || ''} className={CTL(d) + ' w-24 shrink-0'} placeholder="ม." title="หมู่ที่ (ไม่บังคับ)" />
+                </div>
               </F>
               <F label="จังหวัด">
-                <select disabled={d} name="driver_province" value={driverProv} onChange={e => { setDriverProv(e.target.value); setDriverDist('-- เขต --'); }} className={CTL(d)}>
+                <select disabled={d} name="driver_province" value={driverProv} onChange={e => { setDriverProv(e.target.value); setDriverDist('-- เขต --'); setDriverTumbon(''); }} className={CTL(d)}>
                   {withCurrent(PROVINCE_OPTIONS, driverProv).map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
               </F>
               <F label="เขต / อำเภอ">
-                <select disabled={d} name="driver_district" value={driverDist} onChange={e => setDriverDist(e.target.value)} className={CTL(d)}>
+                <select disabled={d} name="driver_district" value={driverDist} onChange={e => { setDriverDist(e.target.value); setDriverTumbon(''); }} className={CTL(d)}>
                   {districtOptions(driverProv, driverProv === report.driver_province ? report.driver_district : '').map(dt => <option key={dt} value={dt}>{dt}</option>)}
+                </select>
+              </F>
+              <F label="ตำบล / แขวง">
+                <select disabled={d} name="driver_subdistrict" value={driverTumbon} onChange={e => setDriverTumbon(e.target.value)} className={CTL(d)}>
+                  <option value="">-- ตำบล --</option>
+                  {[...(driverTumbon && !driverTumbons.includes(driverTumbon) ? [driverTumbon] : []), ...driverTumbons].map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </F>
 

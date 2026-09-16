@@ -88,6 +88,7 @@ flutter:
 
   assets:
     - assets/thai_provinces.json
+    - assets/thai_tumbons.json
     - assets/alarm_loop.wav
     - assets/se-mark.png
     - assets/splash_logo.png

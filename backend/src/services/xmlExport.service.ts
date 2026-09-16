@@ -13,6 +13,7 @@
  */
 
 import { EMCS_DISTRICTS } from '../data/emcsDistricts';
+import { driverAddressLine } from './driverAddress';
 
 // ── SE Survey identity ในพอร์ทัล (คงที่ต่อบริษัท; override ได้ผ่าน env) ──
 const SURVEY_ID = process.env.PORTAL_SURVEY_ID || '5684';
@@ -463,7 +464,8 @@ function buildCar(c: Row, type: number, insured: boolean): string {
     // คู่กรณี: วันเกิด "-" → อายุ 1 (คู่กับ DRI_BIRTHDAY = วันนี้; EMCS ไม่รับ 0 — user เจอ #282 10/09/69) · รถประกันไม่แตะ
     el('DRI_AGE', insured ? xmlAge(c.driver_age, c.driver_birthdate) : xmlAge(c.age, c.birthdate, '1')) +
     el('DRI_RELATION', lookup(RELATION, insured ? c.driver_relation : c.relation)) +
-    el('DRI_ADDRESS', insured ? c.driver_address : c.address) +
+    // ผู้ขับขี่รถประกัน: บ้านเลขที่ + ม.<หมู่> + ต.<ตำบล> ในช่องเดียว (16/09/69) — จังหวัด/อำเภอไป DRI_PROVINCEID/DRI_DISTRICTID
+    el('DRI_ADDRESS', insured ? driverAddressLine(c.driver_address, c.driver_moo, c.driver_subdistrict) : c.address) +
     // คู่กรณีไม่มีช่องอำเภอในแอป (มีแต่ที่อยู่) → ปล่อยว่างเฉพาะคู่กรณี
     // คู่กรณีมีช่องอำเภอแล้ว (opposing_parties[].district cascade จากจังหวัด) → ddlDri_DistrictID ของคู่กรณี
     // ภูมิลำเนาผู้ขับขี่ (จากบัตรประชาชน/ทะเบียนบ้าน) — คนละช่องกับ CAR_PROVINCE ที่เป็น
@@ -669,7 +671,7 @@ export function emcsNameWarnings(r: Row): EmcsNameWarning[] {
   lenWarn(out, 'ASSURED_NAME', 'ผู้เอาประกันภัย', r.assured_name);
   lenWarn(out, 'POLICE_STATION', 'สถานีตำรวจ', r.acc_police_station);
   lenWarn(out, 'DRIVER_BY_POLICY', 'ชื่อผู้ขับขี่ตามกรมธรรม์', r.driver_by_policy);
-  lenWarn(out, 'DRI_ADDRESS', 'ที่อยู่ผู้ขับขี่รถประกัน', r.driver_address);
+  lenWarn(out, 'DRI_ADDRESS', 'ที่อยู่ผู้ขับขี่รถประกัน', driverAddressLine(r.driver_address, r.driver_moo, r.driver_subdistrict));
   nameWarn(out, 'ACC_CALL', 'ผู้แจ้ง', r.acc_reporter);
   nameWarn(out, 'ACC_SURV', 'ผู้สำรวจภัย', r.acc_surveyor);
   nameWarn(out, 'POLICE_NAME', 'ชื่อพนักงานสอบสวน', r.acc_police_name);
