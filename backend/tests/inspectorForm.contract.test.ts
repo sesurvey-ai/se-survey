@@ -475,7 +475,7 @@ const opt = fs.readFileSync(
   path.join(__dirname, '..', '..', 'web', 'src', 'components', 'cases', 'caseOptions.ts'), 'utf8');
 check('ลิสต์ยี่ห้อรับได้ทั้งรหัสและป้ายไทย (คู่กรณีเก็บประเภทรถเป็นป้ายไทย)',
       opt.includes('CAR_TYPE_LABEL_TO_CODE')
-      && opt.includes('CAR_BRANDS_BY_TYPE[CAR_TYPE_LABEL_TO_CODE[raw] ?? raw]'));
+      && opt.includes('const code = CAR_TYPE_LABEL_TO_CODE[raw] ?? raw;') && opt.includes('CAR_BRANDS_BY_TYPE[code] ?? []'));   // 16/09/69 แยกตัวแปร code (เติม -ALL- ตามประเภท)
 check('ช่อง "ราคาพนักงาน" ของค่ารูปถ่ายถูกล็อก (พนักงานไม่มีค่ารูป)',
       src.includes('disabled name="pay_photo_fee"'));
 const xml5 = fs.readFileSync(
