@@ -165,7 +165,7 @@ const read = (p: string) => fs.readFileSync(path.join(ROOT, p), 'utf8');
   check('เว็บ: คู่กรณีมีช่อง owner_title (select คำนำหน้า) ในช่องเดียวกับชื่อ · ป้าย "เจ้าของรถคู่กรณี *"',
     web.includes("{ k: 'owner_title', label: 'คำนำหน้า', options: TITLES }") && web.includes("label: 'เจ้าของรถคู่กรณี *'") && web.includes('function OwnerNameCell'));
   check('เว็บ: ที่อยู่ผู้ขับขี่คู่กรณี บ้านเลขที่+หมู่ (ช่องเดียว) · จังหวัด · เขต/อำเภอ · ตำบล/แขวง จาก /api/geo/tumbons · เปลี่ยนจังหวัด/อำเภอแล้วล้างตำบล',
-    web.includes("{ k: 'moo', label: 'หมู่' }") && web.includes("{ k: 'subdistrict', label: 'ตำบล/แขวง (ที่อยู่)' }") && web.includes('function AddressMooCell')
+    web.includes("{ k: 'moo', label: 'หมู่' }") && web.includes("{ k: 'subdistrict', label: 'ตำบล/แขวง (ที่อยู่)', reqWhen: opponentHasAddress }") && web.includes('function AddressMooCell')
     && web.includes("api.get('/api/geo/tumbons'") && (web.match(/next\.subdistrict = ''/g) ?? []).length >= 2);
   const opp = read('mobile/lib/screens/survey/opponent_editor.dart');
   check('มือถือ: เจ้าของรถคู่กรณี (ชื่อช่องใหม่) + คำนำหน้า · ที่อยู่ผู้ขับขี่ หมู่/จังหวัด/อำเภอ/ตำบล ส่งครบ',
@@ -174,6 +174,11 @@ const read = (p: string) => fs.readFileSync(path.join(ROOT, p), 'utf8');
   const form = read('mobile/lib/screens/survey_form_screen.dart');
   check('มือถือ: ฟอร์มหลักส่งรายการตำบลให้ editor คู่กรณี (2 จุด) · รายการช่องบังคับใช้ชื่อ "เจ้าของรถคู่กรณี"',
     (form.match(/tumbonsData: _tumbonsData/g) ?? []).length === 2 && form.includes("'owner_name': 'เจ้าของรถคู่กรณี'"));
+  check('เว็บ+มือถือ: จังหวัด/อำเภอ/ตำบล ของที่อยู่ผู้ขับขี่คู่กรณี บังคับเมื่อมีข้อมูลที่อยู่ (opponentHasAddress / addrHasData) · "รอตรวจสอบ"/ว่างทั้งหมด ยกเว้น (user เคาะ 16/09/69)',
+    (web.match(/reqWhen: opponentHasAddress/g) ?? []).length === 3 && web.includes("a !== 'รอตรวจสอบ'") && web.includes('if (r.pending === true) return false')
+    && opp.includes('static bool addrHasData(') && opp.includes("if (_hasAddr && _subdistrict.isEmpty) 'ตำบล/แขวง (ที่อยู่ผู้ขับขี่)'") && (opp.match(/req: _hasAddr/g) ?? []).length === 3
+    && form.includes("OpponentEditor.addrHasData(s('address'), s('moo'), s('home_province'), s('district'), s('subdistrict'))") && form.includes("if (it['pending'] == true) return const <String>[];"));
+  check('มือถือ: สแกนบัตรประชาชนคู่กรณีแล้วเลือกจังหวัด/อำเภอ/ตำบลให้เอง', opp.includes("_matchProvince(f('province'))") && opp.includes("_matchTumbonInText(prov, dist, f('address'))"));
 }
 
 // ── ฝั่งบอท (se-autokey ข้าง ๆ — ข้ามถ้าไม่มี) ──

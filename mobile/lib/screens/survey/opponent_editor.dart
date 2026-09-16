@@ -17,6 +17,13 @@ class OpponentEditor extends StatefulWidget {
   final void Function(Map<String, dynamic> data)? onDraft;
   const OpponentEditor({super.key, required this.data, required this.provinces, this.provincesData = const {}, this.tumbonsData = const {}, required this.number, this.isNew = false, this.onScan, this.onDraft});
 
+  /// ที่อยู่ผู้ขับขี่คู่กรณี "มีข้อมูล" = กรอกส่วนใดส่วนหนึ่ง (บ้านเลขที่ที่ไม่ใช่ -/รอตรวจสอบ · หมู่ · จังหวัด · อำเภอ · ตำบล)
+  /// → จังหวัด/อำเภอ/ตำบล ต้องครบ (user เคาะ 16/09/69) · ฟอร์มหลัก (alsoMissing หมวด 6) และเว็บ (opponentHasAddress) ใช้กติกาเดียวกัน
+  static bool addrHasData(String addr, String moo, String prov, String dist, String tumbon) {
+    final a = addr.trim();
+    return (a.isNotEmpty && a != '-' && a != 'รอตรวจสอบ') || moo.trim().isNotEmpty || prov.isNotEmpty || dist.isNotEmpty || tumbon.isNotEmpty;
+  }
+
   @override
   State<OpponentEditor> createState() => _OpponentEditorState();
 }
@@ -76,6 +83,54 @@ class _OpponentEditorState extends State<OpponentEditor> {
   void dispose() {
     for (final c in _c.values) { c.dispose(); }
     super.dispose();
+  }
+
+  // ── ที่อยู่ผู้ขับขี่คู่กรณี: "มีข้อมูล" = กรอกส่วนใดส่วนหนึ่ง (บ้านเลขที่ที่ไม่ใช่ -/รอตรวจสอบ · หมู่ · จังหวัด · อำเภอ · ตำบล) ──
+  // → จังหวัด/อำเภอ/ตำบล ต้องครบ (user เคาะ 16/09/69 "ถ้ามีก็ต้องกรอก") · ไม่มีข้อมูลเลย = เว้นว่างทั้งหมด บอทใส่ "-" ให้ EMCS
+  // · "รอตรวจสอบ" = ยกเว้น · กติกาเดียวกับเว็บ (RecordEditors.tsx opponentHasAddress) และ alsoMissing หมวด 6 ของฟอร์มหลัก
+  bool get _hasAddr => !_pending && OpponentEditor.addrHasData(_ctl('address').text, _ctl('moo').text, _homeProvince, _district, _subdistrict);
+
+  // จับคู่ชื่อจังหวัด/อำเภอที่ OCR อ่านจากบัตร → ตัวเลือกใน dropdown (ชุดเดียวกับผู้ขับขี่รถประกันในฟอร์มหลัก)
+  static String _normTh(String s) => s.replaceAll(RegExp(r'\s+'), '').replaceAll('ฯ', '');
+  String? _matchProvince(String raw) {
+    if (raw.trim().isEmpty || widget.provinces.isEmpty) return null;
+    final n = _normTh(raw).replaceAll('จังหวัด', '').replaceAll('จ.', '');
+    if (n.contains('กรุงเทพ') || n == 'กทม' || n == 'กทม.') {
+      for (final p in widget.provinces) { if (p.contains('กรุงเทพ')) return p; }
+    }
+    for (final p in widget.provinces) { if (_normTh(p) == n) return p; }
+    if (n.length >= 3) {
+      for (final p in widget.provinces) {
+        final pn = _normTh(p);
+        if (pn.contains(n) || n.contains(pn)) return p;
+      }
+    }
+    return null;
+  }
+  String? _matchDistrict(String province, String raw) {
+    final ds = widget.provincesData[province];
+    if (ds == null || ds.isEmpty || raw.trim().isEmpty) return null;
+    String strip(String s) => _normTh(s)
+        .replaceAll('กิ่งอำเภอ', '').replaceAll('อำเภอ', '').replaceAll('เขต', '')
+        .replaceAll('กิ่ง', '').replaceAll('อ.', '').replaceAll('ข.', '').replaceAll('ต.', '');
+    final n = strip(raw);
+    if (n.isEmpty) return null;
+    for (final d in ds) {
+      final dn = strip(d);
+      if (dn == n || dn.startsWith(n) || n.startsWith(dn)) return d;
+    }
+    return null;
+  }
+  // ตำบล/แขวง จากข้อความที่อยู่บนบัตร ("ต.ท้ายบ้าน" / "แขวงบางด้วน") → ตัวเลือกในรายการของอำเภอนั้น
+  String? _matchTumbonInText(String province, String district, String text) {
+    final list = widget.tumbonsData[province]?[district] ?? const <String>[];
+    if (list.isEmpty || text.trim().isEmpty) return null;
+    final m = RegExp(r'(?:ตำบล|แขวง|ต\.)\s*([^\s,]+)').firstMatch(text);
+    if (m == null) return null;
+    final n = _normTh(m.group(1)!);
+    for (final t in list) { if (_normTh(t) == n) return t; }
+    for (final t in list) { final tn = _normTh(t); if (n.startsWith(tn) || tn.startsWith(n)) return t; }
+    return null;
   }
 
   bool get _hasInsurance => _insurer.isNotEmpty && _insurer != 'ไม่มีบริษัทประกันภัย' && _insurer != 'อื่นๆ';
@@ -183,6 +238,10 @@ class _OpponentEditorState extends State<OpponentEditor> {
         if (_ctl('birthdate').text.trim().isEmpty) 'วันเกิด',
         if (_ctl('age').text.trim().isEmpty) 'อายุ',
         if (_insurer.trim().isEmpty) 'มีประกันภัยที่',
+        // ที่อยู่ผู้ขับขี่ (16/09/69): มีข้อมูลส่วนใดส่วนหนึ่ง → จังหวัด/อำเภอ/ตำบล ต้องครบ · ว่างทั้งหมด/"รอตรวจสอบ" = ไม่บังคับ
+        if (_hasAddr && _homeProvince.isEmpty) 'จังหวัด (ที่อยู่ผู้ขับขี่)',
+        if (_hasAddr && _district.isEmpty) 'เขต/อำเภอ (ที่อยู่ผู้ขับขี่)',
+        if (_hasAddr && _subdistrict.isEmpty) 'ตำบล/แขวง (ที่อยู่ผู้ขับขี่)',
       ];
 
   Future<void> _save() async {
@@ -225,6 +284,19 @@ class _OpponentEditorState extends State<OpponentEditor> {
         if (f('cid').isNotEmpty) _ctl('cid').text = f('cid');
         if (f('birthdate').isNotEmpty) _ctl('birthdate').text = kNormThaiDateEra(f('birthdate'));
         if (f('address').isNotEmpty) _ctl('address').text = f('address');
+        // จังหวัด/อำเภอ(/ตำบล) ของที่อยู่บนบัตร → เลือก dropdown ให้ (16/09/69 — ช่องพวกนี้บังคับเมื่อมีที่อยู่) เหมือนผู้ขับขี่รถประกัน
+        final prov = _matchProvince(f('province'));
+        if (prov != null) {
+          if (prov != _homeProvince) { _district = ''; _subdistrict = ''; }
+          _homeProvince = prov;
+          final dist = _matchDistrict(prov, f('district'));
+          if (dist != null) {
+            if (dist != _district) _subdistrict = '';
+            _district = dist;
+            final t = _matchTumbonInText(prov, dist, f('address'));
+            if (t != null) _subdistrict = t;
+          }
+        }
         final p = f('prefix');
         if (const ['นาย', 'นาง', 'นางสาว', 'ด.ช.', 'ด.ญ.'].contains(p)) {
           _title = p;
@@ -371,17 +443,18 @@ class _OpponentEditorState extends State<OpponentEditor> {
         ),
         kPhone(_ctl('phone'), 'โทรศัพท์', req: true),
         // ที่อยู่ปัจจุบันผู้ขับขี่คู่กรณี (16/09/69 user สั่ง): บ้านเลขที่/ถนน + หมู่ · จังหวัด · เขต/อำเภอ · ตำบล/แขวง
-        // EMCS มีช่องข้อความเดียว → บอทประกอบ "46/23 ม.7 ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ" (หมู่/จังหวัด/อำเภอ/ตำบล ไม่บังคับ)
-        kText(_ctl('address'), 'ที่อยู่ปัจจุบัน (บ้านเลขที่ / ถนน)', req: true, maxLines: 2),
+        // EMCS มีช่องข้อความเดียว → บอทประกอบ "46/23 ม.7 ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ"
+        // มีที่อยู่ส่วนใดส่วนหนึ่ง → จังหวัด/อำเภอ/ตำบล บังคับ (จุดแดงขึ้นเอง · นับใน "ขาด") · ไม่มีข้อมูลเลยเว้นว่างทั้งหมด (user เคาะ 16/09/69)
+        kText(_ctl('address'), 'ที่อยู่ปัจจุบัน (บ้านเลขที่ / ถนน)', req: true, maxLines: 2, onChanged: (_) => setState(() {})),
         kRow2(
-          kText(_ctl('moo'), 'หมู่', keyboardType: TextInputType.number),
-          KPickerField(label: 'จังหวัด (ที่อยู่)', value: _homeProvince, options: widget.provinces,
+          kText(_ctl('moo'), 'หมู่', keyboardType: TextInputType.number, onChanged: (_) => setState(() {})),
+          KPickerField(label: 'จังหวัด (ที่อยู่)', value: _homeProvince, options: widget.provinces, req: _hasAddr,
               onSelected: (v) => setState(() { if (v != _homeProvince) { _district = ''; _subdistrict = ''; } _homeProvince = v; })),
         ),
         kRow2(
-          KPickerField(label: 'เขต / อำเภอ', value: _district, options: widget.provincesData[_homeProvince] ?? const <String>[],
+          KPickerField(label: 'เขต / อำเภอ', value: _district, options: widget.provincesData[_homeProvince] ?? const <String>[], req: _hasAddr,
               onSelected: (v) => setState(() { if (v != _district) _subdistrict = ''; _district = v; })),
-          KPickerField(label: 'ตำบล / แขวง', value: _subdistrict, options: widget.tumbonsData[_homeProvince]?[_district] ?? const <String>[],
+          KPickerField(label: 'ตำบล / แขวง', value: _subdistrict, options: widget.tumbonsData[_homeProvince]?[_district] ?? const <String>[], req: _hasAddr,
               onSelected: (v) => setState(() => _subdistrict = v)),
         ),
         _cidField(),

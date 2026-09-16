@@ -369,6 +369,15 @@ export const dropEmptyRecords = (items: RecordItem[]): RecordItem[] =>
 //
 // ⚠️ `province` ทำ 2 หน้าที่ในสคีมาของแอป: จังหวัดป้ายทะเบียน **และ** จังหวัดที่อยู่ผู้ขับขี่
 //    (เป็น parent ของ cascade อำเภอ) — สืบทอดมาจากฝั่งแอป ยังไม่ได้แยก
+/** ที่อยู่ผู้ขับขี่คู่กรณี "มีข้อมูล" = กรอกส่วนใดส่วนหนึ่ง (บ้านเลขที่ที่ไม่ใช่ -/รอตรวจสอบ · หมู่ · จังหวัด · อำเภอ · ตำบล)
+ *  → จังหวัด/อำเภอ/ตำบล ต้องครบ (user เคาะ 16/09/69 "ถ้ามีก็ต้องกรอก") · ไม่มีข้อมูลเลย = เว้นว่างทั้งหมด บอทใส่ "-" · แอปติ๊ก "รอตรวจสอบ" = ยกเว้น
+ *  กติกาเดียวกับแอป (OpponentEditor.addrHasData + alsoMissing หมวด 6) */
+export const opponentHasAddress = (r: LooseRecord): boolean => {
+  if (r.pending === true) return false;
+  const a = String(r.address ?? '').trim();
+  return (a !== '' && a !== '-' && a !== 'รอตรวจสอบ') || String(r.moo ?? '').trim() !== '' || chosen(r.home_province) || chosen(r.district) || chosen(r.subdistrict);
+};
+
 const OPPONENT_FIELDS: FieldDef[] = [
   // ลำดับ 5 แถวแรก user กำหนดเอง 10/09/69 (กริด 4 ช่องต่อแถวบนจอกว้าง):
   //   แถว 1 เจ้าของรถคู่กรณี · ประเภทรถ · ทะเบียน · จังหวัด
@@ -432,13 +441,13 @@ const OPPONENT_FIELDS: FieldDef[] = [
   // ป้าย กทม. / ภูมิลำเนา ศรีสะเกษ → อำเภอปรางค์กู่หายจากลิสต์)
   // ที่อยู่ปัจจุบันผู้ขับขี่คู่กรณี (user สั่ง 16/09/69): บ้านเลขที่+หมู่ (ช่องเดียวกัน — AddressMooCell) · จังหวัด · เขต/อำเภอ · ตำบล/แขวง แถวเดียวกัน
   // EMCS มีช่องข้อความเดียว (dropdown ของบล็อกคู่กรณีซ่อน) → บอท/XML ประกอบ "46/23 ม.7 ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ"
-  // (backend services/driverAddress.ts opponentAddressLine) · ทั้ง 4 ช่องใหม่ไม่บังคับ — EMCS บังคับแค่ช่องข้อความ ซึ่งบอทใส่ "-" ให้ถ้าว่าง
+  // (backend services/driverAddress.ts opponentAddressLine) · มีที่อยู่ส่วนใดส่วนหนึ่ง → จังหวัด/อำเภอ/ตำบล บังคับ (opponentHasAddress) · ว่างทั้งหมด = ไม่มีข้อมูล บอทใส่ "-"
   { k: 'address', label: 'ที่อยู่ผู้ขับขี่ (บ้านเลขที่ / ถนน)' },
   { k: 'moo', label: 'หมู่' },
-  { k: 'home_province', label: 'จังหวัด (ที่อยู่ผู้ขับขี่)', options: PROVINCE_OPTIONS },
-  { k: 'district', label: 'เขต/อำเภอ (ที่อยู่)',
+  { k: 'home_province', label: 'จังหวัด (ที่อยู่ผู้ขับขี่)', options: PROVINCE_OPTIONS, reqWhen: opponentHasAddress },
+  { k: 'district', label: 'เขต/อำเภอ (ที่อยู่)', reqWhen: opponentHasAddress,
     optionsFrom: (r) => districtOptions(String(r.home_province || r.province || ''), String(r.district ?? '')) },
-  { k: 'subdistrict', label: 'ตำบล/แขวง (ที่อยู่)' },   // ตัวเลือกจาก /api/geo/tumbons ตามจังหวัด+อำเภอ (tumbonOptions ใน OpponentEditor)
+  { k: 'subdistrict', label: 'ตำบล/แขวง (ที่อยู่)', reqWhen: opponentHasAddress },   // ตัวเลือกจาก /api/geo/tumbons ตามจังหวัด+อำเภอ (tumbonOptions ใน OpponentEditor)
 ];
 
 /** คีย์ที่ editor นี้ดูแล — ใช้ตัดสินว่าการ์ด "ว่างทั้งใบ" ไหม โดยไม่นับ damage/kfk */

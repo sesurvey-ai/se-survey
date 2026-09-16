@@ -3035,7 +3035,19 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
       'owner_name': 'เจ้าของรถคู่กรณี',
       'gender': 'เพศผู้ขับขี่', 'birthdate': 'วันเกิด', 'age': 'อายุ',
       'insurer': 'มีประกันภัยที่',
-    }, unit: 'คันที่');
+    }, unit: 'คันที่',
+      // ที่อยู่ผู้ขับขี่คู่กรณี (16/09/69): มีข้อมูลส่วนใดส่วนหนึ่ง → จังหวัด/อำเภอ/ตำบล ต้องครบ · ว่างทั้งหมด/"รอตรวจสอบ" = ไม่บังคับ
+      // (กติกาเดียวกับ OpponentEditor._missing และเว็บ opponentHasAddress) — ตรวจที่นี่ด้วยเพื่อให้ป้าย "ขาด N" ของ Hub และประตูส่งงานนับ
+      alsoMissing: (it) {
+        if (it['pending'] == true) return const <String>[];
+        String s(String k) => (it[k] ?? '').toString().trim();
+        if (!OpponentEditor.addrHasData(s('address'), s('moo'), s('home_province'), s('district'), s('subdistrict'))) return const <String>[];
+        return [
+          if (s('home_province').isEmpty) 'จังหวัด (ที่อยู่ผู้ขับขี่)',
+          if (s('district').isEmpty) 'เขต/อำเภอ (ที่อยู่ผู้ขับขี่)',
+          if (s('subdistrict').isEmpty) 'ตำบล/แขวง (ที่อยู่ผู้ขับขี่)',
+        ];
+      });
     checkItems('7. ผู้บาดเจ็บ', _hasInjured, _injured, 'ผู้บาดเจ็บ', const {
       'person_type': 'ประเภทผู้บาดเจ็บ', 'gender': 'เพศ', 'name': 'ชื่อ-นามสกุล',
       'cid': 'เลขบัตรประชาชน', 'hospital': 'โรงพยาบาล', 'symptom': 'อาการบาดเจ็บ',
