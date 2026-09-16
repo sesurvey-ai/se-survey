@@ -629,14 +629,7 @@ export function OpponentEditor({ items, onChange }: {
           <div key={i} className="border border-gray-200 rounded-none overflow-hidden">
             <div className="bg-gray-50 px-3 py-1.5 border-b border-gray-200 flex items-center gap-2 flex-wrap">
               <span className="text-sm font-semibold text-gray-700">คู่กรณีคันที่ {i + 1}</span>
-              <label className="flex items-center gap-1 text-xs text-gray-600">
-                <input
-                  type="checkbox" className="w-3.5 h-3.5"
-                  checked={it.kfk === true || it.kfk === 'true'}
-                  onChange={(e) => onChange(items.map((x, idx) => (idx === i ? { ...x, kfk: e.target.checked } : x)))}
-                />
-                KFK
-              </label>
+              {/* ติ๊ก KFK ถอดออกจากเว็บ 16/09/69 (user: ไม่ได้ใช้) — ค่า kfk ที่แอปติ๊กมายังอยู่ใน JSON และไปถึง XML/บอทตามเดิม (spread ของเดิมไว้) */}
               {/* "รอตรวจสอบ" — สถานะเดียวกับแอป (pending): ช่างติ๊กมาจากแอปก็ขึ้นป้ายที่นี่ · หัวหน้าติ๊กบนเว็บได้เอง (user สั่ง 16/09/69) */}
               <label className="flex items-center gap-1 text-xs text-gray-600" title="คู่กรณีหลบหนี / ยังไม่มีรายละเอียด — เติมช่องบังคับที่ยังว่างให้อัตโนมัติ แก้เองได้ (เอาติ๊กออกไม่ล้างค่า)">
                 <input type="checkbox" className="w-3.5 h-3.5" checked={it.pending === true} onChange={(e) => setPending(i, e.target.checked)} />
