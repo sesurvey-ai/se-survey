@@ -2811,9 +2811,14 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
               {/* ที่อยู่ + จังหวัด + เขต/อำเภอ บังคับทั้ง 3 ช่อง (เจอสดตอนเทส 2026-08-01) */}
               {/* 16/09/69: + หมู่ (พิมพ์ ไม่บังคับ) + ตำบล (เลือกตามอำเภอ) — ออก EMCS/XML เป็น "46/23 ม.7 ต.ท้ายบ้าน" จังหวัด/อำเภอไป dropdown */}
               <F label="ที่อยู่ปัจจุบัน (บ้านเลขที่ / ถนน) · หมู่" req={<Req of="driver_address,driver_province,driver_district" />} span={2}>
+                {/* ห่อแต่ละช่องด้วย div กำหนดความกว้าง — CTL มี w-full อยู่แล้ว ใส่ w-24 ซ้อนบน input จะแพ้ w-full (ช่อง ม. เคยกินทั้งแถว 16/09/69) */}
                 <div className="flex gap-2">
-                  <input type="text" disabled={d} name="driver_address" defaultValue={report.driver_address || ''} className={CTL(d) + ' flex-1 min-w-0'} placeholder="บ้านเลขที่ / ถนน / ซอย" />
-                  <input type="text" disabled={d} name="driver_moo" defaultValue={report.driver_moo || ''} className={CTL(d) + ' w-24 shrink-0'} placeholder="ม." title="หมู่ที่ (ไม่บังคับ)" />
+                  <div className="flex-1 min-w-0">
+                    <input type="text" disabled={d} name="driver_address" defaultValue={report.driver_address || ''} className={CTL(d)} placeholder="บ้านเลขที่ / ถนน / ซอย" />
+                  </div>
+                  <div className="w-24 shrink-0">
+                    <input type="text" disabled={d} name="driver_moo" defaultValue={report.driver_moo || ''} className={CTL(d)} placeholder="ม." title="หมู่ที่ (ไม่บังคับ)" />
+                  </div>
                 </div>
               </F>
               <F label="จังหวัด">
