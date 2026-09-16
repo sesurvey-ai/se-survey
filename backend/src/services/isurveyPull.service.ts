@@ -54,24 +54,20 @@ async function callService<T>(path: string, body: Record<string, unknown>, timeo
 
 /**
  * ตารางค่าสำรวจที่จะเขียนลง ISURVEY แท็บ 1 — ยอดรวมของแต่ละแถว (ไม่ใช่ราคาต่อหน่วย)
- *   sur (ฝั่งพนักงาน) ← survey_pay · "อื่น ๆ" = ช่อง "ค่าใช้จ่ายอื่นๆ" บนเว็บเท่านั้น
- *     นอกพื้นที่/นอกเวลา **บวกเข้า "ค่าบริการ"** (user เคาะ 16/09/69 หลังเคส #337: เดิมไปโผล่เป็น "ค่าใช้จ่ายอื่นๆ" 200 บน ISURVEY) —
- *     ISURVEY ไม่มีแถวสำหรับสองตัวนี้ (รู้แค่ธง ใน/นอกเวลา + นอกพื้นที่ ซึ่งคงค่าเดิมไว้) แต่ user ต้องการให้ยอดรวมเซอร์เวย์บน ISURVEY
- *     = ยอดพนักงานบน se-survey (ตัวอย่าง ค่าบริการ 400 + นอกเวลา 200 → ISURVEY ค่าบริการเสนอ 600) · se-billing ยังได้แยกรายการตามสูตรเดิม
+ *   sur (ฝั่งพนักงาน) ← survey_pay.total **ยอดเดียว** ลงช่อง "ค่าบริการ" — แถวอื่นทุกแถว 0 และ "หักเงิน" ของ ISURVEY = 0
+ *     (user เคาะ 16/09/69 รอบ 3 หลังเคส #337: เดิมส่งรายแถว + ยุบนอกเวลา/นอกพื้นที่เข้า "อื่น ๆ" → ยอดบน ISURVEY เพี้ยนจากเว็บ)
+ *     total ของเว็บ = รายรับทุกแถว + นอกพื้นที่/นอกเวลา − หักเงิน (pay.service) จึงต้องไม่ส่งหักเงินซ้ำ · ยอดรวมเซอร์เวย์บน ISURVEY = ยอดเว็บเสมอ
+ *     ISURVEY ไม่มีแถวนอกเวลา/นอกพื้นที่ (รู้แค่ธง ซึ่งคงค่าเดิมไว้) · รายละเอียดแยกรายการอยู่บนเว็บ + se-billing (สูตรเดิม ไม่เปลี่ยน)
+ *     ยังไม่มียอด (total ว่าง = ยังไม่กรอกเรท) = ไม่แตะฝั่งเสนอ · ติดลบ (หักเกินรายรับ) = 0 เพราะ ISURVEY รับติดลบไม่ได้
  *   ins (ฝั่งประกัน) ← survey_expenses · ราคาต่อหน่วย × จำนวน (ค่ารูป 5 × 10 = 50 ตรงกับที่ ISURVEY เก็บเป็นยอดรวม)
  * ไม่มีข้อมูลฝั่งไหน = ไม่ส่งฝั่งนั้น (service คงค่าเดิมของ ISURVEY ไว้) · ไม่มีทั้งคู่ = undefined
  */
 function buildIsurveyRates(r: Record<string, unknown>): Record<string, Record<string, unknown>> | undefined {
   const num = (v: unknown): number => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
   const out: Record<string, Record<string, unknown>> = {};
-  if (r.pay_case_id) {
-    // ค่าตั้งต้นเมื่อติ๊กแต่ไม่ใส่เลข (นอกพื้นที่ 50 · นอกเวลา 100) = ชุดเดียวกับ pay.service ตอนคิดยอดรวม
-    const oa = r.out_of_area ? (r.out_of_area_amt == null ? 50 : num(r.out_of_area_amt)) : 0;
-    const oh = r.out_of_hours ? (r.out_of_hours_amt == null ? 100 : num(r.out_of_hours_amt)) : 0;
+  if (r.pay_case_id && r.pay_total != null) {
     out.sur = {
-      invest: num(r.service_fee) + oa + oh, trans: num(r.travel_fee), photo: num(r.photo_fee), tel: num(r.phone_fee),
-      insure: num(r.bail_fee), claim: num(r.claim_fee), daily: num(r.daily_fee),
-      other: num(r.other_fee), deduct: Math.abs(num(r.deduct_fee)),
+      invest: Math.max(0, num(r.pay_total)), trans: 0, photo: 0, tel: 0, insure: 0, claim: 0, daily: 0, other: 0, deduct: 0,
     };
   }
   if (r.exp_id) {
@@ -190,9 +186,7 @@ export const isurveyPullService = {
     const q = await db.query(
       `SELECT c.id, c.source, c.status, c.isurvey_closed_at,
               sr.claim_no, sr.survey_job_no, sr.survey_result, sr.checklist,
-              sp.case_id AS pay_case_id, sp.service_fee, sp.travel_fee, sp.photo_fee, sp.phone_fee, sp.bail_fee,
-              sp.claim_fee, sp.daily_fee, sp.other_fee, sp.out_of_area, sp.out_of_area_amt,
-              sp.out_of_hours, sp.out_of_hours_amt, sp.deduct_fee,
+              sp.case_id AS pay_case_id, sp.total AS pay_total,
               se.id AS exp_id, se.service_fee_count, se.service_fee_price, se.travel_fee_count, se.travel_fee_price,
               se.photo_fee_count, se.photo_fee_price, se.phone_fee AS ins_phone_fee, se.bail_fee AS ins_bail_fee,
               se.claim_fee_price, se.daily_record_fee, se.other_fee_detail, se.other_fee_price

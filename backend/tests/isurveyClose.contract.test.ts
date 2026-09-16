@@ -1,11 +1,11 @@
 /**
  * Contract test — ตารางค่าสำรวจที่เขียนกลับ ISURVEY ตอนอนุมัติ (services/isurveyPull.service.ts buildIsurveyRates)
  *
- * ล็อกกติกา (user สั่ง 16/09/69 หลังเห็นเคส #337: นอกเวลา 200 โผล่เป็น "ค่าใช้จ่ายอื่นๆ" บน ISURVEY):
- *  1) ฝั่งพนักงาน (sur) "อื่น ๆ" = ช่อง "ค่าใช้จ่ายอื่นๆ" บนเว็บเท่านั้น — นอกพื้นที่/นอกเวลา **บวกเข้า "ค่าบริการ"** แทน
- *     (ISURVEY ไม่มีแถวสำหรับสองตัวนี้ รู้แค่ธง ใน/นอกเวลา + นอกพื้นที่ ซึ่ง service คงค่าเดิมไว้ · user ต้องการให้ยอดรวมเซอร์เวย์
- *     บน ISURVEY = ยอดพนักงานบน se-survey เช่น 400 + 200 → ค่าบริการเสนอ 600) · ค่าตั้งต้นเมื่อติ๊กแต่ไม่ใส่เลข = 50/100 เหมือน pay.service
- *  2) se-billing ยังรวมนอกพื้นที่/นอกเวลาเข้าเงินพนักงานตามสูตรเดิมแยกรายการ (คนละท่อ ห้ามเปลี่ยนตามข้อ 1)
+ * ล็อกกติกา (user เคาะ 16/09/69 รอบ 3 หลังเห็นเคส #337: นอกเวลา 200 โผล่เป็น "ค่าใช้จ่ายอื่นๆ" บน ISURVEY):
+ *  1) ฝั่งพนักงาน (sur) = **ยอดรวมที่บันทึกไว้ (survey_pay.total) ยอดเดียว ลงช่อง "ค่าบริการ"** — แถวอื่นทุกแถว 0 · "หักเงิน" ของ ISURVEY = 0
+ *     (total ของเว็บหักเงินออกแล้ว ส่งซ้ำจะโดนหักสองรอบ) · total ว่าง = ไม่แตะฝั่งเสนอ · ติดลบ = 0
+ *     ISURVEY ไม่มีแถวนอกเวลา/นอกพื้นที่ รู้แค่ธง ซึ่ง service คงค่าเดิมไว้ · ยอดรวมเซอร์เวย์บน ISURVEY = ยอดเว็บเสมอ (400 + นอกเวลา 200 → 600)
+ *  2) se-billing ยังได้แยกรายการ + นอกพื้นที่/นอกเวลาตามสูตรเดิม (คนละท่อ ห้ามเปลี่ยนตามข้อ 1)
  *  3) ฝั่งประกัน (ins) = ราคาต่อหน่วย × จำนวน · "อื่น ๆ" = other_fee_price + คำอธิบาย
  *
  * รัน: npm test   (backend/)
@@ -27,18 +27,19 @@ const read = (p: string) => fs.readFileSync(path.join(__dirname, '..', p), 'utf8
   const fn = svc.slice(i, svc.indexOf('\n}\n', i));
   check('มี buildIsurveyRates', i > 0 && fn.length > 100);
   const sur = fn.slice(fn.indexOf('out.sur = {'), fn.indexOf('};', fn.indexOf('out.sur = {')));
-  check('sur.other = other_fee อย่างเดียว (ไม่บวกนอกพื้นที่/นอกเวลา)', /other:\s*num\(r\.other_fee\)\s*,/.test(sur));
-  check('sur.invest = service_fee + นอกพื้นที่ + นอกเวลา (ยอดรวมเซอร์เวย์บน ISURVEY = ยอดพนักงานบนเว็บ)',
-    /invest:\s*num\(r\.service_fee\)\s*\+\s*oa\s*\+\s*oh\s*,/.test(sur));
-  check('ค่าตั้งต้นติ๊กแต่ไม่ใส่เลข = นอกพื้นที่ 50 · นอกเวลา 100 (ชุดเดียวกับ pay.service)',
-    /out_of_area_amt == null \? 50/.test(fn) && /out_of_hours_amt == null \? 100/.test(fn)
-    && /out_of_area_amt\)\s*\?\?\s*50/.test(read('src/services/pay.service.ts')) && /out_of_hours_amt\)\s*\?\?\s*100/.test(read('src/services/pay.service.ts')));
-  check('sur ยังส่งครบ: invest/trans/photo/tel/insure/claim/daily/deduct',
-    ['invest:', 'trans:', 'photo:', 'tel:', 'insure:', 'claim:', 'daily:', 'deduct: Math.abs('].every((k) => sur.includes(k)));
+  check('sur.invest = survey_pay.total ยอดเดียว (ไม่ติดลบ) — ไม่คำนวณจากรายแถว/นอกเวลา/นอกพื้นที่เอง',
+    /invest:\s*Math\.max\(0,\s*num\(r\.pay_total\)\)/.test(sur) && !/r\.(service_fee|travel_fee|photo_fee|other_fee|deduct_fee|out_of_area|out_of_hours)\b/.test(fn));
+  check('sur แถวอื่นทุกแถว = 0 และหักเงิน = 0 (total หักไปแล้ว ห้ามหักซ้ำ)',
+    ['trans: 0', 'photo: 0', 'tel: 0', 'insure: 0', 'claim: 0', 'daily: 0', 'other: 0', 'deduct: 0'].every((k) => sur.includes(k)));
+  check('total ว่าง (ยังไม่กรอกเรท) = ไม่แตะฝั่งเสนอ', fn.includes('if (r.pay_case_id && r.pay_total != null)'));
+  check('closeCase ดึง survey_pay.total มาเป็น pay_total', svc.includes('sp.total AS pay_total'));
+  const pay = read('src/services/pay.service.ts');
+  check('total ของเว็บ = รายรับทุกแถว + นอกพื้นที่/นอกเวลา − หักเงิน (ที่มาของยอดเดียวที่ส่ง)',
+    pay.includes('+ (areaAmt ?? 0) + (hoursAmt ?? 0) - (money[PAY_DEDUCT_FIELD] ?? 0))'));
   const ins = fn.slice(fn.indexOf('out.ins = {'), fn.indexOf('};', fn.indexOf('out.ins = {')));
   check('ins = ราคา × จำนวน + other_fee_price/other_desc',
     ins.includes('invest: svcP * svcN') && ins.includes('photo: phoP * phoN') && ins.includes('other: num(r.other_fee_price)') && ins.includes('other_desc:'));
-  check('ไม่มีข้อมูลฝั่งไหน = ไม่ส่งฝั่งนั้น', fn.includes('if (r.pay_case_id)') && fn.includes('if (r.exp_id)') && fn.includes('Object.keys(out).length ? out : undefined'));
+  check('ไม่มีข้อมูลฝั่งไหน = ไม่ส่งฝั่งนั้น', fn.includes('if (r.pay_case_id && r.pay_total != null)') && fn.includes('if (r.exp_id)') && fn.includes('Object.keys(out).length ? out : undefined'));
 
   const bill = read('src/services/sebilling.service.ts');
   check('se-billing ยังรวมนอกพื้นที่/นอกเวลาเข้าเงินพนักงาน (คนละท่อกับ ISURVEY)',
