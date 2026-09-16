@@ -2944,6 +2944,22 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
             ['สถานีตำรวจ', has(_accPoliceStationCtl)],
           ]));
         }
+        // "รับเงินจำนวน" — กติกาเดียวกับเว็บ (user สั่ง 16/09/69): ติ๊กแล้วต้องมีทั้งยอดรับและยอดเรียกร้อง ·
+        // รับเกินยอดเรียกร้องไม่ได้ · มียอดแต่ไม่ติ๊ก = ไม่สอดคล้อง (EMCS มีกล่องติ๊กคู่กับช่องเงิน)
+        final moneyTick = _opoClaims.contains('รับเงินจำนวน');
+        final recvAmt = double.tryParse(_accClaimAmountCtl.text.replaceAll(',', '').trim());
+        final claimTotal = double.tryParse(_accClaimTotalAmountCtl.text.replaceAll(',', '').trim());
+        if (moneyTick) {
+          base.addAll(miss([
+            ['รับเงินจำนวน (บาท)', has(_accClaimAmountCtl)],
+            ['จากจำนวนเรียกร้องทั้งหมด (บาท)', has(_accClaimTotalAmountCtl)],
+          ]));
+          if (recvAmt != null && claimTotal != null && recvAmt > claimTotal) {
+            base.add('"รับเงินจำนวน" มากกว่ายอดเรียกร้องทั้งหมด');
+          }
+        } else if ((recvAmt ?? 0) > 0) {
+          base.add('มียอดรับเงินแต่ยังไม่ติ๊ก "รับเงินจำนวน"');
+        }
         return base;
       case _SView.s6:
         return const []; // คู่กรณีไม่บังคับ
@@ -3484,8 +3500,9 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
         //    ระบบสร้างให้เองทั้ง 4 (OCR หน้าการ์ด / กดมอบหมาย / ถ่ายรูปยืนยัน / กดเสร็จงาน-ส่งงาน) และโชว์อยู่ที่
         //    "ไทม์ไลน์งาน" บนหัว Hub อยู่แล้ว ไม่ควรแก้มือ · controller ยังอยู่เพื่อโชว์ไทม์ไลน์ แต่**ไม่ส่งกลับ** ให้ server
         _opoClaimChecks(),
-        _row2(_numField(_accClaimAmountCtl, 'รับเงินจำนวน (บาท)', decimal: true),
-            _numField(_accClaimTotalAmountCtl, 'จากจำนวนเรียกร้องทั้งหมด (บาท)', decimal: true)),
+        // จุดแดง 2 ช่องเงินเมื่อติ๊ก "รับเงินจำนวน" — กติกาเดียวกับเว็บ (user สั่ง 16/09/69)
+        _row2(_numField(_accClaimAmountCtl, 'รับเงินจำนวน (บาท)', decimal: true, req: _opoClaims.contains('รับเงินจำนวน')),
+            _numField(_accClaimTotalAmountCtl, 'จากจำนวนเรียกร้องทั้งหมด (บาท)', decimal: true, req: _opoClaims.contains('รับเงินจำนวน'))),
         _switchRow(_policeRequired() ? 'มีการแจ้งความ / ลงประจำวัน (จำเป็น)' : 'มีการแจ้งความ / ลงประจำวัน',
             _hasPolice || _policeRequired(), (v) => setState(() => _hasPolice = v)),
         if (_hasPolice || _policeRequired()) ...[
