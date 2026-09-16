@@ -9,6 +9,7 @@ import { storage, normalizeKey } from '../config/storage';
 import { CAR_BRANDS_BY_TYPE, BRAND_ALIASES, THAI_BRANDS, CAR_TYPE_LABELS } from '../services/vehicleBrand';
 import { notifyCaseChanged } from '../services/caseEvents';
 import { emcsQueueService } from '../services/emcsQueue.service';
+import { botReleaseKeys, BOT_VERSION_RE } from '../services/botRelease';
 
 // ── routes สำหรับเครื่องมือภายใน (se-autokey) — auth ด้วย service token ไม่ผูกบัญชีพนักงาน ──
 // เปิดใช้โดยตั้ง env INTEGRATION_TOKEN (ยาว ≥24 ตัว); ไม่ตั้ง = ทุก route ตอบ 401
@@ -393,6 +394,32 @@ router.get('/files', integrationAuth, asyncHandler(async (req: Request, res: Res
   const r = await storage.get(key);
   if (!r || r.kind !== 'ok') { res.status(404).json({ success: false, message: 'file not found' }); return; }
   res.set('Content-Type', r.contentType);
+  if (typeof r.size === 'number') res.set('Content-Length', String(r.size));
+  res.on('close', () => { try { r.body.destroy(); } catch { /* skip */ } });
+  r.body.on('error', (err: Error) => { if (!res.headersSent) res.status(500).end(); else res.destroy(err); });
+  r.body.pipe(res);
+}));
+
+// ───────────── อัปเดตบอทผ่านเน็ต (15/09/69 แผนข้อ 1 — เลิกขน USB) ─────────────
+// make-release.bat บนเครื่อง dev → scripts/publishBotRelease.ts อัปขึ้นที่เก็บไฟล์ · เครื่องพนักงานกด "ตรวจอัปเดต" ในหน้าบอท
+// → อ่าน latest.json เทียบเวอร์ชัน → โหลด zip ตาม version → บอทตรวจ sha256 เอง · token บอทตัวเดิม ไม่ต้องตั้งอะไรเพิ่ม
+router.get('/bot-release/latest', integrationAuth, asyncHandler(async (_req: Request, res: Response) => {
+  const buf = await storage.getBuffer(botReleaseKeys.latest());
+  if (!buf) { res.status(404).json({ success: false, message: 'ยังไม่มีเวอร์ชันที่ปล่อย (publishBotRelease ยังไม่เคยรัน)' }); return; }
+  let meta: unknown;
+  try { meta = JSON.parse(buf.toString('utf8')); } catch { res.status(500).json({ success: false, message: 'latest.json อ่านไม่ได้' }); return; }
+  res.set('Cache-Control', 'no-store');
+  res.json({ success: true, data: meta });
+}));
+
+router.get('/bot-release/:version/zip', integrationAuth, asyncHandler(async (req: Request, res: Response) => {
+  const version = String(req.params.version ?? '');
+  if (!BOT_VERSION_RE.test(version)) { res.status(400).json({ success: false, message: 'invalid version' }); return; }
+  const r = await storage.get(botReleaseKeys.zip(version));
+  if (!r || r.kind !== 'ok') { res.status(404).json({ success: false, message: `ไม่มีไฟล์ของเวอร์ชัน ${version}` }); return; }
+  res.set('Content-Type', 'application/zip');
+  res.set('Cache-Control', 'no-store');
+  res.setHeader('Content-Disposition', `attachment; filename="se-autokey-${version}.zip"`);
   if (typeof r.size === 'number') res.set('Content-Length', String(r.size));
   res.on('close', () => { try { r.body.destroy(); } catch { /* skip */ } });
   r.body.on('error', (err: Error) => { if (!res.headersSent) res.status(500).end(); else res.destroy(err); });
