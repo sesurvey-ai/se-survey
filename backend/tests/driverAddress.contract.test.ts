@@ -178,6 +178,10 @@ const read = (p: string) => fs.readFileSync(path.join(ROOT, p), 'utf8');
     (web.match(/reqWhen: opponentHasAddress/g) ?? []).length === 3 && web.includes("a !== 'รอตรวจสอบ'") && web.includes('if (r.pending === true) return false')
     && opp.includes('static bool addrHasData(') && opp.includes("if (_hasAddr && _subdistrict.isEmpty) 'ตำบล/แขวง (ที่อยู่ผู้ขับขี่)'") && (opp.match(/req: _hasAddr/g) ?? []).length === 3
     && form.includes("OpponentEditor.addrHasData(s('address'), s('moo'), s('home_province'), s('district'), s('subdistrict'))") && form.includes("if (it['pending'] == true) return const <String>[];"));
+  check('เว็บ: ติ๊ก "รอตรวจสอบ" + ป้ายที่หัวการ์ดคู่กรณี (pending เดียวกับแอป) · เติมช่องบังคับที่ว่างชุดเดียวกับแอป · เลขบัตร "รอตรวจสอบ" ไม่เตือน (user สั่ง 16/09/69)',
+    web.includes('setPending(i, e.target.checked)') && web.includes('{it.pending === true && (') && web.includes("fill(k, PENDING_TEXT)")
+    && web.includes("fill('car_type', 'รถอื่นๆ'); fill('province', 'อื่นๆ'); fill('insurer', 'อื่นๆ'); fill('gender', 'ชาย'); fill('title', 'นาย');")
+    && web.includes("v.trim() !== PENDING_TEXT && !cidChecksum(v)") && opp.includes("for (final k in ['owner_name', 'plate', 'first_name', 'last_name', 'address', 'cid']) {"));
   check('มือถือ: สแกนบัตรประชาชนคู่กรณีแล้วเลือกจังหวัด/อำเภอ/ตำบลให้เอง', opp.includes("_matchProvince(f('province'))") && opp.includes("_matchTumbonInText(prov, dist, f('address'))"));
 }
 

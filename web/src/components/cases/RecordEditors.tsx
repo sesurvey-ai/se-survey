@@ -183,7 +183,8 @@ function Field({ def, value, onChange, warnOverride, quickFix }: {
 }) {
   const v = String(value ?? '');
   const badChars = badNameChars(def.k, v);
-  const badCid = def.k === 'cid' && v.trim() !== '' && !cidChecksum(v);
+  // "รอตรวจสอบ" ในช่องเลขบัตร = ค่าที่แอป/เว็บเติมตอนคู่กรณีหลบหนี ไม่ใช่เลขผิด (16/09/69)
+  const badCid = def.k === 'cid' && v.trim() !== '' && v.trim() !== PENDING_TEXT && !cidChecksum(v);
   // อายุ/วันที่ต้องเป็นรูปแบบที่ระบบประกันรับ — "-" ในช่องอายุทำ EMCS ปัดตกทั้งไฟล์ XML (เคส #282 10/09/69)
   const badAge = def.k === 'age' && v.trim() !== '' && !/^\d{1,3}$/.test(v.trim());
   // วันที่ต้องเป็น "วันจริง" ไม่ใช่แค่รูปแบบ — "00/00/2569" ผ่านรูปแบบแต่ EMCS ปัดตกทั้งไฟล์ (เคส #299 15/09/69)
@@ -457,6 +458,8 @@ const OPPONENT_COST_FIELD: FieldDef = OPPONENT_FIELDS.find((f) => f.k === 'estim
 
 /** ค่า "ไม่มีประกัน" ในช่องมีประกันภัยที่ — เลขกรมธรรม์ต้องเป็น "-" (ดู set() ใน OpponentEditor) */
 const NO_INSURER = 'ไม่มีบริษัทประกันภัย';
+/** ค่าที่แอปเติมให้ตอนติ๊ก "รอตรวจสอบ" (คู่กรณีหลบหนี / ยังไม่มีรายละเอียด) — เว็บใช้คำเดียวกัน */
+const PENDING_TEXT = 'รอตรวจสอบ';
 
 /** 8 ช่องที่ `vlidOpoCar` บล็อกทุกบริษัท — ใช้นับป้าย "ยังขาด N ช่องบังคับ" */
 export const OPPONENT_REQUIRED = [
@@ -557,6 +560,28 @@ export function OpponentEditor({ items, onChange }: {
       return next;
     }));
 
+  /** "รอตรวจสอบ" (คู่กรณีหลบหนี / ยังไม่มีรายละเอียด) — สถานะเดียวกับแอป (`pending`, user สั่ง 16/09/69)
+   *  ติ๊กแล้วเติมช่องบังคับที่ยังว่างด้วยค่าที่ EMCS ยอมรับ ชุดเดียวกับ OpponentEditor._applyPending ของแอป
+   *  (ข้อความ = "รอตรวจสอบ" · ประเภทรถ รถอื่นๆ · จังหวัด อื่นๆ · ประกัน อื่นๆ · เพศ ชาย · คำนำหน้า นาย · วันเกิด 01/01/2525 + อายุ)
+   *  + กรมธรรม์ "รอตรวจสอบ" (เว็บบังคับช่องนี้ แอปไม่) · ของที่กรอกไว้แล้วไม่ทับ · เอาติ๊กออกไม่ล้างค่า
+   *  ที่อยู่: ว่าง/"รอตรวจสอบ" = ไม่บังคับ 3 ช่อง (opponentHasAddress) · บอทออก EMCS เป็น "รอตรวจสอบ" ตามค่าในช่อง */
+  const setPending = (i: number, on: boolean) =>
+    onChange(items.map((it, idx) => {
+      if (idx !== i) return it;
+      const next: LooseRecord = { ...it, pending: on };
+      if (!on) return next;
+      const fill = (k: string, v: string) => { if (!chosen(next[k])) next[k] = v; };
+      for (const k of ['owner_name', 'plate', 'first_name', 'last_name', 'address', 'cid']) fill(k, PENDING_TEXT);
+      fill('car_type', 'รถอื่นๆ'); fill('province', 'อื่นๆ'); fill('insurer', 'อื่นๆ'); fill('gender', 'ชาย'); fill('title', 'นาย');
+      fill('birthdate', '01/01/2525');
+      if (!chosen(next.age)) {
+        const y = Number(String(next.birthdate ?? '').split('/')[2]);
+        if (y > 0) next.age = String(new Date().getFullYear() + 543 - y);
+      }
+      fill('policy_no', PENDING_TEXT);
+      return next;
+    }));
+
   // ระเบียนที่มีอยู่แล้ว (แอปเก่าส่ง policy_no ว่างมากับ "ไม่มีบริษัทประกันภัย") → เติม "-" ตอนเปิดหน้าให้ด้วย
   useEffect(() => {
     const fixed = items.map((it) =>
@@ -610,6 +635,14 @@ export function OpponentEditor({ items, onChange }: {
                 />
                 KFK
               </label>
+              {/* "รอตรวจสอบ" — สถานะเดียวกับแอป (pending): ช่างติ๊กมาจากแอปก็ขึ้นป้ายที่นี่ · หัวหน้าติ๊กบนเว็บได้เอง (user สั่ง 16/09/69) */}
+              <label className="flex items-center gap-1 text-xs text-gray-600" title="คู่กรณีหลบหนี / ยังไม่มีรายละเอียด — เติมช่องบังคับที่ยังว่างให้อัตโนมัติ แก้เองได้ (เอาติ๊กออกไม่ล้างค่า)">
+                <input type="checkbox" className="w-3.5 h-3.5" checked={it.pending === true} onChange={(e) => setPending(i, e.target.checked)} />
+                รอตรวจสอบ
+              </label>
+              {it.pending === true && (
+                <span className="px-2 py-0.5 text-xs font-semibold rounded-none bg-amber-100 text-amber-800 border border-amber-300">⏳ รอตรวจสอบ — คู่กรณีหลบหนี / ยังไม่มีรายละเอียด</span>
+              )}
               {missing.length > 0 && (
                 <span className="text-xs text-red-600">⚠ ยังขาด {missing.length} ช่องบังคับ</span>
               )}
