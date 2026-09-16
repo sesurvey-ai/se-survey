@@ -14,7 +14,7 @@
  */
 import fs from 'fs';
 import path from 'path';
-import { driverAddressLine } from '../src/services/driverAddress';
+import { driverAddressLine, splitMoo, normalizeDriverAddressFields } from '../src/services/driverAddress';
 import { tumbonNames, amphurCode } from '../src/services/areaCode.service';
 
 let failed = 0;
@@ -31,15 +31,28 @@ const read = (p: string) => fs.readFileSync(path.join(ROOT, p), 'utf8');
   const cases: Array<[string, string, string, string]> = [
     ['46/23', '7', 'ท้ายบ้าน', '46/23 ม.7 ต.ท้ายบ้าน'],
     ['25 ม.3', '', 'บ่อวิน', '25 ม.3 ต.บ่อวิน'],
-    ['46/23 หมู่ 7', '7', 'ท้ายบ้าน', '46/23 หมู่ 7 ต.ท้ายบ้าน'],
+    ['46/23 หมู่ 7', '7', 'ท้ายบ้าน', '46/23 ม.7 ต.ท้ายบ้าน'],
+    ['46/23 หมู่ที่ 7', '', 'ท้ายบ้าน', '46/23 ม.7 ต.ท้ายบ้าน'],          // ISURVEY: หมู่ปนในบ้านเลขที่ → แยกเอง
     ['46/23 ม.7 ต.ท้ายบ้าน', '7', 'ท้ายบ้าน', '46/23 ม.7 ต.ท้ายบ้าน'],
+    ['46/23 ต.ท้ายบ้าน หมู่ 7', '', 'ท้ายบ้าน', '46/23 ม.7 ต.ท้ายบ้าน'],   // เรียงใหม่ให้เป็นรูปแบบเดียว
     ['12 ซ.5', 'หมู่ 4', 'ต.บางพลี', '12 ซ.5 ม.4 ต.บางพลี'],
-    ['46/23 หมู่ 17', '7', 'ท้ายบ้าน', '46/23 หมู่ 17 ม.7 ต.ท้ายบ้าน'],
+    ['46/23 หมู่ 17', '7', 'ท้ายบ้าน', '46/23 ม.7 ต.ท้ายบ้าน'],           // ช่องหมู่ที่กรอกมาชนะ
+    ['หมู่บ้านสวนสน 12/3', '', '', 'หมู่บ้านสวนสน 12/3'],                 // "หมู่บ้าน" ไม่ใช่หมู่ที่
     ['99/1', '', '', '99/1'],
     ['', '', '', ''],
   ];
   for (const [a, m, t, want] of cases) check(`ประกอบ ${JSON.stringify([a, m, t])} → ${JSON.stringify(want)}`, driverAddressLine(a, m, t) === want, JSON.stringify(driverAddressLine(a, m, t)));
   check('รับ null/undefined ได้', driverAddressLine(null, undefined, null) === '' && driverAddressLine('1', null, undefined) === '1');
+  check('splitMoo แยกหมู่ทุกรูปแบบ', JSON.stringify(splitMoo('46/23 หมู่ที่ 7')) === '{"address":"46/23","moo":"7"}'
+    && splitMoo('ม.12 บ้านโคก').moo === '12' && splitMoo('46/23 หมู่7,ท้ายบ้าน').address === '46/23,ท้ายบ้าน' && splitMoo('46/23').moo === '' && splitMoo('หมู่บ้านสวนสน').moo === '');
+  check('normalizeDriverAddressFields: ย้ายหมู่ไปช่องหมู่เฉพาะตอนช่องหมู่ว่าง', (() => {
+    const a: Record<string, unknown> = { driver_address: '46/23 หมู่ที่ 7' }; normalizeDriverAddressFields(a);
+    const b: Record<string, unknown> = { driver_address: '46/23 หมู่ 7', driver_moo: '9' }; normalizeDriverAddressFields(b);
+    const c: Record<string, unknown> = { driver_moo: '' }; normalizeDriverAddressFields(c);
+    return a.driver_address === '46/23' && a.driver_moo === '7' && b.driver_address === '46/23 หมู่ 7' && b.driver_moo === '9' && c.driver_address === undefined;
+  })());
+  const cs = read('backend/src/services/case.service.ts');
+  check('case.service เรียก normalizeDriverAddressFields ก่อนเขียนทั้งตอนบันทึก (เว็บ) และส่งงาน (แอป)', (cs.match(/normalizeDriverAddressFields\(data\)/g) ?? []).length === 2);
 }
 
 // ── 2) เก็บแยก + ทุกชั้นรู้จัก ──
