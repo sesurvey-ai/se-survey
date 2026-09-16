@@ -34,7 +34,6 @@ class _OpponentEditorState extends State<OpponentEditor> {
   String _evType = '';
   String _carType = '', _carBrand = '', _carColor = '', _province = '', _homeProvince = '', _district = '', _gender = '', _title = '', _relation = '', _insurer = '', _licenseType = '', _policyType = '';
   String _ownerTitle = '', _subdistrict = '';   // คำนำหน้าเจ้าของรถ · ตำบล/แขวงที่อยู่ผู้ขับขี่คู่กรณี (16/09/69)
-  bool _kfk = false;
   bool _pending = false;  // "รอตรวจสอบ" — คู่กรณีหลบหนี / ยังไม่มีรายละเอียด
   bool _cidThai = true;   // true = คนไทย (13 หลัก+checksum) / false = ต่างชาติ
   bool _hasLicense = false; // สวิตช์ "มีใบขับขี่" — ค่าเริ่มต้น=ปิด (=ไม่มีใบขับขี่); สแกนใบขับขี่ = เปิดอัตโนมัติ; ปิด = ซ่อน+เคลียร์
@@ -65,7 +64,6 @@ class _OpponentEditorState extends State<OpponentEditor> {
     _relation = (widget.data['relation'] ?? '').toString();
     _insurer = (widget.data['insurer'] ?? '').toString();
     _licenseType = (widget.data['license_type'] ?? '').toString();
-    _kfk = widget.data['kfk'] == true;
     _pending = widget.data['pending'] == true;
     // ชนิดบัตร: ค่าที่เคยเลือก; ไม่มี = คนไทย (พฤติกรรมเดิม)
     _cidThai = '${widget.data['id_type'] ?? ''}'.trim() != 'foreign';
@@ -185,7 +183,7 @@ class _OpponentEditorState extends State<OpponentEditor> {
         'damage': _damage,
         'damage_description': _ctl('damage_description').text.trim(),
         'estimated_cost': _ctl('estimated_cost').text.trim(),
-        'kfk': !_noInsurance && _kfk,
+        'kfk': false,   // ติ๊ก KFK ถอดออก 16/09/69 (user: ไม่ได้ใช้ ทั้งเว็บและแอป) — ส่ง false เสมอ ค่าเก่าที่เคยติ๊กถูกล้างเมื่อบันทึกคันนี้ใหม่
         'pending': _pending,   // จำสถานะติ๊กไว้ เปิดคันเดิมกลับมาจะยังติ๊กอยู่
       };
 
@@ -485,7 +483,6 @@ class _OpponentEditorState extends State<OpponentEditor> {
         kSubhead('ประกันภัยคู่กรณี'),
         KPickerField(label: 'มีประกันภัยที่', value: _insurer, options: kOpoInsurers, req: true, onSelected: (v) => setState(() {
               _insurer = v;
-              _kfk = kKfkInsurers.contains(v);
               // เคยเป็น "ไม่มีประกัน" (เลขกรมธรรม์ = "-") แล้วเปลี่ยนเป็นบริษัทจริง → ล้างขีดให้กรอกเลขจริง
               if (v != 'ไม่มีบริษัทประกันภัย' && _ctl('policy_no').text.trim() == '-') _ctl('policy_no').clear();
             })),
@@ -496,14 +493,7 @@ class _OpponentEditorState extends State<OpponentEditor> {
           // ได้อยู่แล้ว (ไม่ล้างทิ้ง) เคสเก่าจึงไม่หาย
           KPickerField(label: 'ประเภทประกัน', value: _policyType, options: kPolicyTypes,
               req: true, onSelected: (v) => setState(() => _policyType = v)),
-          GestureDetector(
-            onTap: () => setState(() => _kfk = !_kfk),
-            child: Row(children: [
-              Icon(_kfk ? Icons.check_box : Icons.check_box_outline_blank, color: _kfk ? kPrimary : kMuted2, size: 22),
-              const SizedBox(width: 8),
-              const Expanded(child: Text('เข้าสัญญา KFK (Knock-for-Knock)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: kInk))),
-            ]),
-          ),
+          // ติ๊ก "เข้าสัญญา KFK" ถอดออก 16/09/69 (user: ไม่ได้ใช้) — เว็บก็ถอดแล้ว
         ],
         kSubhead('ความเสียหาย'),
         DamageDiagramField(items: _damage, onChanged: () => setState(() {})),
