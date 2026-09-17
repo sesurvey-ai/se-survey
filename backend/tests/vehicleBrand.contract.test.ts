@@ -60,7 +60,7 @@ check('"-ALL-": ทุกประเภทไม่มีปัญหา ยก
   ['A', 'E', 'M', 'T', 'V', 'W'].every((c) => brandTypeIssue(c, '-ALL-') === null && webBrandTypeIssue(c, '-ALL-') === null)
   && !!brandTypeIssue('O', '-ALL-') && /รถอื่นๆ/.test(brandTypeIssue('O', '-ALL-')!.message) && brandTypeIssue('O', '-ALL-')!.suggestion === null
   && JSON.stringify(webBrandTypeIssue('รถอื่นๆ', '-ALL-')) === JSON.stringify(brandTypeIssue('O', '-ALL-')) && normalizeBrand('-ALL-') === '-ALL-');
-check('เว็บ/แอป: "-ALL-" อยู่หัวลิสต์ยี่ห้อทุกประเภทยกเว้นรถอื่นๆ · รอตรวจสอบ = เก๋งเอเชีย + -ALL- · บอทไม่ตัดทิ้ง',
+check('เว็บ/แอป: "-ALL-" อยู่หัวลิสต์ยี่ห้อทุกประเภทยกเว้นรถอื่นๆ · รอตรวจสอบ = รถอื่นๆ ไม่มียี่ห้อ (17/09/69) แต่ประเภทอื่นที่เลือกไว้ + ยี่ห้อว่าง = -ALL- · บอทไม่ตัดทิ้ง',
   webCarBrandOptions('เก๋งเอเชีย')[1] === '-ALL-' && webCarBrandOptions('T')[1] === '-ALL-' && !webCarBrandOptions('รถอื่นๆ').includes('-ALL-') && !webCarBrandOptions('').includes('-ALL-')
   && webCarBrandOptions('เก๋งเอเชีย', '-ALL-').filter((x) => x === '-ALL-').length === 1
   && read('../mobile/lib/data/survey_master.dart').includes('return [kAllBrand, ...list];') && read('../mobile/lib/data/survey_master.dart').includes("if (list.isEmpty || k == 'รถอื่นๆ') return list;")

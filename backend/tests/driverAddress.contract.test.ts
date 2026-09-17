@@ -178,11 +178,21 @@ const read = (p: string) => fs.readFileSync(path.join(ROOT, p), 'utf8');
     (web.match(/reqWhen: opponentHasAddress/g) ?? []).length === 3 && web.includes("a !== 'รอตรวจสอบ'") && web.includes('if (r.pending === true) return false')
     && opp.includes('static bool addrHasData(') && opp.includes("if (_hasAddr && _subdistrict.isEmpty) 'ตำบล/แขวง (ที่อยู่ผู้ขับขี่)'") && (opp.match(/req: _hasAddr/g) ?? []).length === 3
     && form.includes("OpponentEditor.addrHasData(s('address'), s('moo'), s('home_province'), s('district'), s('subdistrict'))") && form.includes("if (it['pending'] == true) return const <String>[];"));
-  check('เว็บ: ติ๊ก "รอตรวจสอบ" + ป้ายที่หัวการ์ดคู่กรณี (pending เดียวกับแอป) · เติมช่องบังคับที่ว่างชุดเดียวกับแอป · เลขบัตร "รอตรวจสอบ" ไม่เตือน (user สั่ง 16/09/69)',
-    web.includes('setPending(i, e.target.checked)') && web.includes('{it.pending === true && (') && web.includes("fill(k, PENDING_TEXT)")
-    && web.includes("fill('car_type', 'เก๋งเอเชีย'); fill('province', 'อื่นๆ'); fill('insurer', 'อื่นๆ'); fill('gender', 'ชาย'); fill('title', 'นาย');")
+  check('เว็บ: ติ๊ก "รอตรวจสอบ" + ป้ายที่หัวการ์ดคู่กรณี (pending เดียวกับแอป) · เลขบัตร "รอตรวจสอบ" (ชุดเก่า) ไม่เตือน (user สั่ง 16/09/69)',
+    web.includes('setPending(i, e.target.checked)') && web.includes('{it.pending === true && (') && web.includes("v.trim() !== PENDING_TEXT && !cidChecksum(v)"));
+  // ชุดค่าที่เติมเมื่อติ๊ก — user เคาะ 17/09/69: เจ้าของ "-" · ทะเบียน "00" · รถอื่นๆ (ยี่ห้อว่าง) · จังหวัด อื่นๆ · ชาย + "ไม่ทราบชื่อ" (ไม่ใส่คำนำหน้า/นามสกุล)
+  // · 01/01/2500 · ไม่มีบริษัทประกันภัย · กรมธรรม์ "-" — ต้องตรงกันเว็บ/แอป และห้ามกลับไปชุด 16/09 ("รอตรวจสอบ"/เก๋งเอเชีย/-ALL-/อื่นๆ/2525)
+  check('เว็บ+มือถือ: ชุดค่า "รอตรวจสอบ" ตรงกัน (user เคาะ 17/09/69) · ไม่เติมคำนำหน้า/นามสกุล/ที่อยู่/เลขบัตร · ยี่ห้อไม่บังคับเมื่อ pending',
+    web.includes("fill('owner_name', '-'); fill('plate', '00'); fill('first_name', 'ไม่ทราบชื่อ');") && web.includes("fill('car_type', 'รถอื่นๆ');")
+    && web.includes("fill('province', 'อื่นๆ'); fill('gender', 'ชาย'); fill('insurer', NO_INSURER); fill('policy_no', '-');") && web.includes("fill('birthdate', '01/01/2500');")
     && web.includes("if (!chosen(next.car_brand) && carTypeCode(next.car_type) !== 'O') next.car_brand = ALL_BRAND;")
-    && web.includes("v.trim() !== PENDING_TEXT && !cidChecksum(v)") && opp.includes("for (final k in ['owner_name', 'plate', 'first_name', 'last_name', 'address', 'cid']) {"));
+    && !web.includes("fill('title', 'นาย')") && !web.includes('fill(k, PENDING_TEXT)') && !web.includes('01/01/2525')
+    && web.includes("reqWhen: (r) => chosen(r.car_type) && r.pending !== true")
+    && opp.includes("fill('owner_name', '-');") && opp.includes("fill('plate', '00');") && opp.includes("fill('first_name', 'ไม่ทราบชื่อ');")
+    && opp.includes("if (_carType.isEmpty) _carType = 'รถอื่นๆ';") && opp.includes("if (_carBrand.isEmpty && _carType != 'รถอื่นๆ') _carBrand = kAllBrand;")
+    && opp.includes("if (_province.isEmpty) _province = 'อื่นๆ';") && opp.includes("if (_gender.isEmpty) _gender = 'ชาย';")
+    && opp.includes("if (_insurer.isEmpty) _insurer = 'ไม่มีบริษัทประกันภัย';") && opp.includes("fill('policy_no', '-');") && opp.includes("fill('birthdate', '01/01/2500');")
+    && !opp.includes("_title = 'นาย'") && !opp.includes('_pendingText') && !opp.includes('01/01/2525') && !opp.includes("'last_name', 'address', 'cid']"));
   check('มือถือ: สแกนบัตรประชาชนคู่กรณีแล้วเลือกจังหวัด/อำเภอ/ตำบลให้เอง', opp.includes("_matchProvince(f('province'))") && opp.includes("_matchTumbonInText(prov, dist, f('address'))"));
 }
 

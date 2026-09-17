@@ -395,8 +395,9 @@ const OPPONENT_FIELDS: FieldDef[] = [
   { k: 'plate', label: 'ทะเบียน *' },
   { k: 'province', label: 'จังหวัด *', options: PROVINCE_OPTIONS },
   // เลือกประเภทรถแล้ว EMCS บังคับยี่ห้อด้วย (ddlCMFG cascade จากประเภทรถ) — user ขอ 10/09/69 · ยังไม่เลือกประเภท = ยังไม่บังคับ
+  // ยกเว้นคันที่ติ๊ก "รอตรวจสอบ" (17/09/69): ประเภท รถอื่นๆ ไม่มี -ALL- ให้เลือก และ EMCS ไม่ตรวจยี่ห้อคู่กรณีตอนบันทึก (vlidOpoCar) — บอท v1.1.7 ข้ามยี่ห้อว่างให้
   { k: 'car_brand', label: 'ยี่ห้อ', optionsFrom: (r) => carBrandOptions(String(r.car_type ?? ''), String(r.car_brand ?? '')),
-    reqWhen: (r) => chosen(r.car_type) },
+    reqWhen: (r) => chosen(r.car_type) && r.pending !== true },
   { k: 'car_model', label: 'รุ่น' },
   // ค่าที่นำเข้าจาก ISURVEY มักสะกดไม่ตรงลิสต์ (เคส #255 สีรถ "บอน") — เดิม <select> ไม่มี option ตรง value
   // → โชว์ "-- ระบุ --" ทั้งที่มีค่าอยู่ แล้วบอทกรอก EMCS ด้วยค่าจริง (fuzzy → "บรอน") หัวหน้าเลยงงว่า EMCS รู้ได้ไง
@@ -458,7 +459,7 @@ const OPPONENT_COST_FIELD: FieldDef = OPPONENT_FIELDS.find((f) => f.k === 'estim
 
 /** ค่า "ไม่มีประกัน" ในช่องมีประกันภัยที่ — เลขกรมธรรม์ต้องเป็น "-" (ดู set() ใน OpponentEditor) */
 const NO_INSURER = 'ไม่มีบริษัทประกันภัย';
-/** ค่าที่แอปเติมให้ตอนติ๊ก "รอตรวจสอบ" (คู่กรณีหลบหนี / ยังไม่มีรายละเอียด) — เว็บใช้คำเดียวกัน */
+/** ค่าที่แอป/เว็บเคยเติมตอนติ๊ก "รอตรวจสอบ" (ชุด 16/09/69 — 17/09 เปลี่ยนเป็น "-"/"00"/"ไม่ทราบชื่อ") ยังอยู่ในคันเก่า → ใช้ยกเว้นเตือนเลขบัตร/ที่อยู่ */
 const PENDING_TEXT = 'รอตรวจสอบ';
 
 /** 8 ช่องที่ `vlidOpoCar` บล็อกทุกบริษัท — ใช้นับป้าย "ยังขาด N ช่องบังคับ" */
@@ -561,26 +562,27 @@ export function OpponentEditor({ items, onChange }: {
     }));
 
   /** "รอตรวจสอบ" (คู่กรณีหลบหนี / ยังไม่มีรายละเอียด) — สถานะเดียวกับแอป (`pending`, user สั่ง 16/09/69)
-   *  ติ๊กแล้วเติมช่องบังคับที่ยังว่างด้วยค่าที่ EMCS ยอมรับ ชุดเดียวกับ OpponentEditor._applyPending ของแอป
-   *  (ข้อความ = "รอตรวจสอบ" · ประเภทรถ เก๋งเอเชีย + ยี่ห้อ "-ALL-" (ตัวเลือกจริงของ EMCS ยกเว้นรถอื่นๆ) · จังหวัด อื่นๆ · ประกัน อื่นๆ · เพศ ชาย · คำนำหน้า นาย · วันเกิด 01/01/2525 + อายุ)
-   *  + กรมธรรม์ "รอตรวจสอบ" (เว็บบังคับช่องนี้ แอปไม่) · ของที่กรอกไว้แล้วไม่ทับ · เอาติ๊กออกไม่ล้างค่า
-   *  ที่อยู่: ว่าง/"รอตรวจสอบ" = ไม่บังคับ 3 ช่อง (opponentHasAddress) · บอทออก EMCS เป็น "รอตรวจสอบ" ตามค่าในช่อง */
+   *  ติ๊กแล้วเติมช่องบังคับที่ยังว่างด้วยค่าที่ EMCS ยอมรับ ชุดเดียวกับ OpponentEditor._applyPending ของแอป — ชุดค่า user เคาะ 17/09/69
+   *  (แทนชุด 16/09 "รอตรวจสอบ"/เก๋งเอเชีย/-ALL-/ประกัน อื่นๆ/วันเกิดปี 2525):
+   *  เจ้าของรถ "-" · ทะเบียน "00" · ประเภทรถ รถอื่นๆ (ยี่ห้อว่าง — รถอื่นๆ ไม่มี -ALL- และ EMCS ไม่บังคับยี่ห้อคู่กรณี;
+   *  ประเภทอื่นที่เลือกไว้แล้ว + ยี่ห้อว่าง → -ALL-) · จังหวัด อื่นๆ · เพศ ชาย + ชื่อ "ไม่ทราบชื่อ" (ไม่ใส่คำนำหน้า/นามสกุล → EMCS เห็นคำเดียว) ·
+   *  วันเกิด 01/01/2500 + อายุจากปี พ.ศ. · ประกัน ไม่มีบริษัทประกันภัย · กรมธรรม์ "-" · ที่อยู่/เลขบัตร/โทร ปล่อยว่าง (บอทใส่ "-" ให้ EMCS)
+   *  ของที่กรอกไว้แล้วไม่ทับ · เอาติ๊กออกไม่ล้างค่า · ที่อยู่ว่าง = ไม่บังคับ 3 ช่อง (opponentHasAddress) · คันที่ติ๊กไว้ก่อน 17/09 ยังเป็นค่าเดิม */
   const setPending = (i: number, on: boolean) =>
     onChange(items.map((it, idx) => {
       if (idx !== i) return it;
       const next: LooseRecord = { ...it, pending: on };
       if (!on) return next;
       const fill = (k: string, v: string) => { if (!chosen(next[k])) next[k] = v; };
-      for (const k of ['owner_name', 'plate', 'first_name', 'last_name', 'address', 'cid']) fill(k, PENDING_TEXT);
-      // ประเภทรถไม่รู้ → เก๋งเอเชีย (ประเภทที่ EMCS มียี่ห้อ "-ALL-" ให้เลือก; รถอื่นๆ ไม่มี) · ยี่ห้อว่าง → "-ALL-" (user พบ 16/09/69)
-      fill('car_type', 'เก๋งเอเชีย'); fill('province', 'อื่นๆ'); fill('insurer', 'อื่นๆ'); fill('gender', 'ชาย'); fill('title', 'นาย');
+      fill('owner_name', '-'); fill('plate', '00'); fill('first_name', 'ไม่ทราบชื่อ');
+      fill('car_type', 'รถอื่นๆ');
       if (!chosen(next.car_brand) && carTypeCode(next.car_type) !== 'O') next.car_brand = ALL_BRAND;
-      fill('birthdate', '01/01/2525');
+      fill('province', 'อื่นๆ'); fill('gender', 'ชาย'); fill('insurer', NO_INSURER); fill('policy_no', '-');
+      fill('birthdate', '01/01/2500');
       if (!chosen(next.age)) {
         const y = Number(String(next.birthdate ?? '').split('/')[2]);
         if (y > 0) next.age = String(new Date().getFullYear() + 543 - y);
       }
-      fill('policy_no', PENDING_TEXT);
       return next;
     }));
 
