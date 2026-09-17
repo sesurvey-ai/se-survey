@@ -40,12 +40,17 @@ const tlNames = tlRows.flatMap((m) => [m[1], m[2], m[3]]);
 check('การ์ดลำดับเวลามีครบ 6 จังหวะ (5 ของ EMCS + ส่งงาน)', tlRows.length === 6, `${tlRows.length} จังหวะ · ${tlNames.length} ช่อง`);
 check('ช่องในการ์ดลำดับเวลาผูกชื่อจากตารางเดียวกัน',
       /name=\{n\.date\}/.test(src) && /name=\{n\.hour\}/.test(src) && /name=\{n\.min\}/.test(src));
-// ดอกจันวาดเฉพาะจังหวะที่ EMCS บังคับ (req=true) — จังหวะ 6 "ส่งงาน" เป็นของเราเอง ไม่มีดอกจัน ไม่เข้าตัวไล่ช่องว่าง
-check('ดอกจันของลำดับเวลาคุมทั้ง 3 ช่องของจังหวะนั้น (เฉพาะจังหวะที่บังคับ)', /\{n\.req && <Req of=\{n\.keys\.join\(','\)\} \/>\}/.test(src));
-// จังหวะ 6 "ส่งงาน" (13/09/69) — ช่องวันที่ + ชม:นาที แก้ได้ ค่าจาก submitted_at_th · ไม่ใช่ช่องบังคับ (req=false) · กริด 6 ช่อง
-check('จังหวะ 6 "ส่งงาน" เป็นช่องกรอกจาก submitted_at_th แบบไม่บังคับ',
+// ดอกจันวาดตาม req ของจังหวะ — 17/09/69 user ให้จังหวะ 6 "ส่งงาน" มีดอกจันแดงด้วย (บังคับก่อนอนุมัติ) จึง req=true ทั้ง 6 จังหวะ
+check('ดอกจันของลำดับเวลาคุมทั้ง 3 ช่องของจังหวะนั้น', /\{n\.req && <Req of=\{n\.keys\.join\(','\)\} \/>\}/.test(src));
+// จังหวะ 6 "ส่งงาน" (13/09/69) — ช่องวันที่ + ชม:นาที แก้ได้ ค่าจาก submitted_at_th · 17/09/69 บังคับ (ไม่ส่ง false) · กริด 6 ช่อง
+check('จังหวะ 6 "ส่งงาน" เป็นช่องกรอกจาก submitted_at_th แบบบังคับ (ดอกจันแดง)',
       src.includes('submitted_at_th') && src.includes('xl:grid-cols-6')
-      && /tl\('submitted_date_val', 'submitted_hour', 'submitted_minute',[\s\S]{0,200}?false\)/.test(src));
+      && /tl\('submitted_date_val', 'submitted_hour', 'submitted_minute',[\s\S]{0,200}?\|\| null\)\),/.test(src)
+      && !/tl\('submitted_date_val'[\s\S]{0,200}?, false\)/.test(src));
+// 17/09/69 (user): ไม่มีเส้นเทาเชื่อมจังหวะ/ต่อท้ายชื่อ · วันที่+ชม:นาที อยู่แถวเดียว (nowrap) ช่องวันที่เล็กลง
+check('ลำดับเวลา: ไม่มีเส้นเชื่อม/เส้นต่อท้ายชื่อ · วันที่กับเวลาอยู่แถวเดียวกัน ช่องวันที่ขนาดคงที่',
+      !src.includes('border-t-2 border-[var(--md-line)]') && !src.includes('flex-1 h-0.5 mt-[0.6875rem] bg-[var(--md-line)]')
+      && src.includes('<div className="flex flex-nowrap items-center gap-0.5 min-w-0">') && src.includes('w-[5.5rem] min-w-[4.75rem] shrink border'));
 
 // ผ่อนให้เฉพาะดอกจันของลำดับเวลาเท่านั้น — ตัวอื่นยังต้องเป็นสตริงตรง ๆ
 const TL_REQ = /\bof=\{n\.keys\.join\(','\)\}/;

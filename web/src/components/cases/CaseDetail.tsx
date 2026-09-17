@@ -1312,11 +1312,11 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
     /**
      * จังหวะ 6 "ส่งงาน" — เวลาที่ช่างกด "ตรวจสอบ & ส่ง" บนแอป (cases.submitted_at, migration 059) หรือ
      * "ส่งรายงานเวลา" ของงานจาก ISURVEY · เดิมเป็นกล่องเทาอ่านอย่างเดียว user ขอ 10/09/69 ให้เป็นช่องวันที่ + ชม:นาที
-     * แก้ได้เหมือนจังหวะอื่น (งาน XML/งานเก่าที่ขึ้น "-" หัวหน้าเติมเองได้) · ไม่ใช่ช่องบังคับของ EMCS จึงไม่มีดอกจัน
-     * และไม่เข้าตัวตรวจลำดับเวลา · ค่าจาก API เป็น "วว/ดด/ปปปป ชช:นน" (พ.ศ.) → แปลงเป็นรูป "วันที่|เวลา" ให้ parseDatetime
+     * แก้ได้เหมือนจังหวะอื่น (งาน XML/งานเก่าที่ขึ้น "-" หัวหน้าเติมเองได้) · 17/09/69 user ให้มีดอกจันแดง = บังคับก่อนอนุมัติ
+     * (เดิมไม่บังคับเพราะไม่ใช่ช่องของ EMCS) · ยังไม่เข้าตัวตรวจลำดับเวลา · ค่าจาก API เป็น "วว/ดด/ปปปป ชช:นน" (พ.ศ.) → แปลงเป็นรูป "วันที่|เวลา" ให้ parseDatetime
      */
     tl('submitted_date_val', 'submitted_hour', 'submitted_minute',
-       parseDatetime(String(caseData?.submitted_at_th ?? '').trim().replace(' ', '|') || null), false),
+       parseDatetime(String(caseData?.submitted_at_th ?? '').trim().replace(' ', '|') || null)),
   ] : [];
 
   /**
@@ -2495,38 +2495,24 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
                 const errs = timeErrs.filter((e) => e.at === n.date);
                 return (
                   <div key={n.date} className="relative min-w-0">
-                    {/* เส้นเชื่อมระหว่างจังหวะ — โชว์เฉพาะจอกว้างที่วางเรียงกัน 5 ช่อง
-                        ⛔ ทั้งเส้นในช่องไฟและเส้นต่อท้ายชื่อ ต้องอยู่กึ่งกลางกล่องเลขพอดี (0.75rem
-                           จากขอบบนแถว = mt ของกล่อง 0.0625 + ครึ่งความสูง 0.6875) เส้นหนา 2px
-                           จึงต้องเยื้องขึ้นครึ่งเส้น (0.0625rem) ทั้งคู่ ไม่งั้นเหลื่อมกัน 1px
-                           มองเป็นเส้นหักคนละระดับ (user แจ้ง 03/09/69) */}
-                    {i > 0 && <div className="hidden xl:block absolute -left-[0.875rem] top-[0.6875rem] w-[0.875rem] border-t-2 border-[var(--md-line)]" />}
+                    {/* เส้นเทาเชื่อมจังหวะ + เส้นต่อท้ายชื่อ ถอดออก 17/09/69 (user: ลบเส้นสีเทา) */}
                     <div className="flex items-start gap-2 mb-1.5">
                       {/* เลขจังหวะใช้น้ำเงินชุดเดียวกับแถบหัวการ์ด (เดิมดำ ดูเป็นคนละชุดกับหัวเรื่อง)
                           · ยังไม่กรอก = แดงเตือนเหมือนเดิม */}
                       <span className={`mt-[0.0625rem] w-[1.375rem] h-[1.375rem] shrink-0 text-[0.6875rem] font-extrabold flex items-center justify-center text-white ${
                         gap ? 'bg-[var(--md-accent)]' : ''}`} style={gap ? undefined : { background: '#1E3E82' }}>{i + 1}</span>
                       <span className="text-xs font-semibold text-[var(--md-muted-2)] leading-tight min-w-0">{n.label} {n.req && <Req of={n.keys.join(',')} />}</span>
-                      {/* เส้นบางลากต่อจากชื่อจังหวะ — ทำให้ 5 จังหวะอ่านเป็น "เส้นเวลา" ไม่ใช่ 5 กล่องแยกกัน
-                          (จังหวะที่ 5 ก็มีเส้น — user เคาะ 03/09/69 ให้เท่ากันทุกจังหวะ) */}
-                      <span className="hidden xl:block flex-1 h-0.5 mt-[0.6875rem] bg-[var(--md-line)]" />
                     </div>
-                    {/* ⛔ ช่องเวลา (ชม/นาที) กว้างเป็น rem จึงโตตามขนาดตัวอักษร แต่ความกว้าง
-                        ของช่องจังหวะมาจากกริดซึ่งผูกกับความกว้างจอ **ไม่โตตาม** — พอผู้ใช้
-                        ขยายตัวอักษรเป็น 130-140% ช่องวันที่ถูกบีบจนวันที่ขาด ("29/08/2")
-                        กันด้วย min-w + flex-wrap: แคบเมื่อไหร่ให้เวลาตกลงไปบรรทัดล่าง
-                        แทนที่จะบีบวันที่ · ห่อ ชม:นาที ไว้ด้วยกันไม่งั้นเครื่องหมาย ":"
-                        ตกไปคนละบรรทัดกับนาที */}
-                    <div className="flex flex-wrap items-center gap-1">
+                    {/* 17/09/69 (user): ช่องวันที่เล็กลง + ชม:นาที อยู่ข้างกันแถวเดียว ไม่ตกบรรทัด — ตัวอักษร xs ให้ 6 จังหวะเรียงจอกว้างได้
+                        ⛔ ขยายตัวอักษร 130%+ ช่องวันที่ย่อได้ถึง min-w แล้วหยุด (ไม่ห่อบรรทัดตาม user) */}
+                    <div className="flex flex-nowrap items-center gap-0.5 min-w-0">
                       <input type="text" disabled={d} name={n.date} defaultValue={n.v.date} placeholder="วว/ดด/ปปปป"
-                        className={`flex-1 min-w-[7rem] border border-gray-300 rounded-none h-9 px-2.5 text-gray-800 ${d ? 'bg-gray-100' : 'bg-white'} text-sm`} />
-                      <div className="flex items-center gap-1 shrink-0">
-                        <input type="text" maxLength={2} inputMode="numeric" onBlur={padTimeOnBlur} disabled={d} name={n.hour} defaultValue={n.v.hour} placeholder="ชม"
-                          className={`w-[2.125rem] shrink-0 border border-gray-300 rounded-none h-9 px-1 text-gray-800 ${d ? 'bg-gray-100' : 'bg-white'} text-sm text-center`} />
-                        <span className="text-gray-400 shrink-0">:</span>
-                        <input type="text" maxLength={2} inputMode="numeric" onBlur={padTimeOnBlur} disabled={d} name={n.min} defaultValue={n.v.minute} placeholder="นาที"
-                          className={`w-[2.125rem] shrink-0 border border-gray-300 rounded-none h-9 px-1 text-gray-800 ${d ? 'bg-gray-100' : 'bg-white'} text-sm text-center`} />
-                      </div>
+                        className={`w-[5.5rem] min-w-[4.75rem] shrink border border-gray-300 rounded-none h-8 px-1 text-gray-800 ${d ? 'bg-gray-100' : 'bg-white'} text-xs`} />
+                      <input type="text" maxLength={2} inputMode="numeric" onBlur={padTimeOnBlur} disabled={d} name={n.hour} defaultValue={n.v.hour} placeholder="ชช"
+                        className={`w-[1.75rem] shrink-0 border border-gray-300 rounded-none h-8 px-0 text-gray-800 ${d ? 'bg-gray-100' : 'bg-white'} text-xs text-center`} />
+                      <span className="text-gray-400 shrink-0 text-xs">:</span>
+                      <input type="text" maxLength={2} inputMode="numeric" onBlur={padTimeOnBlur} disabled={d} name={n.min} defaultValue={n.v.minute} placeholder="นน"
+                        className={`w-[1.75rem] shrink-0 border border-gray-300 rounded-none h-8 px-0 text-gray-800 ${d ? 'bg-gray-100' : 'bg-white'} text-xs text-center`} />
                     </div>
                     {/* เตือนตรงจุดที่ผิด — ไม่ต้องเลื่อนขึ้นไปอ่านข้างบนแล้วเลื่อนกลับลงมาแก้ */}
                     {errs.map((e) => (
