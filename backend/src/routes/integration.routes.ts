@@ -273,6 +273,23 @@ router.get('/cases', integrationAuth, asyncHandler(async (_req: Request, res: Re
 
 // meta ของเคสเดียว (บริษัทประกัน/เลขต่าง ๆ + สถานะนำเข้า) — SE-AutoKey ใช้ resolve รหัสบริษัท
 // และ "เช็คกันซ้ำก่อนเริ่ม" (emcs_imported_at ไม่ null = ห้าม import อีก — EMCS สร้างเรื่องซ้ำ)
+// เช็คว่าเลขเซอร์เวย์นี้มีเคสในเว็บแล้วไหม (ทุกสถานะ ทุกต้นทาง · เคสในถังขยะไม่นับเพราะ cases เป็น VIEW) — ตัวดึงงาน (se-autokey pull_core) ใช้ก่อนตัดสินว่า
+// "ใบครั้งก่อนหน้าที่ยังไม่จบงานบน ISURVEY" ถูกดึงเข้ามาตรวจเป็นงานปกติแล้วหรือยัง (user สั่ง 19/09/69: ครั้งก่อนหน้าเป็นเคสอ้างอิงได้เฉพาะที่จบงานแล้ว
+// ใบที่ยังรอตรวจต้องดึงเข้าตรวจก่อน ไม่งั้นตัวดึงหยุดและบอกให้ดึงใบนั้นก่อน) · ⛔ ต้องประกาศก่อน '/cases/:id' ไม่งั้น "lookup" ถูกอ่านเป็น id
+router.get('/cases/lookup', integrationAuth, asyncHandler(async (req: Request, res: Response) => {
+  const { db } = await import('../config/database');
+  const no = String(req.query.survey_no ?? '').trim().slice(0, 50);
+  if (!no) { res.status(400).json({ success: false, message: 'ต้องมี survey_no' }); return; }
+  const r = await db.query(
+    `SELECT c.id, c.status, c.source, sr.claim_no
+       FROM cases c
+       LEFT JOIN survey_reports sr ON sr.case_id = c.id
+      WHERE sr.survey_job_no = $1
+      ORDER BY c.id
+      LIMIT 1`, [no]);
+  res.json({ success: true, data: r.rows[0] ?? null });
+}));
+
 router.get('/cases/:id', integrationAuth, asyncHandler(async (req: Request, res: Response) => {
   const caseId = parseInt(req.params.id as string);
   const { db } = await import('../config/database');

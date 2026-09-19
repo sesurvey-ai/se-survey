@@ -80,5 +80,13 @@ check('ไม่เตือนตัวเองตอนบันทึกเ�
 check('เตือนอย่างเดียว ไม่โหลดทับสิ่งที่พิมพ์ค้างไว้',
       !/case_changed'[\s\S]{0,400}onReviewSubmitted\(\)/.test(detail));
 
+// ตัวดึงงาน ISURVEY (user สั่ง 19/09/69): ครั้งก่อนหน้าเป็นเคสอ้างอิงเฉพาะที่จบงาน — ใบที่ยังรอตรวจต้องมีในเว็บแล้ว ตัวดึงถามผ่าน lookup นี้
+{
+  const ir = read('src', 'routes', 'integration.routes.ts');
+  check('integration: GET /cases/lookup?survey_no= คืนเคสที่มีเลขเซอร์เวย์นั้น (ทุกสถานะ) และประกาศก่อน /cases/:id',
+        /router\.get\('\/cases\/lookup', integrationAuth/.test(ir) && ir.includes('WHERE sr.survey_job_no = $1')
+        && ir.indexOf("router.get('/cases/lookup'") < ir.indexOf("router.get('/cases/:id'"));
+}
+
 console.log(failed === 0 ? '\n✅ ผ่านทั้งหมด\n' : `\n❌ ไม่ผ่าน ${failed} ข้อ\n`);
 process.exit(failed === 0 ? 0 : 1);
