@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import PhotoGallery from './PhotoGallery';
 import { PROVINCE_OPTIONS, carBrandOptions, CAR_COLOR_OPTIONS, EV_TYPE_OPTIONS, ACC_CAUSE_OPTIONS, ACC_DAMAGE_TYPE_OPTIONS, POLICY_TYPE_OPTIONS, CLAIM_TYPE_LABELS, CLAIM_TYPE_OPTIONS,
-         brandTypeIssue, CAR_TYPE_LABELS, isValidSeDate } from './caseOptions';
+         brandTypeIssue, CAR_TYPE_LABELS, isValidSeDate, ageFromSeDate } from './caseOptions';
 import { districtOptions } from './districtOptions';
 import api from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
@@ -560,6 +560,8 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
     driver_license_start: report.driver_license_start || '',
     driver_license_end: report.driver_license_end || '',
   });
+  // อายุผู้ขับขี่รถประกัน — เป็น state เพื่อให้คำนวณใหม่ได้ตอนแก้วันเกิด (user สั่ง 19/09/69) · ยังพิมพ์ทับได้ · ชื่อช่อง driver_age ส่งกับฟอร์มเหมือนเดิม
+  const [drvAge, setDrvAge] = useState<string>(report.driver_age != null ? String(report.driver_age) : '');
   const DRV_DATE_LABEL: Record<string, string> = {
     driver_birthdate: 'วันเกิดผู้ขับขี่', driver_license_start: 'ใบขับขี่ ออกให้วันที่', driver_license_end: 'ใบขับขี่ หมดอายุวันที่',
   };
@@ -570,7 +572,12 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
   const drvDateWarn = (k: string) => (badDrvDates.includes(k) ? 'ไม่ใช่วันที่จริง (วว/ดด/ปปปป พ.ศ.) — EMCS ปัดตกไฟล์นำเข้าทั้งไฟล์' : '');
   // ⛔ ช่อง input ต้องเขียน name="..." เป็นตัวอักษรตรง ๆ (ไม่ผ่านตัวแปร) — contract test ไล่จับดอกจันกับชื่อช่องจากข้อความ
   const drvDateCls = (k: string) => `${CTL(d)} ${drvDateWarn(k) ? 'border-red-500 ring-1 ring-red-300' : ''}`;
-  const drvDateChange = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) => setDrvDates({ ...drvDates, [k]: e.target.value });
+  const drvDateChange = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value;
+    setDrvDates({ ...drvDates, [k]: v });
+    // แก้วันเกิดผู้ขับขี่รถประกัน → อายุคำนวณใหม่ (ปีเต็ม ณ วันนี้ สูตรเดียวกับแอปและคู่กรณี) เฉพาะตอนหัวหน้าแก้ ไม่คำนวณตอนโหลด (user สั่ง 19/09/69)
+    if (k === 'driver_birthdate' && v !== drvDates.driver_birthdate) { const a = ageFromSeDate(v); if (a) setDrvAge(a); }
+  };
   const drvDateWarnEl = (k: string) => (drvDateWarn(k)
     ? <div className="mt-1 text-[0.6875rem] leading-tight text-red-600">⚠ {drvDateWarn(k)}</div> : null);
   /** หน้าต่างข้อมูลกรมธรรม์ทั้งชุดจาก ISURVEY แท็บ 7 (report.policy_info, migration 053) — user ขอ 07/09/69 */
@@ -2775,7 +2782,7 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
                 {drvDateWarnEl('driver_birthdate')}
               </F>
               <F label="อายุ" req={<Req of="driver_age" />}>
-                <input type="text" disabled={d} name="driver_age" defaultValue={report.driver_age != null ? report.driver_age : ''} className={CTL(d)} />
+                <input type="text" disabled={d} name="driver_age" value={drvAge} onChange={(e) => setDrvAge(e.target.value)} className={CTL(d)} />
               </F>
               <F label="โทรศัพท์" req={<Req of="driver_phone" />}>
                 <input type="text" disabled={d} name="driver_phone" defaultValue={report.driver_phone || ''} className={CTL(d)} />

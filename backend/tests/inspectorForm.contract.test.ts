@@ -560,5 +560,10 @@ check('การ์ดคู่กรณี/ความเสียหาย/�
     && rec.includes("if (!/^[1-9]\\d{0,2}$/.test(String(next.age ?? '').trim())) next.age = ageFromSeDate(next.birthdate);"));
 }
 
+// ผู้ขับขี่รถประกัน: แก้วันเกิดบนเว็บ → อายุคำนวณใหม่ (user สั่งเพิ่ม 19/09/69) — ช่องอายุเป็น state ยังพิมพ์ทับได้ · name="driver_age" คงเดิม
+check('ผู้ขับขี่รถประกัน: แก้วันเกิดบนเว็บ → อายุคำนวณใหม่ (ageFromSeDate → setDrvAge) · ช่องอายุยังแก้เองได้',
+      src.includes("if (k === 'driver_birthdate' && v !== drvDates.driver_birthdate) { const a = ageFromSeDate(v); if (a) setDrvAge(a); }")
+      && src.includes('name="driver_age" value={drvAge} onChange={(e) => setDrvAge(e.target.value)}'));
+
 console.log(`\n${failed === 0 ? '✅ ผ่านทั้งหมด' : `❌ ล้มเหลว ${failed} รายการ`}`);
 process.exit(failed ? 1 : 0);
