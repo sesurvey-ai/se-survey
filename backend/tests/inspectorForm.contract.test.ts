@@ -547,5 +547,18 @@ check('⛔ ตัวทากรอบแดงยังอ่านจากข
 check('การ์ดคู่กรณี/ความเสียหาย/รูป ไม่มีมุมมนหลงเหลือ',
       [rec, dlg, ed, gal].every((f) => !/rounded(-(sm|md|lg|xl)\b|-t-\[|-\[)/.test(f)));
 
+// อายุ/วันเกิดผู้ขับขี่คู่กรณี (user เคาะ 19/09/69): เว็บคำนวณอายุใหม่เฉพาะตอนแก้วันเกิด · วันเกิด "-"/ไม่จริง กั้นอนุมัติ + เตือนให้แก้หรือติ๊กรอตรวจสอบ
+{
+  const co = fs.readFileSync(path.join(__dirname, '..', '..', 'web', 'src', 'components', 'cases', 'caseOptions.ts'), 'utf8');
+  check('คู่กรณี: แก้วันเกิดบนเว็บ → อายุคำนวณใหม่ (ageFromSeDate) · ไม่คำนวณตอนโหลด',
+    rec.includes("if (k === 'birthdate' && v !== String(it.birthdate ?? '')) { const a = ageFromSeDate(v); if (a) next.age = a; }")
+    && /export function ageFromSeDate\(/.test(co));
+  check('คู่กรณี: วันเกิด "-" หรือไม่ใช่วันจริง = ยังไม่ครบ (กั้นอนุมัติ) · วันใบขับขี่ "-" ยังผ่าน · เตือนบอกให้แก้หรือติ๊กรอตรวจสอบ',
+    rec.includes("if (v === '-') return k === 'birthdate';") && rec.includes('หรือติ๊ก "รอตรวจสอบ" ถ้าไม่ทราบ'));
+  check('คู่กรณี: ติ๊กรอตรวจสอบ → วันเกิด "-"/ไม่จริง แทนด้วย 01/01/2500 + อายุคำนวณใหม่เมื่ออายุไม่ใช่ตัวเลข/0',
+    rec.includes("if (b === '-' || !isValidSeDate(b)) next.birthdate = '';")
+    && rec.includes("if (!/^[1-9]\\d{0,2}$/.test(String(next.age ?? '').trim())) next.age = ageFromSeDate(next.birthdate);"));
+}
+
 console.log(`\n${failed === 0 ? '✅ ผ่านทั้งหมด' : `❌ ล้มเหลว ${failed} รายการ`}`);
 process.exit(failed ? 1 : 0);

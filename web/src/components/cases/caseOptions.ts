@@ -233,6 +233,23 @@ export function isValidSeDate(v: unknown): boolean {
   return t.getUTCMonth() === mo - 1 && t.getUTCDate() === d;
 }
 
+/** อายุ (ปีเต็ม ณ วันนี้) จากวันเกิด วว/ดด/ปปปป (พ.ศ. หรือ ค.ศ.) — สูตรเดียวกับแอป (kAgeFromThaiDate) และตัวออก XML (xmlAge)
+ *  ใช้ตอนหัวหน้าแก้วันเกิดคู่กรณีบนเว็บ (user สั่ง 19/09/69) · ไม่ใช่วันจริง/อ่านไม่ออก/นอกช่วง 0–120 = '' */
+export function ageFromSeDate(v: unknown): string {
+  const s = String(v ?? '').trim();
+  if (!s || !isValidSeDate(s)) return '';
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/.exec(s.includes('|') ? s.split('|')[0].trim() : s);
+  if (!m) return '';
+  const d = Number(m[1]), mo = Number(m[2]);
+  let y = Number(m[3]);
+  if (y < 100) y += 2500; else if (y < 2400) y += 543;
+  const now = new Date();
+  let a = (now.getFullYear() + 543) - y;
+  const mm = now.getMonth() + 1;
+  if (mm < mo || (mm === mo && now.getDate() < d)) a -= 1;
+  return a >= 0 && a <= 120 ? String(a) : '';
+}
+
 // sync EMCS master ddlCar_Color (verbatim 55 สี) 2026-07-25
 /**
  * ประเภทประกัน — ชุดเดียวกับตาราง masterPolicyType ของ ISURVEY เป๊ะ ๆ (ดึงสด 30/08/69)

@@ -19,6 +19,7 @@ import {
 import {
   CAR_BRANDS_BY_TYPE as WEB_BRANDS, BRAND_ALIASES as WEB_ALIASES, THAI_BRANDS as WEB_THAI,
   brandTypeIssue as webBrandTypeIssue, isValidSeDate, carBrandOptions as webCarBrandOptions,
+  ageFromSeDate as webAgeFromSeDate,
 } from '../../web/src/components/cases/caseOptions';
 import { parseSe, emcsNameWarnings } from '../src/services/xmlExport.service';
 
@@ -134,6 +135,14 @@ check('web isValidSeDate ให้ผลเดียวกัน', !isValidSeDat
     /\.\.\.\(carBrandIssue \? \[/.test(cd) && /\.\.\.badDrvDates\.map\(/.test(cd));
   const ir = read('src/routes/integration.routes.ts');
   check('บอทดึงตารางได้จาก GET /api/integrations/car-brands', /router\.get\('\/car-brands', integrationAuth/.test(ir));
+}
+
+// อายุจากวันเกิด (เว็บ) — สูตรเดียวกับแอป kAgeFromThaiDate / ตัวออก XML xmlAge (user เคาะ 19/09/69)
+{
+  const exp = (d: number, m: number, y: number) => { const t = new Date(); let a = t.getFullYear() + 543 - y; if ((t.getMonth() + 1) < m || ((t.getMonth() + 1) === m && t.getDate() < d)) a -= 1; return String(a); };
+  check('เว็บ ageFromSeDate: ปีเต็ม ณ วันนี้ (นับเดือน/วัน) · รับ ค.ศ. · 00/00/2569 · "-" · ว่าง = ""',
+    webAgeFromSeDate('01/01/2500') === exp(1, 1, 2500) && webAgeFromSeDate('31/12/2500') === exp(31, 12, 2500) && webAgeFromSeDate('01/01/1957') === exp(1, 1, 2500)
+    && webAgeFromSeDate('00/00/2569') === '' && webAgeFromSeDate('-') === '' && webAgeFromSeDate('') === '' && webAgeFromSeDate('31/02/2530') === '');
 }
 
 console.log(failed ? `\nFAILED ❌: ${failed}` : '\nALL PASS ✅');

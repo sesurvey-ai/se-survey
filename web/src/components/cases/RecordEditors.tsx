@@ -17,7 +17,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import api from '@/lib/api';
 import { PROVINCE_OPTIONS, CAR_COLOR_OPTIONS, EV_TYPE_OPTIONS, POLICY_TYPE_OPTIONS, carBrandOptions,
-         brandTypeIssue, CAR_TYPE_LABELS, isValidSeDate, carTypeCode, ALL_BRAND } from './caseOptions';
+         brandTypeIssue, CAR_TYPE_LABELS, isValidSeDate, carTypeCode, ALL_BRAND, ageFromSeDate } from './caseOptions';
 import { districtOptions } from './districtOptions';
 import { insurerOptions, isEmcsInsurer } from './insurerOptions';
 import DamageDialog from './DamageDialog';
@@ -202,7 +202,9 @@ function Field({ def, value, onChange, warnOverride, quickFix }: {
       : offList ? 'ชื่อนี้ไม่มีใน EMCS — เลือกใหม่จากลิสต์'
         : badCid ? 'เลขบัตรไม่ถูกต้อง — EMCS จะไม่ยอมบันทึกทั้งบล็อก'
           : badAge ? 'อายุต้องเป็นตัวเลข — ใส่ "-" แล้ว EMCS ปัดตกทั้งไฟล์ (ไม่รู้ = เว้นว่าง)'
-            : badDate ? 'ต้องเป็นวันที่จริง วว/ดด/ปปปป (พ.ศ.) — 00/00 หรือ "-" ไม่ได้ EMCS ปัดตกทั้งไฟล์ (ไม่รู้ = เว้นว่าง)'
+            : badDate ? (def.k === 'birthdate'
+              ? 'วันเกิดไม่ใช่วันจริง (ISURVEY/XML ส่งมาเป็น 00/00 หรือใส่ "-") — ใส่ วว/ดด/ปปปป จริง หรือติ๊ก "รอตรวจสอบ" ถ้าไม่ทราบ · ปล่อยไว้อนุมัติไม่ผ่าน'
+              : 'ต้องเป็นวันที่จริง วว/ดด/ปปปป (พ.ศ.) — 00/00 หรือ "-" ไม่ได้ EMCS ปัดตกทั้งไฟล์ (ไม่รู้ = เว้นว่าง)')
               : '';
   const c = cls(def, v, warn);
   return (
@@ -475,10 +477,13 @@ export const opponentMissing = (rec: LooseRecord): string[] => [
   ...OPPONENT_REQUIRED.filter((k) => !String(rec[k] ?? '').trim()),
   ...OPPONENT_FIELDS.filter((f) => f.reqWhen && f.reqWhen(rec) && !chosen(rec[f.k])).map((f) => f.k),
   // วันที่ที่ไม่ใช่วันจริง (00/00/2569) นับเป็น "ยังไม่ครบ" — ปล่อยอนุมัติแล้ว EMCS ปัดตกไฟล์ทั้งไฟล์ (เคส #299 15/09/69)
-  // "-" = ไม่ทราบ ปล่อยผ่าน (ตัวออก XML ใช้วันนี้แทนตามกติกาเดิม)
+  // วันเกิดคู่กรณี: "-" ก็ไม่ผ่าน (user เคาะ 19/09/69 — วันเกิดไม่จริงจาก ISURVEY/XML ให้เตือนบนเว็บแล้วหัวหน้าแก้ ไม่ทราบ = ติ๊กรอตรวจสอบ;
+  //   เดิม "-" ผ่านแล้วบอทใส่วันนี้+อายุ 1 ให้เงียบ ๆ) · วันออก/หมดอายุใบขับขี่ "-" = ไม่ทราบ ปล่อยผ่านเหมือนเดิม
   ...['birthdate', 'license_start', 'license_end'].filter((k) => {
     const v = String(rec[k] ?? '').trim();
-    return v !== '' && v !== '-' && !isValidSeDate(v);
+    if (v === '') return false;
+    if (v === '-') return k === 'birthdate';
+    return !isValidSeDate(v);
   }),
   // ยี่ห้อไม่มีในลิสต์ของประเภทรถนั้นบน EMCS — บอทเลือกไม่ได้ (เคส #300 15/09/69)
   ...(brandTypeIssue(rec.car_type, rec.car_brand) ? ['car_brand'] : []),
@@ -551,6 +556,9 @@ export function OpponentEditor({ items, onChange }: {
       // ที่อยู่ผู้ขับขี่: เปลี่ยนจังหวัด → ล้างอำเภอ+ตำบล · เปลี่ยนอำเภอ → ล้างตำบล (รายการตำบลผูกกับคู่จังหวัด/อำเภอ)
       if (k === 'home_province' && v !== String(it.home_province ?? '')) { next.district = ''; next.subdistrict = ''; }
       if (k === 'district' && v !== String(it.district ?? '')) next.subdistrict = '';
+      // แก้วันเกิด → คำนวณอายุใหม่ (ปีเต็ม ณ วันนี้ สูตรเดียวกับแอป) เฉพาะตอนหัวหน้าแก้บนเว็บ — ข้อมูลจากแอปมาพร้อมอายุแล้ว
+      // ไม่คำนวณซ้ำตอนโหลด · ช่องอายุยังพิมพ์ทับได้ (user สั่ง 19/09/69)
+      if (k === 'birthdate' && v !== String(it.birthdate ?? '')) { const a = ageFromSeDate(v); if (a) next.age = a; }
       // "ไม่มีบริษัทประกันภัย" → เลขกรมธรรม์ "-" ให้เอง (EMCS บังคับช่องนี้ทุกบริษัท · กติกาช่องบังคับไม่มีข้อมูล = "-")
       // เปลี่ยนกลับเป็นบริษัทจริงแล้วยังเป็น "-" อยู่ → ล้างให้กรอกเลขจริง (user ขอ 10/09/69)
       if (k === 'insurer') {
@@ -578,11 +586,10 @@ export function OpponentEditor({ items, onChange }: {
       fill('car_type', 'รถอื่นๆ');
       if (!chosen(next.car_brand) && carTypeCode(next.car_type) !== 'O') next.car_brand = ALL_BRAND;
       fill('province', 'อื่นๆ'); fill('gender', 'ชาย'); fill('insurer', NO_INSURER); fill('policy_no', '-');
+      // วันเกิดที่ไม่ใช่วันจริง ("-" · 00/00/00 จาก ISURVEY/XML) นับเป็นว่าง → 01/01/2500 · อายุที่ไม่ใช่ตัวเลข/เป็น 0 → คำนวณใหม่ (19/09/69)
+      { const b = String(next.birthdate ?? '').trim(); if (b === '-' || !isValidSeDate(b)) next.birthdate = ''; }
       fill('birthdate', '01/01/2500');
-      if (!chosen(next.age)) {
-        const y = Number(String(next.birthdate ?? '').split('/')[2]);
-        if (y > 0) next.age = String(new Date().getFullYear() + 543 - y);
-      }
+      if (!/^[1-9]\d{0,2}$/.test(String(next.age ?? '').trim())) next.age = ageFromSeDate(next.birthdate);
       return next;
     }));
 
