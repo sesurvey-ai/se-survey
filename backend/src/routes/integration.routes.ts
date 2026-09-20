@@ -237,6 +237,10 @@ router.get('/cases/:id/export-xml', integrationAuth, asyncHandler(async (req: Re
 
 // รายการเคสที่พร้อมนำเข้า EMCS — webui ของ SE-AutoKey ใช้โชว์ลิสต์ให้เลือก
 // ⛔ เฉพาะ 'reviewed' (หัวหน้าอนุมัติแล้ว) — เดิมรวม 'surveyed' ด้วย ทำให้อนุมัติหรือไม่ก็เข้า EMCS ได้
+// จำนวนสมาชิกของคอลัมน์ JSONB (คู่กรณี/ผู้บาดเจ็บ/ทรัพย์สิน) สำหรับการ์ดบอท (user ขอ 20/09/69) —
+// ใช้ของใบครั้งที่ 1 ของเคลม (fv) ถ้ามี ไม่งั้นของใบนั้นเอง = ชุดเดียวกับ effectiveReport ที่บอทกรอก · ไม่ใช่ array (ข้อมูลเก่ารูปทรงอื่น) = 0 เหมือน parseJsonArr ของ XML
+const jsonCount = (col: string) =>
+  `(CASE WHEN jsonb_typeof(COALESCE(fv.${col}, sr.${col})) = 'array' THEN jsonb_array_length(COALESCE(fv.${col}, sr.${col})) ELSE 0 END)::int`;
 router.get('/cases', integrationAuth, asyncHandler(async (_req: Request, res: Response) => {
   const { db } = await import('../config/database');
   const r = await db.query(
@@ -256,9 +260,22 @@ router.get('/cases', integrationAuth, asyncHandler(async (_req: Request, res: Re
               (SELECT COUNT(*)::int FROM cases c2 JOIN survey_reports s2 ON s2.case_id = c2.id
                 WHERE s2.claim_no = sr.claim_no AND c2.created_at <= c.created_at))::int AS visit_no,
             (SELECT COUNT(*)::int FROM cases c3 JOIN survey_reports s3 ON s3.case_id = c3.id
-              WHERE s3.claim_no = sr.claim_no) AS visit_total
+              WHERE s3.claim_no = sr.claim_no) AS visit_total,
+            -- จำนวนคู่กรณี/ผู้บาดเจ็บ/ทรัพย์สิน (การ์ดบอทโชว์ "คู่กรณี 2 · ผู้บาดเจ็บ 1 · ทรัพย์สิน 0" — user ขอ 20/09/69)
+            ${jsonCount('opposing_parties')} AS opponent_count,
+            ${jsonCount('injured_persons')} AS injured_count,
+            ${jsonCount('damaged_property')} AS property_count
        FROM cases c
        LEFT JOIN survey_reports sr ON sr.case_id = c.id
+       -- ใบครั้งที่ 1 ของเคลม (กติกาเดียวกับ findFirstVisit: visit_no ที่เก็บ ไม่มีก็ลำดับสร้าง) = ที่มาของข้อมูลหลักบนใบครั้งที่ 2+
+       LEFT JOIN LATERAL (
+         SELECT t.opposing_parties, t.injured_persons, t.damaged_property
+           FROM (SELECT s1.opposing_parties, s1.injured_persons, s1.damaged_property, c1.created_at AS fv_created,
+                        COALESCE(c1.visit_no, ROW_NUMBER() OVER (PARTITION BY s1.claim_no ORDER BY c1.created_at))::int AS fv_visit_no
+                   FROM survey_reports s1 JOIN cases c1 ON c1.id = s1.case_id
+                  WHERE s1.claim_no = sr.claim_no AND sr.claim_no <> '') t
+          ORDER BY t.fv_visit_no, t.fv_created LIMIT 1
+       ) fv ON TRUE
        LEFT JOIN users u ON u.id = c.assigned_to
        LEFT JOIN reviews rv ON rv.case_id = c.id
        LEFT JOIN users ck ON ck.id = rv.checker_id

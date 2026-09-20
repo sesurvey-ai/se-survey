@@ -139,5 +139,11 @@ check('หน้าดึงงาน: ค้นหาจากรายกา�
   && pull.includes('placeholder="เลขเคลม / เลขเซอร์เวย์ / ผู้สำรวจ / จังหวัด"') && /onClick=\{\(\) => setStatusOpen\(\(o\) => !o\)\} disabled=\{searching\}/.test(pull)
   && pull.includes('ตัวกรองสถานะพักไว้ระหว่างค้นหา'));
 
+/** การ์ดบอทโชว์ "คู่กรณี N · ผู้บาดเจ็บ N · ทรัพย์สิน N" (user ขอ 20/09/69) — นับจากใบครั้งที่ 1 ของเคลม (รายงานที่มีผล) · ไม่ใช่ array = 0 */
+check('รายการเคสสำหรับบอทส่ง opponent_count/injured_count/property_count นับจากใบครั้งที่ 1 (กติกา findFirstVisit)',
+  /\$\{jsonCount\('opposing_parties'\)\} AS opponent_count,\s*\$\{jsonCount\('injured_persons'\)\} AS injured_count,\s*\$\{jsonCount\('damaged_property'\)\} AS property_count/.test(routes)
+  && routes.includes("`(CASE WHEN jsonb_typeof(COALESCE(fv.${col}, sr.${col})) = 'array' THEN jsonb_array_length(COALESCE(fv.${col}, sr.${col})) ELSE 0 END)::int`")
+  && /LEFT JOIN LATERAL \(\s*SELECT t\.opposing_parties, t\.injured_persons, t\.damaged_property[\s\S]{0,700}?COALESCE\(c1\.visit_no, ROW_NUMBER\(\) OVER \(PARTITION BY s1\.claim_no ORDER BY c1\.created_at\)\)::int AS fv_visit_no[\s\S]{0,300}?WHERE s1\.claim_no = sr\.claim_no AND sr\.claim_no <> ''\) t\s*ORDER BY t\.fv_visit_no, t\.fv_created LIMIT 1\s*\) fv ON TRUE/.test(routes));
+
 console.log(failed === 0 ? '\n✅ ผ่านทั้งหมด\n' : `\n❌ ไม่ผ่าน ${failed} ข้อ\n`);
 process.exit(failed === 0 ? 0 : 1);
