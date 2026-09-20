@@ -10,7 +10,7 @@ import { CAR_BRANDS_BY_TYPE, BRAND_ALIASES, THAI_BRANDS, CAR_TYPE_LABELS } from 
 import { notifyCaseChanged } from '../services/caseEvents';
 import { emcsQueueService } from '../services/emcsQueue.service';
 import { botReleaseKeys, BOT_VERSION_RE } from '../services/botRelease';
-import { driverAddressLine, opponentAddressLine, withTitle } from '../services/driverAddress';
+import { driverAddressLine, opponentAddressLine, withTitle, addressLineOrDash } from '../services/driverAddress';
 
 // ── routes สำหรับเครื่องมือภายใน (se-autokey) — auth ด้วย service token ไม่ผูกบัญชีพนักงาน ──
 // เปิดใช้โดยตั้ง env INTEGRATION_TOKEN (ยาว ≥24 ตัว); ไม่ตั้ง = ทุก route ตอบ 401
@@ -392,6 +392,26 @@ router.post('/cases/:id/emcs-status', integrationAuth, asyncHandler(async (req: 
 
 // ข้อมูลรายงานสำรวจ (ค่าไทย) ของเคส — SE-AutoKey ใช้เติม ClaimData ให้ fill_* กรอกหน้าหลัก EMCS
 // (fuzzy_select ต้องการชื่อไทย เช่น จังหวัด/ยี่ห้อ/ประเภทรถ — ต่างจาก XML ที่เป็นรหัส EMCS)
+// ค่าที่ประกอบแล้วสำหรับกรอก EMCS (สูตรอยู่ที่ services/driverAddress.ts ที่เดียว):
+// คู่กรณี (16/09/69): owner_name_emcs = "นาย บุญเลี้ยง ชงสุวรรณ" · address_emcs = "46/23 ม.7 ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ"
+// ผู้บาดเจ็บ/ทรัพย์สิน (21/09/69): name_emcs / owner_name_emcs = คำนำหน้า+ชื่อ · address_emcs = ที่อยู่ 5 ช่องประกอบ — บอทกรอกช่องข้อความเดียวของ EMCS ตรง ๆ
+const emcsRecordViews = (r: Record<string, unknown>) => {
+  const arr = (v: unknown) => (Array.isArray(v) ? (v as Record<string, unknown>[]) : null);
+  const map = (v: unknown, f: (o: Record<string, unknown>) => Record<string, unknown>) => {
+    const a = arr(v); return a ? a.map((o) => (o && typeof o === 'object' ? f(o) : o)) : v;
+  };
+  return {
+    opposing: map(r.opposing_parties, (o) => ({ ...o,
+      owner_name_emcs: withTitle(o.owner_title, o.owner_name),
+      address_emcs: opponentAddressLine(o.address, o.moo, o.subdistrict, o.district, o.home_province) })),
+    injured: map(r.injured_persons, (p) => ({ ...p,
+      name_emcs: withTitle(p.title, p.name),
+      address_emcs: addressLineOrDash(p.address, p.moo, p.subdistrict, p.district, p.home_province) })),
+    property: map(r.damaged_property, (a) => ({ ...a,
+      owner_name_emcs: withTitle(a.owner_title, a.owner_name),
+      address_emcs: addressLineOrDash(a.owner_address, a.owner_moo, a.owner_subdistrict, a.owner_district, a.owner_province) })),
+  };
+};
 router.get('/cases/:id/report', integrationAuth, asyncHandler(async (req: Request, res: Response) => {
   const caseId = parseInt(req.params.id as string);
   if (!(await assertApproved(caseId, res))) return;
@@ -400,14 +420,8 @@ router.get('/cases/:id/report', integrationAuth, asyncHandler(async (req: Reques
   if (!eff) { res.status(404).json({ success: false, message: 'report not found' }); return; }
   // driver_address_emcs = ที่อยู่ผู้ขับขี่ประกอบแล้ว "46/23 ม.7 ต.ท้ายบ้าน" (16/09/69) — บอทกรอก txtDri_Address ตรง ๆ
   const r = eff.report as Record<string, unknown>;
-  // คู่กรณี (16/09/69): owner_name_emcs = "นาย บุญเลี้ยง ชงสุวรรณ" · address_emcs = "46/23 ม.7 ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ"
-  // — บอทกรอก txtOpo_Name / txtDri_Adrress ของบล็อกคู่กรณีตรง ๆ (สูตรอยู่ที่ services/driverAddress.ts ที่เดียว)
-  const opposing = Array.isArray(r.opposing_parties)
-    ? (r.opposing_parties as Record<string, unknown>[]).map((o) => (o && typeof o === 'object' ? { ...o,
-        owner_name_emcs: withTitle(o.owner_title, o.owner_name),
-        address_emcs: opponentAddressLine(o.address, o.moo, o.subdistrict, o.district, o.home_province) } : o))
-    : r.opposing_parties;
-  res.json({ success: true, data: { ...eff.report, main_from: eff.main_from, opposing_parties: opposing,
+  const v = emcsRecordViews(r);
+  res.json({ success: true, data: { ...eff.report, main_from: eff.main_from, opposing_parties: v.opposing, injured_persons: v.injured, damaged_property: v.property,
     driver_address_emcs: driverAddressLine(r.driver_address, r.driver_moo, r.driver_subdistrict) } });
 }));
 

@@ -13,7 +13,7 @@
  */
 
 import { EMCS_DISTRICTS } from '../data/emcsDistricts';
-import { driverAddressLine, opponentAddressLine, withTitle } from './driverAddress';
+import { driverAddressLine, opponentAddressLine, addressLineOrDash, withTitle } from './driverAddress';
 
 // ── SE Survey identity ในพอร์ทัล (คงที่ต่อบริษัท; override ได้ผ่าน env) ──
 const SURVEY_ID = process.env.PORTAL_SURVEY_ID || '5684';
@@ -523,8 +523,9 @@ function buildAsset(a: Row, seq: number): string {
     el('ASSET_DAMAGE_CAUSE', injText(a.cause, true)) +   // สาเหตุ (ลำดับตรง gold: cause ก่อน damage)
     el('ASSET_DAMAGE', injText(a.detail, true)) +        // รายละเอียดความเสียหาย
     el('COST_DAMAGE', money(injNum(a.estimated_cost))) +
-    el('OWNER', injText(a.owner_name, true)) +
-    el('ADDRESS', injText(a.owner_address)) +
+    // เจ้าของทรัพย์สิน (21/09/69): คำนำหน้าแยกช่อง (บริษัทเว้นว่าง) → "นาย สมชาย ใจดี" · ที่อยู่แยก 5 ช่องประกอบสูตรเดียวกับคู่กรณี
+    el('OWNER', injText(withTitle(a.owner_title, a.owner_name), true)) +
+    el('ADDRESS', injText(addressLineOrDash(a.owner_address, a.owner_moo, a.owner_subdistrict, a.owner_district, a.owner_province))) +
     el('TEL_NO', tel50(injNum(a.owner_phone))) +
     '</TXN_SURV_ASSET>';
 }
@@ -549,16 +550,30 @@ const injNum = (v: unknown): string => { const s = String(v ?? '').trim(); retur
 /** ช่องข้อความคู่กรณี (user เคาะ 20/09/69): "รอตรวจสอบ" ที่คนพิมพ์ = ไม่ทราบ → "-" (ชุดเดียวกับบอท _opp_clean) */
 const oppText = (v: unknown): string => { const t = String(v ?? '').trim(); if (!t) return ''; return t === 'รอตรวจสอบ' || /^-+$/.test(t) ? '-' : t; };   // "--" ของ ISURVEY = ไม่ทราบ ด้วย
 
-function buildInjure(p: Row, seq: number): string {
+/** ทะเบียนรถของผู้บาดเจ็บ (user เคาะ 21/09/69 กติกาเดียวกับคู่กรณี): ไม่มี → "00" · EMCS หน้าจอเติมให้เองจากประเภทผู้บาดเจ็บ
+ *  (ผู้ขับขี่/ผู้โดยสาร - รถประกัน → ทะเบียนรถประกัน · - รถคู่กรณี → ทะเบียนคู่กรณี) ไฟล์จึงเติมแบบเดียวกัน · บุคคลภายนอกรถ → "00" */
+type InjureCtx = { insuredPlate: string; oppPlates: string[] };
+const injuredPlate = (p: Row, ctx: InjureCtx): string => {
+  const own = emcsPlate(injNum(p.car_reg));
+  if (own) return own;
+  const t = String(p.person_type ?? '');
+  if (/รถประกัน/.test(t)) return ctx.insuredPlate || '00';
+  if (/คู่กรณี/.test(t)) return ctx.oppPlates[0] || '00';
+  return '00';
+};
+
+function buildInjure(p: Row, seq: number, ctx: InjureCtx = { insuredPlate: '', oppPlates: [] }): string {
   return '<TXN_SURV_INJ>' +
     el('INJ_SEQ', seq) +
-    el('NAME', injText(p.name, true)) +
+    // คำนำหน้าแยกช่อง (21/09/69) → "นาย สมชาย ใจดี" สูตรเดียวกับคู่กรณี (withTitle: ตัวแทนค่า/ไม่ทราบชื่อ ไม่ต่อคำนำหน้า · คำนำหน้าที่ติดในชื่ออยู่แล้วไม่ซ้ำ)
+    el('NAME', injText(withTitle(p.title, p.name), true)) +
     el('AGE', injNum(p.age)) +
     el('CITIZEN_ID', injText(p.cid, true)) +
     el('DRI_RELATION_ID', lookup(RELATION, p.relation)) + // ความสัมพันธ์ (รหัส 1-35)
     el('JOB', injText(p.occupation)) +
-    el('CAR_REGNO', emcsPlate(injNum(p.car_reg))) +
-    el('ADDRESS', injText(p.address)) +
+    el('CAR_REGNO', injuredPlate(p, ctx)) +
+    // ที่อยู่แยก 5 ช่อง (21/09/69) → "46/23 ม.7 ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ" สูตรเดียวกับคู่กรณี (opponentAddressLine) · ข้อมูลเก่าที่เป็นข้อความเดียวยังผ่านได้
+    el('ADDRESS', injText(addressLineOrDash(p.address, p.moo, p.subdistrict, p.district, p.home_province))) +
     el('TEL_NO', tel10(injNum(p.phone))) +
     el('WORK_PLACE', injText(p.work_place)) +
     el('POSITION', injText(p.position)) +
@@ -860,7 +875,8 @@ export function generateSurveyXml(r: Row): string {
   // อ่านคู่กรณีเป็น "รถประกันคันที่ N" แล้วบังคับเลขตัวถัง/ฟิลด์ของรถประกัน → import ไม่ผ่าน)
   const cars = buildCar(r, 0, true) + opponents.map((o, i) => buildCar(o, 20 + i, false)).join('');
   const assetBlocks = assets.map((a, i) => buildAsset(a, i + 1)).join('');   // ทรัพย์สินเสียหาย (0..n)
-  const injureBlocks = injured.map((p, i) => buildInjure(p, i + 1)).join(''); // ผู้บาดเจ็บ (0..n)
+  const injCtx: InjureCtx = { insuredPlate: emcsPlate(r.license_plate), oppPlates: opponents.map((o) => emcsPlate(o.plate) || '00') };
+  const injureBlocks = injured.map((p, i) => buildInjure(p, i + 1, injCtx)).join(''); // ผู้บาดเจ็บ (0..n)
 
   // ── ตารางค่าใช้จ่าย (ฝั่ง**เรียกเก็บบริษัทประกัน**) ────────────────────────────
   //

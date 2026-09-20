@@ -3057,13 +3057,30 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
       alsoMissing: (it) {
         final pt = (it['person_type'] ?? '').toString().trim();
         final reg = (it['car_reg'] ?? '').toString().trim();
-        return (pt.isNotEmpty && pt != 'บุคคลภายนอกรถ' && reg.isEmpty)
-            ? const ['เลขทะเบียนรถ'] : const <String>[];
+        String s(String k) => (it[k] ?? '').toString().trim();
+        // ที่อยู่ผู้บาดเจ็บ (21/09/69): มีส่วนใดส่วนหนึ่ง → จังหวัด/อำเภอ/ตำบล ต้องครบ (กติกาเดียวกับคู่กรณี · InjuredEditor._missing)
+        final addr = OpponentEditor.addrHasData(s('address'), s('moo'), s('home_province'), s('district'), s('subdistrict'));
+        return [
+          if (pt.isNotEmpty && pt != 'บุคคลภายนอกรถ' && reg.isEmpty) 'เลขทะเบียนรถ',
+          if (addr && s('home_province').isEmpty) 'จังหวัด (ที่อยู่)',
+          if (addr && s('district').isEmpty) 'เขต/อำเภอ (ที่อยู่)',
+          if (addr && s('subdistrict').isEmpty) 'ตำบล/แขวง (ที่อยู่)',
+        ];
       });
     checkItems('8. ทรัพย์สิน', _hasProperty, _property, 'ทรัพย์สิน', const {
       'item': 'รายการทรัพย์สิน', 'cause': 'สาเหตุที่เสียหาย',
       'detail': 'รายละเอียดความเสียหาย', 'owner_name': 'ชื่อเจ้าของ',
-    });
+    },
+      // ที่อยู่เจ้าของทรัพย์สิน (21/09/69): กติกาเดียวกับคู่กรณี/ผู้บาดเจ็บ (PropertyEditor._missing)
+      alsoMissing: (it) {
+        String s(String k) => (it[k] ?? '').toString().trim();
+        final addr = OpponentEditor.addrHasData(s('owner_address'), s('owner_moo'), s('owner_province'), s('owner_district'), s('owner_subdistrict'));
+        return [
+          if (addr && s('owner_province').isEmpty) 'จังหวัด (ที่อยู่เจ้าของ)',
+          if (addr && s('owner_district').isEmpty) 'เขต/อำเภอ (ที่อยู่เจ้าของ)',
+          if (addr && s('owner_subdistrict').isEmpty) 'ตำบล/แขวง (ที่อยู่เจ้าของ)',
+        ];
+      });
 
     // เพดานของ EMCS: ผู้บาดเจ็บ 32 คน / ทรัพย์สิน 30 ชิ้น — ส่วนเกินหายเงียบตอน import
     if (_injured.length > 32) {
@@ -3795,7 +3812,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
 
   Future<void> _addInjured() async {
     final res = await _openRecordEditor('injured', null, (onDraft) => InjuredEditor(
-        data: const {}, provinces: _provinceNames, number: _injured.length + 1, isNew: true, onScan: _captureRetainOcr, onDraft: onDraft));
+        data: const {}, provinces: _provinceNames, provincesData: _provincesData, tumbonsData: _tumbonsData, number: _injured.length + 1, isNew: true, onScan: _captureRetainOcr, onDraft: onDraft));
     if (res == null || res['action'] != 'save') return;
     setState(() { _injured.add(Map<String, dynamic>.from(res['data'] as Map)); _hasInjured = true; });
     _autosave();
@@ -3803,7 +3820,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
 
   Future<void> _editInjured(int i) async {
     final res = await _openRecordEditor('injured', i, (onDraft) => InjuredEditor(
-        data: _injured[i], provinces: _provinceNames, number: i + 1, onScan: _captureRetainOcr, onDraft: onDraft));
+        data: _injured[i], provinces: _provinceNames, provincesData: _provincesData, tumbonsData: _tumbonsData, number: i + 1, onScan: _captureRetainOcr, onDraft: onDraft));
     if (res == null) return;
     setState(() {
       if (res['action'] == 'save') {
@@ -3836,7 +3853,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
 
   Future<void> _addProperty() async {
     final res = await Navigator.of(context).push<Map>(MaterialPageRoute(
-        builder: (_) => PropertyEditor(data: const {}, number: _property.length + 1, isNew: true)));
+        builder: (_) => PropertyEditor(data: const {}, provinces: _provinceNames, provincesData: _provincesData, tumbonsData: _tumbonsData, number: _property.length + 1, isNew: true)));
     if (!mounted || res == null || res['action'] != 'save') return;
     setState(() { _property.add(Map<String, dynamic>.from(res['data'] as Map)); _hasProperty = true; });
     _autosave();
@@ -3844,7 +3861,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
 
   Future<void> _editProperty(int i) async {
     final res = await Navigator.of(context).push<Map>(MaterialPageRoute(
-        builder: (_) => PropertyEditor(data: _property[i], number: i + 1)));
+        builder: (_) => PropertyEditor(data: _property[i], provinces: _provinceNames, provincesData: _provincesData, tumbonsData: _tumbonsData, number: i + 1)));
     if (!mounted || res == null) return;
     setState(() {
       if (res['action'] == 'save') {

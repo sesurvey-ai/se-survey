@@ -441,5 +441,41 @@ console.log('\n── การ์ด: เงินฝั่งพนักง�
   check('XML ทรัพย์สิน: ค่าจริงคงเดิม (ไม่ถูกแปลง)', ast2.includes('<ASSET_DESC>เสาไฟฟ้า</ASSET_DESC>') && ast2.includes('<OWNER>การไฟฟ้า</OWNER>') && ast2.includes('<TEL_NO>021234567</TEL_NO>'));
 }
 
+// ผู้บาดเจ็บ/ทรัพย์สิน (user สั่ง 21/09/69): คำนำหน้าแยกช่อง → NAME/OWNER "นาย ชื่อ สกุล" · ที่อยู่ 5 ช่อง → ADDRESS สูตรคู่กรณี · ทะเบียนผู้บาดเจ็บไม่มี → ตามประเภท/00
+{
+  const inj = (extra: Record<string, unknown>) => ({ name: 'สมชาย ใจดี', cid: '1100800629296', hospital: 'รพ.เมือง', symptom: 'ฟกช้ำ', gender: 'ชาย', ...extra });
+  const x = generateSurveyXml({ ...row, license_plate: '1กข1234', opposing_parties: [{ ...(row.opposing_parties as any[])[0], plate: '83-2668' }],
+    injured_persons: [
+      inj({ title: 'นาย', address: '46/23', moo: '7', subdistrict: 'ท้ายบ้าน', district: 'อำเภอเมือง', home_province: 'สมุทรปราการ', person_type: 'ผู้โดยสาร - รถประกัน', car_reg: '' }),
+      inj({ title: 'นาง', name: 'นางสมหญิง ดีงาม', address: '', moo: '', subdistrict: 'บางด้วน', district: 'เขตภาษีเจริญ', home_province: 'กรุงเทพมหานคร', person_type: 'ผู้ขับขี่ - รถคู่กรณี', car_reg: '' }),
+      inj({ title: '', address: '99 ถ.สุขุมวิท ต.บางนา อ.บางนา จ.กรุงเทพฯ', person_type: 'บุคคลภายนอกรถ', car_reg: '' }),
+      inj({ title: 'คุณ', name: '-', person_type: 'ผู้ขับขี่ - รถประกัน', car_reg: 'กข 55-11' }),
+    ] } as never);
+  const blocks = x.match(/<TXN_SURV_INJ>[\s\S]*?<\/TXN_SURV_INJ>/g) || [];
+  const tg = (b: string, t: string) => (b.match(new RegExp('<' + t + '>([^<]*)<')) || ['', '?'])[1];
+  check('XML ผู้บาดเจ็บ: NAME "นาย สมชาย ใจดี" · ADDRESS "46/23 ม.7 ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ" · ทะเบียนว่าง+รถประกัน → ทะเบียนรถประกัน',
+        blocks.length === 4 && tg(blocks[0], 'NAME') === 'นาย สมชาย ใจดี' && tg(blocks[0], 'ADDRESS') === '46/23 ม.7 ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ' && tg(blocks[0], 'CAR_REGNO') === '1กข1234',
+        blocks.length ? `${tg(blocks[0], 'NAME')} | ${tg(blocks[0], 'ADDRESS')} | ${tg(blocks[0], 'CAR_REGNO')}` : 'no blocks');
+  check('XML ผู้บาดเจ็บ: คำนำหน้าที่ติดในชื่ออยู่แล้วไม่ซ้ำ · กรุงเทพ = "แขวงบางด้วน เขตภาษีเจริญ กรุงเทพฯ" · ฝั่งคู่กรณี → ทะเบียนคู่กรณี (ตัดขีด)',
+        tg(blocks[1], 'NAME') === 'นาง สมหญิง ดีงาม' && tg(blocks[1], 'ADDRESS') === 'แขวงบางด้วน เขตภาษีเจริญ กรุงเทพฯ' && tg(blocks[1], 'CAR_REGNO') === '832668',
+        `${tg(blocks[1], 'NAME')} | ${tg(blocks[1], 'ADDRESS')} | ${tg(blocks[1], 'CAR_REGNO')}`);
+  const z = generateSurveyXml({ ...row, injured_persons: [inj({ address: 'รอตรวจสอบ', moo: '', subdistrict: '', district: '', home_province: '' })] } as never);
+  const zb = (z.match(/<TXN_SURV_INJ>[\s\S]*?<\/TXN_SURV_INJ>/g) || [])[0] || '';
+  check('XML ผู้บาดเจ็บ: บ้านเลขที่ "รอตรวจสอบ" อย่างเดียว (ประกอบแล้วว่าง) → ADDRESS "-"', tg(zb, 'ADDRESS') === '-', tg(zb, 'ADDRESS'));
+  check('XML ผู้บาดเจ็บ: ที่อยู่ข้อความเดียวแบบเก่าคงเดิม · บุคคลภายนอกรถ → CAR_REGNO 00 · ชื่อ "-" ไม่ต่อคำนำหน้า · ทะเบียนที่กรอกเองถูกตัดเครื่องหมาย',
+        tg(blocks[2], 'ADDRESS') === '99 ถ.สุขุมวิท ต.บางนา อ.บางนา จ.กรุงเทพฯ' && tg(blocks[2], 'CAR_REGNO') === '00' && tg(blocks[2], 'NAME') === 'สมชาย ใจดี'
+        && tg(blocks[3], 'NAME') === '-' && tg(blocks[3], 'CAR_REGNO') === 'กข5511',
+        `${tg(blocks[2], 'ADDRESS')} | ${tg(blocks[2], 'CAR_REGNO')} | ${tg(blocks[3], 'NAME')} | ${tg(blocks[3], 'CAR_REGNO')}`);
+  const y = generateSurveyXml({ ...row, damaged_property: [
+    { item: 'เสาไฟฟ้า', cause: 'รถชน', detail: 'หัก', owner_title: 'นาย', owner_name: 'สมศักดิ์ มั่นคง', owner_address: '12/3', owner_moo: '2', owner_subdistrict: 'ท้ายบ้าน', owner_district: 'อำเภอเมือง', owner_province: 'สมุทรปราการ', owner_phone: '0812345678' },
+    { item: 'รั้ว', cause: 'รถชน', detail: 'พัง', owner_title: '', owner_name: 'บริษัท เอบีซี จำกัด', owner_address: '99 ถ.สุขุมวิท กรุงเทพฯ' },
+  ] } as never);
+  const ab = y.match(/<TXN_SURV_ASSET>[\s\S]*?<\/TXN_SURV_ASSET>/g) || [];
+  check('XML ทรัพย์สิน: OWNER "นาย สมศักดิ์ มั่นคง" + ADDRESS 5 ช่องประกอบ · บริษัทไม่มีคำนำหน้า + ที่อยู่ข้อความเดียวคงเดิม',
+        ab.length === 2 && tg(ab[0], 'OWNER') === 'นาย สมศักดิ์ มั่นคง' && tg(ab[0], 'ADDRESS') === '12/3 ม.2 ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ'
+        && tg(ab[1], 'OWNER') === 'บริษัท เอบีซี จำกัด' && tg(ab[1], 'ADDRESS') === '99 ถ.สุขุมวิท กรุงเทพฯ',
+        ab.length ? `${tg(ab[0], 'OWNER')} | ${tg(ab[0], 'ADDRESS')} | ${tg(ab[1], 'OWNER')} | ${tg(ab[1], 'ADDRESS')}` : 'no blocks');
+}
+
 console.log(`\n${failed === 0 ? '✅ ผ่านทั้งหมด' : `❌ ล้มเหลว ${failed} รายการ`}`);
 process.exit(failed === 0 ? 0 : 1);

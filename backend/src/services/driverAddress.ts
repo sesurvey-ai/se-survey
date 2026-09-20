@@ -108,6 +108,13 @@ const THAI_FOLLOW = /^[ะ-ฺๅ็-๎]/u;
  * · ชื่อที่มีคำนำหน้าเดียวกันติดมาแล้ว ("นายบุญเลี้ยง" / "นาย บุญเลี้ยง" / "น.ส.สมใจ"+นางสาว) → ตัดออกก่อน ไม่ซ้ำ
  * · ไม่มีคำนำหน้า = ชื่อตามเดิม · ไม่มีชื่อ = "" (ให้ผู้เรียกใส่ "-" ตามกติกาช่องบังคับ)
  */
+/** ที่อยู่แยกช่อง (ผู้บาดเจ็บ/เจ้าของทรัพย์สิน 21/09/69) ประกอบสูตรคู่กรณี · ประกอบได้ว่างแต่บ้านเลขที่เป็นตัวแทนค่า ("-"/"รอตรวจสอบ"/"--")
+ *  → "-" ตามกติกาช่องข้อความ 20/09/69 (บอท/XML กรอก "-" แทนคำที่คนพิมพ์) · ว่างจริง → "" */
+export function addressLineOrDash(address: unknown, moo: unknown, subdistrict: unknown, district: unknown, province: unknown): string {
+  const line = opponentAddressLine(address, moo, subdistrict, district, province);
+  return line || (isPlaceholder(address) ? '-' : '');
+}
+
 export function withTitle(title: unknown, name: unknown): string {
   const t = s(title).replace(/\s+/g, ' ');
   const n = s(name).replace(/\s+/g, ' ');

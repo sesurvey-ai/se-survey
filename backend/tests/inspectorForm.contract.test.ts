@@ -587,5 +587,29 @@ check('ผู้ขับขี่รถประกัน: ageMismatch ใช�
       && src.includes("if (String(report.driver_birthdate ?? '').trim() !== PLACEHOLDER_BIRTHDATE) return;")
       && src.includes("if (!v || v === '-' || v === 'รอตรวจสอบ' || /^-+$/.test(v)) return '';"));
 
+// ผู้บาดเจ็บ/ทรัพย์สิน (user สั่ง 21/09/69): คำนำหน้า · ชนิดบัตร · ที่อยู่แยก 5 ช่อง (บังคับ 3 ช่องเมื่อมีที่อยู่) · ประตูอนุมัติใช้ injuredMissing/propertyMissing
+check('การ์ดผู้บาดเจ็บ: คำนำหน้า + ชนิดบัตร (id_type thai/foreign ชุดเดียวกับแอป) + ที่อยู่แยกช่อง (จังหวัด/อำเภอ/ตำบล บังคับเมื่อมีที่อยู่) · ต่างชาติไม่ตรวจ checksum',
+      rec.includes("{ k: 'title', label: 'คำนำหน้า', optionsFrom: (r) => withCurrentOption(TITLES, r.title) }")
+      && rec.includes("{ k: 'id_type', label: 'ชนิดบัตร', options: ['thai', 'foreign'], optionLabels: { thai: 'คนไทย', foreign: 'ต่างชาติ/พาสปอร์ต' }, defaultValue: 'thai' }")
+      && rec.includes("{ k: 'home_province', label: 'จังหวัด (ที่อยู่)', options: PROVINCE_OPTIONS, reqWhen: injuredHasAddress }")
+      && rec.includes("{ k: 'subdistrict', label: 'ตำบล/แขวง (ที่อยู่)', reqWhen: injuredHasAddress }")
+      && rec.includes("rec?.id_type !== 'foreign' && !cidChecksum(v)"));
+check('การ์ดทรัพย์สิน: คำนำหน้าเจ้าของ (ไม่บังคับ) + ที่อยู่เจ้าของแยกช่อง owner_* (บังคับ 3 ช่องเมื่อมีที่อยู่)',
+      rec.includes("{ k: 'owner_title', label: 'คำนำหน้าเจ้าของ', optionsFrom: (r) => withCurrentOption(TITLES, r.owner_title) }")
+      && rec.includes("{ k: 'owner_province', label: 'จังหวัด (ที่อยู่เจ้าของ)', options: PROVINCE_OPTIONS, reqWhen: propertyHasAddress }")
+      && rec.includes("{ k: 'owner_subdistrict', label: 'ตำบล/แขวง (ที่อยู่เจ้าของ)', reqWhen: propertyHasAddress }")
+      && rec.includes('addrKey="owner_address" mooKey="owner_moo"'));
+check('ประตูอนุมัติ: ผู้บาดเจ็บ/ทรัพย์สินนับด้วย injuredMissing/propertyMissing (รวมช่องบังคับแบบมีเงื่อนไข) · ตำบลโหลดผ่าน useTumbonOptions ร่วมกัน 3 การ์ด',
+      src.includes('n + injuredMissing(it).length') && src.includes('n + propertyMissing(it).length')
+      && rec.includes('export const injuredMissing = (rec: LooseRecord): string[] => recordMissing(INJURED_FIELDS, INJURED_REQUIRED, rec);')
+      && (rec.match(/useTumbonOptions\(items,/g) || []).length === 3);
+// backend: ไฟล์ XML + report ให้บอท ประกอบชื่อ/ที่อยู่ผู้บาดเจ็บ-เจ้าของทรัพย์สินสูตรเดียวกับคู่กรณี · ทะเบียนผู้บาดเจ็บไม่มี → ตามประเภท/00
+check('XML/report: NAME=withTitle(title,name) · ADDRESS=opponentAddressLine(5 ช่อง) ทั้งผู้บาดเจ็บและทรัพย์สิน · CAR_REGNO ผู้บาดเจ็บผ่าน injuredPlate (00)',
+      xml2.includes("el('NAME', injText(withTitle(p.title, p.name), true))")
+      && xml2.includes("el('ADDRESS', injText(addressLineOrDash(p.address, p.moo, p.subdistrict, p.district, p.home_province)))")
+      && xml2.includes("el('OWNER', injText(withTitle(a.owner_title, a.owner_name), true))")
+      && xml2.includes("el('CAR_REGNO', injuredPlate(p, ctx))")
+      && fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'integration.routes.ts'), 'utf8').includes('name_emcs: withTitle(p.title, p.name),'));
+
 console.log(`\n${failed === 0 ? '✅ ผ่านทั้งหมด' : `❌ ล้มเหลว ${failed} รายการ`}`);
 process.exit(failed ? 1 : 0);

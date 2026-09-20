@@ -96,6 +96,10 @@ type FieldDef = {
   placeholder?: string;
   /** บังคับแบบมีเงื่อนไข — คืน true = ช่องนี้บังคับสำหรับระเบียนนี้ (ป้ายได้ดอกจัน กรอบแดงเมื่อว่าง นับเข้าประตูอนุมัติ) */
   reqWhen?: (rec: LooseRecord) => boolean;
+  /** ป้ายที่แสดงของแต่ละค่าใน options (ค่าเก็บ ≠ ป้าย เช่น id_type thai/foreign → คนไทย/ต่างชาติ) */
+  optionLabels?: Record<string, string>;
+  /** ค่าที่ถือว่าเลือกอยู่เมื่อระเบียนยังไม่มีค่า (แสดงอย่างเดียว ไม่เขียนลงระเบียนจนกว่าจะเปลี่ยน) */
+  defaultValue?: string;
 };
 
 /** เลือกค่าจริงแล้วหรือยัง (ว่าง/ป้าย "-- ระบุ --" = ยังไม่เลือก) */
@@ -174,12 +178,14 @@ export const cidChecksum = (raw: string): boolean => {
   return (11 - (sum % 11)) % 10 === Number(d[12]);
 };
 
-function Field({ def, value, onChange, warnOverride, quickFix }: {
+function Field({ def, value, onChange, warnOverride, quickFix, rec }: {
   def: FieldDef; value: string; onChange: (v: string) => void;
   /** คำเตือนที่คิดจากช่องอื่นในระเบียนเดียวกัน (ยี่ห้อ ↔ ประเภทรถ) — ตัวการ์ดส่งมา */
   warnOverride?: string;
   /** ปุ่มแก้ให้ทันที ข้างคำเตือน (เช่น "เปลี่ยนประเภทรถเป็น เก๋งยุโรป") */
   quickFix?: { label: string; onClick: () => void };
+  /** ระเบียนทั้งใบ — ใช้ดูช่องข้างเคียง (ชนิดบัตร id_type ของผู้บาดเจ็บ: ต่างชาติไม่ตรวจ checksum) */
+  rec?: LooseRecord;
 }) {
   const v = String(value ?? '');
   const badChars = badNameChars(def.k, v);
@@ -188,7 +194,8 @@ function Field({ def, value, onChange, warnOverride, quickFix }: {
   const badPlate = def.k === 'plate' && v.trim() !== '' && plateClean !== v.trim();
   // "รอตรวจสอบ" ในช่องเลขบัตร = ค่าที่แอป/เว็บเติมตอนคู่กรณีหลบหนี ไม่ใช่เลขผิด (16/09/69)
   // "-" = ไม่ทราบ ตามกติกาช่องข้อความบังคับของ EMCS (ผู้บาดเจ็บ/คู่กรณี user เคาะ 20/09/69) ไม่ใช่เลขผิด
-  const badCid = def.k === 'cid' && v.trim() !== '' && v.trim() !== PENDING_TEXT && !/^-+$/.test(v.trim()) && !cidChecksum(v);
+  // ผู้บาดเจ็บชนิดบัตร "ต่างชาติ/พาสปอร์ต" (id_type foreign — ชุดเดียวกับแอป 21/09/69) ไม่มีสูตรตรวจ → ไม่เตือน
+  const badCid = def.k === 'cid' && v.trim() !== '' && v.trim() !== PENDING_TEXT && !/^-+$/.test(v.trim()) && rec?.id_type !== 'foreign' && !cidChecksum(v);
   // อายุ/วันที่ต้องเป็นรูปแบบที่ระบบประกันรับ — "-" ในช่องอายุทำ EMCS ปัดตกทั้งไฟล์ XML (เคส #282 10/09/69)
   const badAge = def.k === 'age' && v.trim() !== '' && !/^\d{1,3}$/.test(v.trim());
   // วันที่ต้องเป็น "วันจริง" ไม่ใช่แค่รูปแบบ — "00/00/2569" ผ่านรูปแบบแต่ EMCS ปัดตกทั้งไฟล์ (เคส #299 15/09/69)
@@ -233,7 +240,7 @@ function Field({ def, value, onChange, warnOverride, quickFix }: {
               ถ้าไม่ตัด dropdown จะมี 2 บรรทัดหน้าตาเหมือนกันเป๊ะ ตัวล่างเลือกแล้วเก็บข้อความนั้น
               ลง JSONB → ตัวนับช่องบังคับเห็นว่า "กรอกแล้ว" ป้ายเตือนหาย และรหัสจังหวัดใน XML ว่าง */}
           {def.options.filter((o) => !PLACEHOLDERS.has(o.trim()))
-            .map((o) => <option key={o} value={o}>{o}</option>)}
+            .map((o) => <option key={o} value={o}>{def.optionLabels?.[o] ?? o}</option>)}
         </select>
       ) : (
         <input
@@ -248,7 +255,7 @@ function Field({ def, value, onChange, warnOverride, quickFix }: {
 
 /** การ์ด 1 ระเบียน + ปุ่มลบ, และปุ่มเพิ่มท้ายรายการ — ใช้ร่วมกันทั้งผู้บาดเจ็บ/ทรัพย์สิน */
 function RecordList({
-  items, onChange, fields, cardTitle, addLabel, emptyHint,
+  items, onChange, fields, cardTitle, addLabel, emptyHint, cells,
 }: {
   items: RecordItem[];
   onChange: (next: RecordItem[]) => void;
@@ -257,6 +264,8 @@ function RecordList({
   addLabel: string;
   /** ข้อความตอนยังไม่มีรายการ — ไม่ส่ง = ไม่แสดงกล่องเหลือง (user ถอดของผู้บาดเจ็บ/ทรัพย์สิน 07/09/69) */
   emptyHint?: string;
+  /** ช่องที่วาดเองแทน Field มาตรฐาน (คีย์ → ตัววาด; คืน null = ไม่วาดช่องนั้น) */
+  cells?: Record<string, (it: LooseRecord, set: (k: string, v: string) => void) => React.ReactNode>;
 }) {
   const set = (i: number, k: string, v: string) =>
     onChange(items.map((it, idx) => (idx === i ? { ...it, [k]: v } : it)));
@@ -280,9 +289,15 @@ function RecordList({
             </button>
           </div>
           <div className="p-3 grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-2">
-            {fields.map((f) => (
-              <Field key={f.k} def={f} value={it[f.k] ?? ''} onChange={(v) => set(i, f.k, v)} />
-            ))}
+            {fields.map((f) => {
+              // ช่องที่การ์ดวาดเอง (ที่อยู่+หมู่ ช่องเดียวกัน) — คืน null = ไม่วาด (หมู่ไปอยู่ในช่องที่อยู่แล้ว)
+              if (cells && f.k in cells) return <React.Fragment key={f.k}>{cells[f.k](it, (k, v) => set(i, k, v))}</React.Fragment>;
+              const options = f.optionsFrom ? f.optionsFrom(it) : f.options;
+              return (
+                <Field key={f.k} def={{ ...f, options, label: labelFor(f, it) }} rec={it}
+                       value={String(it[f.k] ?? '') || (f.defaultValue ?? '')} onChange={(v) => set(i, f.k, v)} />
+              );
+            })}
           </div>
         </div>
       ))}
@@ -304,13 +319,55 @@ function RecordList({
 //    ลิสต์ต้องตรงกับ `checkItems()` ในแอปมือถือ (survey_form_screen.dart)
 //    ขาดแม้ช่องเดียว = บันทึก**ทั้งบล็อก**บนระบบประกันไม่ผ่าน และช่องที่ว่างกลายเป็น '-'
 //    ให้หัวหน้าไล่แก้เองทีละช่อง — เดิมหน้านี้ติดดาวไว้ช่องเดียว (ประเภทผู้บาดเจ็บ)
+/** ที่อยู่แบบแยกช่อง "มีข้อมูล" = กรอกส่วนใดส่วนหนึ่ง (บ้านเลขที่ที่ไม่ใช่ -/รอตรวจสอบ · หมู่ · จังหวัด · อำเภอ · ตำบล)
+ *  → จังหวัด/อำเภอ/ตำบล ต้องครบ — กติกาเดียวกับคู่กรณี (user เคาะ 16/09/69) ใช้กับผู้บาดเจ็บ/เจ้าของทรัพย์สินด้วย (21/09/69) */
+const addressPartsPresent = (r: LooseRecord, keys: { addr: string; moo: string; prov: string; dist: string; sub: string }): boolean => {
+  const a = String(r[keys.addr] ?? '').trim();
+  return (a !== '' && !/^-+$/.test(a) && a !== 'รอตรวจสอบ') || String(r[keys.moo] ?? '').trim() !== ''
+    || chosen(r[keys.prov]) || chosen(r[keys.dist]) || chosen(r[keys.sub]);
+};
+const INJ_ADDR = { addr: 'address', moo: 'moo', prov: 'home_province', dist: 'district', sub: 'subdistrict' };
+const PROP_ADDR = { addr: 'owner_address', moo: 'owner_moo', prov: 'owner_province', dist: 'owner_district', sub: 'owner_subdistrict' };
+export const injuredHasAddress = (r: LooseRecord): boolean => addressPartsPresent(r, INJ_ADDR);
+export const propertyHasAddress = (r: LooseRecord): boolean => addressPartsPresent(r, PROP_ADDR);
+
+/** ตำบล/แขวง ตามจังหวัด+อำเภอ — โหลดจาก /api/geo/tumbons ครั้งเดียวต่อคู่ (แคชในหน้า) · ค่าที่บันทึกไว้แต่ไม่อยู่ในรายการยังโชว์
+ *  ใช้ร่วมกัน คู่กรณี (home_province/district/subdistrict) · ผู้บาดเจ็บ (ชุดเดียวกัน) · เจ้าของทรัพย์สิน (owner_*) */
+function useTumbonOptions(items: LooseRecord[], provOf: (it: LooseRecord) => string, distKey: string, subKey: string) {
+  const [tumbons, setTumbons] = useState<Record<string, string[]>>({});
+  const pendingRef = useRef<Set<string>>(new Set());
+  const keyOf = (it: LooseRecord): string => {
+    const p = provOf(it).trim();
+    const d = String(it[distKey] ?? '').trim();
+    return p && d && !p.startsWith('--') && !d.startsWith('--') ? `${p}|${d}` : '';
+  };
+  useEffect(() => {
+    for (const key of Array.from(new Set(items.map(keyOf)))) {
+      if (!key || key in tumbons || pendingRef.current.has(key)) continue;
+      pendingRef.current.add(key);
+      const [province, district] = key.split('|');
+      api.get('/api/geo/tumbons', { params: { province, district } })
+        .then((res) => setTumbons((prev) => ({ ...prev, [key]: Array.isArray(res.data?.data) ? (res.data.data as string[]) : [] })))
+        .catch(() => setTumbons((prev) => ({ ...prev, [key]: [] })))
+        .finally(() => pendingRef.current.delete(key));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, tumbons]);
+  return (it: LooseRecord): string[] => withCurrentOption(tumbons[keyOf(it)] ?? [], it[subKey]);
+}
+
+// ลำดับช่องตามหน้าผู้บาดเจ็บของแอปมือถือ (person_type → ข้อมูลตัว → ที่ทำงาน → การรักษา)
+// 21/09/69 (user สั่ง): คำนำหน้าแยกช่อง (EMCS/XML ได้ "นาย สมชาย ใจดี") · ชนิดบัตร คนไทย/ต่างชาติ (id_type ชุดเดียวกับแอป)
+//   · ที่อยู่แยก บ้านเลขที่+หมู่ · จังหวัด · เขต/อำเภอ · ตำบล/แขวง → EMCS/XML ประกอบสูตรเดียวกับคู่กรณี · มีส่วนใดส่วนหนึ่ง → 3 ช่องบังคับ
 const INJURED_FIELDS: FieldDef[] = [
   { k: 'person_type', label: 'ประเภทผู้บาดเจ็บ *', options: PERSON_TYPES },
   { k: 'relation', label: 'ความสัมพันธ์', optionsFrom: (r) => withCurrentOption(RELATIONS, r.relation) },
   { k: 'gender', label: 'เพศ *', options: GENDERS },
+  { k: 'title', label: 'คำนำหน้า', optionsFrom: (r) => withCurrentOption(TITLES, r.title) },
   { k: 'name', label: 'ชื่อ-นามสกุล *' },
   { k: 'age', label: 'อายุ' },
-  { k: 'cid', label: 'เลขบัตรประชาชน *' },
+  { k: 'cid', label: 'เลขบัตรประชาชน / ต่างด้าว / พาสปอร์ต *' },
+  { k: 'id_type', label: 'ชนิดบัตร', options: ['thai', 'foreign'], optionLabels: { thai: 'คนไทย', foreign: 'ต่างชาติ/พาสปอร์ต' }, defaultValue: 'thai' },
   { k: 'car_reg', label: 'เลขทะเบียนรถ' },
   { k: 'phone', label: 'โทรศัพท์' },
   { k: 'occupation', label: 'อาชีพ' },
@@ -322,36 +379,54 @@ const INJURED_FIELDS: FieldDef[] = [
   { k: 'treat_to', label: 'ถึงวันที่', placeholder: 'วว/ดด/ปปปป (พ.ศ.)' },
   { k: 'treat_cost', label: 'ค่ารักษา' },
   { k: 'wound_level', label: 'ระดับการบาดเจ็บ', options: WOUND_LEVELS },
-  { k: 'address', label: 'ที่อยู่', wide: true },
+  { k: 'address', label: 'ที่อยู่ (บ้านเลขที่ / ถนน)' },
+  { k: 'moo', label: 'หมู่' },
+  { k: 'home_province', label: 'จังหวัด (ที่อยู่)', options: PROVINCE_OPTIONS, reqWhen: injuredHasAddress },
+  { k: 'district', label: 'เขต/อำเภอ (ที่อยู่)', reqWhen: injuredHasAddress,
+    optionsFrom: (r) => districtOptions(String(r.home_province ?? ''), String(r.district ?? '')) },
+  { k: 'subdistrict', label: 'ตำบล/แขวง (ที่อยู่)', reqWhen: injuredHasAddress },   // ตัวเลือกจาก useTumbonOptions ใน InjuredEditor
   { k: 'symptom', label: 'อาการบาดเจ็บ *', wide: true },
 ];
 
+// ทรัพย์สิน 21/09/69 (user สั่ง): คำนำหน้าเจ้าของ (ไม่บังคับ — บริษัทเว้นว่าง) → EMCS/XML "นาย สมศักดิ์ มั่นคง" · ที่อยู่เจ้าของแยก 5 ช่อง (สูตรคู่กรณี)
 const PROPERTY_FIELDS: FieldDef[] = [
   { k: 'item', label: 'รายการทรัพย์สิน *' },
+  { k: 'owner_title', label: 'คำนำหน้าเจ้าของ', optionsFrom: (r) => withCurrentOption(TITLES, r.owner_title) },
   { k: 'owner_name', label: 'เจ้าของ *' },
   { k: 'owner_phone', label: 'โทรศัพท์เจ้าของ' },
   { k: 'estimated_cost', label: 'ค่าเสียหายประมาณ' },
-  { k: 'owner_address', label: 'ที่อยู่เจ้าของ', wide: true },
+  { k: 'owner_address', label: 'ที่อยู่เจ้าของ (บ้านเลขที่ / ถนน)' },
+  { k: 'owner_moo', label: 'หมู่' },
+  { k: 'owner_province', label: 'จังหวัด (ที่อยู่เจ้าของ)', options: PROVINCE_OPTIONS, reqWhen: propertyHasAddress },
+  { k: 'owner_district', label: 'เขต/อำเภอ (ที่อยู่เจ้าของ)', reqWhen: propertyHasAddress,
+    optionsFrom: (r) => districtOptions(String(r.owner_province ?? ''), String(r.owner_district ?? '')) },
+  { k: 'owner_subdistrict', label: 'ตำบล/แขวง (ที่อยู่เจ้าของ)', reqWhen: propertyHasAddress },
   { k: 'cause', label: 'สาเหตุที่เสียหาย *', wide: true },
   { k: 'detail', label: 'รายละเอียดความเสียหาย *', wide: true },
 ];
 
 export function InjuredEditor({ items, onChange }: { items: RecordItem[]; onChange: (n: RecordItem[]) => void }) {
+  const tumbonOptions = useTumbonOptions(items, (it) => String(it.home_province ?? ''), 'district', 'subdistrict');
+  const fields = INJURED_FIELDS.map((f) => (f.k === 'subdistrict' ? { ...f, optionsFrom: tumbonOptions } : f));
   return (
     <RecordList
-      items={items} onChange={onChange} fields={INJURED_FIELDS}
+      items={items} onChange={onChange} fields={fields}
       cardTitle={(i) => `ผู้บาดเจ็บคนที่ ${i + 1}`}
       addLabel="+ เพิ่มผู้บาดเจ็บ"
+      cells={{ address: (it, set) => <AddressMooCell it={it} set={set} label="ที่อยู่ (บ้านเลขที่ / ถนน)" />, moo: () => null }}
     />
   );
 }
 
 export function PropertyEditor({ items, onChange }: { items: RecordItem[]; onChange: (n: RecordItem[]) => void }) {
+  const tumbonOptions = useTumbonOptions(items, (it) => String(it.owner_province ?? ''), 'owner_district', 'owner_subdistrict');
+  const fields = PROPERTY_FIELDS.map((f) => (f.k === 'owner_subdistrict' ? { ...f, optionsFrom: tumbonOptions } : f));
   return (
     <RecordList
-      items={items} onChange={onChange} fields={PROPERTY_FIELDS}
+      items={items} onChange={onChange} fields={fields}
       cardTitle={(i) => `รายการที่ ${i + 1}`}
       addLabel="+ เพิ่มทรัพย์สิน"
+      cells={{ owner_address: (it, set) => <AddressMooCell it={it} set={set} addrKey="owner_address" mooKey="owner_moo" label="ที่อยู่เจ้าของ (บ้านเลขที่ / ถนน)" />, owner_moo: () => null }}
     />
   );
 }
@@ -522,6 +597,14 @@ export const opponentMissing = (rec: LooseRecord): string[] => [
 const reqKeys = (defs: FieldDef[]) => defs.filter((f) => f.label.trim().endsWith('*')).map((f) => f.k);
 export const INJURED_REQUIRED = reqKeys(INJURED_FIELDS);
 export const PROPERTY_REQUIRED = reqKeys(PROPERTY_FIELDS);
+/** ช่องบังคับที่ยังว่างของผู้บาดเจ็บ/ทรัพย์สิน 1 ระเบียน = ช่องดอกจัน + ช่องบังคับแบบมีเงื่อนไข (จังหวัด/อำเภอ/ตำบล เมื่อมีที่อยู่ — 21/09/69)
+ *  ⛔ การ์ดกับประตูอนุมัติในหน้าเคสต้องใช้ตัวเดียวกัน (แบบเดียวกับ opponentMissing) */
+const recordMissing = (defs: FieldDef[], required: string[], rec: LooseRecord): string[] => [
+  ...required.filter((k) => !String(rec[k] ?? '').trim()),
+  ...defs.filter((f) => f.reqWhen && f.reqWhen(rec) && !chosen(rec[f.k])).map((f) => f.k),
+];
+export const injuredMissing = (rec: LooseRecord): string[] => recordMissing(INJURED_FIELDS, INJURED_REQUIRED, rec);
+export const propertyMissing = (rec: LooseRecord): string[] => recordMissing(PROPERTY_FIELDS, PROPERTY_REQUIRED, rec);
 
 /** เจ้าของรถคู่กรณี: คำนำหน้า (เลือก ไม่บังคับ — เจ้าของเป็นบริษัทได้) + ชื่อ ในช่องเดียว (16/09/69) → EMCS/XML รวมเป็น "นาย บุญเลี้ยง ชงสุวรรณ" */
 function OwnerNameCell({ it, set }: { it: LooseRecord; set: (k: string, v: string) => void }) {
@@ -550,17 +633,21 @@ function OwnerNameCell({ it, set }: { it: LooseRecord; set: (k: string, v: strin
 }
 
 /** ที่อยู่ผู้ขับขี่คู่กรณี: บ้านเลขที่/ถนน + หมู่ ในช่องเดียว (แบบเดียวกับผู้ขับขี่รถประกันในหน้าเคส) — ทั้งคู่ไม่บังคับ */
-function AddressMooCell({ it, set }: { it: LooseRecord; set: (k: string, v: string) => void }) {
+function AddressMooCell({ it, set, addrKey = 'address', mooKey = 'moo', label = 'ที่อยู่ผู้ขับขี่ (บ้านเลขที่ / ถนน)' }: {
+  it: LooseRecord; set: (k: string, v: string) => void;
+  /** คีย์ในระเบียน — คู่กรณี/ผู้บาดเจ็บ address+moo · เจ้าของทรัพย์สิน owner_address+owner_moo (21/09/69) */
+  addrKey?: string; mooKey?: string; label?: string;
+}) {
   const box = `border rounded-none h-9 text-sm text-gray-800 ${OK_CLS}`;
   return (
     <div className="md:col-start-1">{/* ขึ้นแถวใหม่เสมอ → ที่อยู่+หมู่ | จังหวัด | อำเภอ | ตำบล อยู่แถวเดียวกัน (แบบเดียวกับผู้ขับขี่รถประกัน) */}
-      <label className="block text-xs text-[var(--md-muted)] mb-0.5">ที่อยู่ผู้ขับขี่ (บ้านเลขที่ / ถนน)</label>
+      <label className="block text-xs text-[var(--md-muted)] mb-0.5">{label}</label>
       <div className="flex items-center gap-1">
-        <input type="text" className={`${box} flex-1 min-w-0 px-3`} value={String(it.address ?? '')} placeholder="บ้านเลขที่ / ถนน / ซอย"
-               onChange={(e) => set('address', e.target.value)} />
+        <input type="text" className={`${box} flex-1 min-w-0 px-3`} value={String(it[addrKey] ?? '')} placeholder="บ้านเลขที่ / ถนน / ซอย"
+               onChange={(e) => set(addrKey, e.target.value)} />
         <span className="text-sm text-gray-600 shrink-0 pl-1">หมู่</span>
-        <input type="text" className={`${box} w-14 shrink-0 px-2`} value={String(it.moo ?? '')} title="หมู่ที่ (ไม่บังคับ)"
-               onChange={(e) => set('moo', e.target.value)} />
+        <input type="text" className={`${box} w-14 shrink-0 px-2`} value={String(it[mooKey] ?? '')} title="หมู่ที่ (ไม่บังคับ)"
+               onChange={(e) => set(mooKey, e.target.value)} />
       </div>
     </div>
   );
@@ -629,27 +716,9 @@ export function OpponentEditor({ items, onChange }: {
     if (fixed.some((x, i) => x !== items[i])) onChange(fixed);
   }, [items, onChange]);
 
-  /** ตำบล/แขวง ตามจังหวัด+อำเภอของที่อยู่ผู้ขับขี่ — โหลดจาก /api/geo/tumbons ครั้งเดียวต่อคู่ (แคชในหน้า)
-   *  ค่าที่บันทึกไว้แต่ไม่อยู่ในรายการยังโชว์ · จังหวัดใช้ home_province (เคสเก่าไม่มี → จังหวัดป้ายทะเบียน ตามที่ลิสต์อำเภอใช้) */
-  const [tumbons, setTumbons] = useState<Record<string, string[]>>({});
-  const pendingRef = useRef<Set<string>>(new Set());
-  const tumbonKey = (it: LooseRecord): string => {
-    const p = String(it.home_province || it.province || '').trim();
-    const d = String(it.district ?? '').trim();
-    return p && d && !p.startsWith('--') && !d.startsWith('--') ? `${p}|${d}` : '';
-  };
-  useEffect(() => {
-    for (const key of Array.from(new Set(items.map(tumbonKey)))) {
-      if (!key || key in tumbons || pendingRef.current.has(key)) continue;
-      pendingRef.current.add(key);
-      const [province, district] = key.split('|');
-      api.get('/api/geo/tumbons', { params: { province, district } })
-        .then((res) => setTumbons((prev) => ({ ...prev, [key]: Array.isArray(res.data?.data) ? (res.data.data as string[]) : [] })))
-        .catch(() => setTumbons((prev) => ({ ...prev, [key]: [] })))
-        .finally(() => pendingRef.current.delete(key));
-    }
-  }, [items, tumbons]);
-  const tumbonOptions = (it: LooseRecord): string[] => withCurrentOption(tumbons[tumbonKey(it)] ?? [], it.subdistrict);
+  /** ตำบล/แขวง ตามจังหวัด+อำเภอของที่อยู่ผู้ขับขี่ (useTumbonOptions — ใช้ร่วมกับผู้บาดเจ็บ/ทรัพย์สินตั้งแต่ 21/09/69)
+   *  จังหวัดใช้ home_province (เคสเก่าไม่มี → จังหวัดป้ายทะเบียน ตามที่ลิสต์อำเภอใช้) */
+  const tumbonOptions = useTumbonOptions(items, (it) => String(it.home_province || it.province || ''), 'district', 'subdistrict');
 
   /** หน้าต่าง "ข้อมูลความเสียหาย" ของคู่กรณีคันที่เปิดอยู่ (null = ปิด)
    *  เดิมความเสียหายคู่กรณีแก้ได้เฉพาะในแอป หน้าตรวจเห็นแค่ตัวเลข → หัวหน้าตรวจไม่ได้

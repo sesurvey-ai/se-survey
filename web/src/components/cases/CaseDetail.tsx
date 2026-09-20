@@ -11,7 +11,7 @@ import { setFormDirty } from '@/lib/dirtyGuard';
 import { useSocket } from '@/hooks/useSocket';
 import { DamageItem, DamageList, autoDamageDesc } from './DamageEditor';
 import DamageDialog from './DamageDialog';
-import { opponentMissing, INJURED_REQUIRED, PROPERTY_REQUIRED, cidChecksum, ageMismatch, PLACEHOLDER_BIRTHDATE } from './RecordEditors';
+import { opponentMissing, injuredMissing, propertyMissing, INJURED_REQUIRED, PROPERTY_REQUIRED, cidChecksum, ageMismatch, PLACEHOLDER_BIRTHDATE } from './RecordEditors';
 import { InjuredEditor, PropertyEditor, OpponentEditor, dropEmptyRecords, dropEmptyOpponents, emcsBadChars, RecordItem, LooseRecord } from './RecordEditors';
 import PolicyInfoModal from './PolicyInfoModal';
 
@@ -1268,9 +1268,11 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
     const cnt = (rows: Record<string, unknown>[], keys: string[]) =>
       rows.reduce((n, it) => n + keys.filter((k) => !String(it[k] ?? '').trim()).length, 0);
     // คู่กรณีมีช่องบังคับแบบมีเงื่อนไข (เลือกประเภทรถแล้วต้องมียี่ห้อ — EMCS ต้องการ, user ขอ 10/09/69) → ใช้ตัวนับเดียวกับการ์ด
+    // ผู้บาดเจ็บ/ทรัพย์สิน (21/09/69): ช่องดอกจัน (INJURED_REQUIRED, PROPERTY_REQUIRED) + จังหวัด/อำเภอ/ตำบล เมื่อมีที่อยู่ — ตัวเดียวกับที่การ์ดทาแดง
+    void cnt;
     return (opponents as Record<string, unknown>[]).reduce((n, it) => n + opponentMissing(it).length, 0)
-         + cnt(injured as Record<string, unknown>[], INJURED_REQUIRED)
-         + cnt(property as Record<string, unknown>[], PROPERTY_REQUIRED);
+         + (injured as Record<string, unknown>[]).reduce((n, it) => n + injuredMissing(it).length, 0)
+         + (property as Record<string, unknown>[]).reduce((n, it) => n + propertyMissing(it).length, 0);
   })();
   /**
    * รายการความเสียหายต้องมีอย่างน้อย 1 ชิ้น (B7)
