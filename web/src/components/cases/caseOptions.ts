@@ -250,6 +250,17 @@ export function ageFromSeDate(v: unknown): string {
   return a >= 0 && a <= 120 ? String(a) : '';
 }
 
+/** วันเกิดอยู่ในปีปัจจุบัน (พ.ศ.) หรืออนาคต — คนพิมพ์ 01/01/2569 แทน "ไม่ทราบ" (เคส #433 21/09/69) ไม่ใช่วันเกิดจริง → ให้ใช้ 01/01/2500 (ชุดเดียวกับ XML normBirth / บอท) */
+export function isCurrentYearSeDate(v: unknown): boolean {
+  const s = String(v ?? '').trim();
+  if (!s || !isValidSeDate(s)) return false;
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/.exec(s.includes('|') ? s.split('|')[0].trim() : s);
+  if (!m) return false;
+  let y = Number(m[3]);
+  if (y < 100) y += 2500; else if (y < 2400) y += 543;
+  return y >= new Date().getFullYear() + 543;
+}
+
 // sync EMCS master ddlCar_Color (verbatim 55 สี) 2026-07-25
 /**
  * ประเภทประกัน — ชุดเดียวกับตาราง masterPolicyType ของ ISURVEY เป๊ะ ๆ (ดึงสด 30/08/69)

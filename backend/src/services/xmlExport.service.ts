@@ -13,7 +13,7 @@
  */
 
 import { EMCS_DISTRICTS } from '../data/emcsDistricts';
-import { driverAddressLine, opponentAddressLine, addressLineOrDash, withTitle } from './driverAddress';
+import { driverAddressLine, opponentAddressLine, addressLineOrDash, withTitle, nameOrUnknown } from './driverAddress';
 
 // ── SE Survey identity ในพอร์ทัล (คงที่ต่อบริษัท; override ได้ผ่าน env) ──
 const SURVEY_ID = process.env.PORTAL_SURVEY_ID || '5684';
@@ -376,6 +376,10 @@ const xmlAge = (age: unknown, birthdate: unknown, noBirthFallback = ''): string 
 };
 
 /** วันนี้ในรูปแบบไฟล์ (ค.ศ.) — ใช้แทนวันเกิดคู่กรณีที่หัวหน้าใส่ "-" (user เคาะ 10/09/69: วันเกิด = วันนี้ · อายุ = 1 เพราะ EMCS ไม่รับ 0) */
+/** วันเกิดที่อยู่ในปีปัจจุบันหรืออนาคต (เช่น 01/01/2569 ที่คนพิมพ์แทน "ไม่ทราบ" — เคส #433) = ไม่ใช่วันเกิดจริง
+ *  → วันเกิดตัวแทนค่า 01/01/2500 (อายุคำนวณ 69) — user เคาะ 21/09/69 · ใช้ทั้งผู้ขับขี่รถประกันและคู่กรณี */
+const normBirth = (bd: unknown): unknown => { const p = parseSe(bd); return p && p.yBE >= new Date().getFullYear() + 543 ? '01/01/2500' : bd; };
+
 const todayCE = (): string => {
   const t = new Date();
   const p2 = (n: number) => String(n).padStart(2, '0');
@@ -444,7 +448,7 @@ function buildCar(c: Row, type: number, insured: boolean): string {
   const driName = insured
     ? (`${c.driver_first_name ?? ''} ${c.driver_last_name ?? ''}`.trim()
        || stripThaiTitle(String(c.driver_name ?? '')))
-    : (oppName || stripThaiTitle(String(c.driver_name ?? '')) || '-');
+    : nameOrUnknown(oppName || stripThaiTitle(String(c.driver_name ?? '')));   // ไม่ทราบชื่อ (ว่าง/รอตรวจสอบ/ขีด) → "ไม่ทราบชื่อ" (user เคาะ 21/09/69)
 
   const g = (k: string, ok: string) => (insured ? c[k] : c[ok]);
 
@@ -468,7 +472,7 @@ function buildCar(c: Row, type: number, insured: boolean): string {
     el('DRI_TITLE_ID', lookup(TITLE, insured ? c.driver_title : c.title)) +
     el('DRI_NAME', driName) +
     // คู่กรณี: วันเกิด "-" → อายุ 1 (คู่กับ DRI_BIRTHDAY = วันนี้; EMCS ไม่รับ 0 — user เจอ #282 10/09/69) · รถประกันไม่แตะ
-    el('DRI_AGE', insured ? xmlAge(c.driver_age, c.driver_birthdate) : xmlAge(c.age, c.birthdate, '1')) +
+    el('DRI_AGE', insured ? xmlAge(c.driver_age, normBirth(c.driver_birthdate)) : xmlAge(c.age, normBirth(c.birthdate), '1')) +
     el('DRI_RELATION', lookup(RELATION, insured ? c.driver_relation : c.relation)) +
     // ผู้ขับขี่รถประกัน: บ้านเลขที่ + ม.<หมู่> + ต.<ตำบล> ในช่องเดียว (16/09/69) — จังหวัด/อำเภอไป DRI_PROVINCEID/DRI_DISTRICTID
     // คู่กรณี: บล็อกคู่กรณีของ EMCS มีช่องข้อความเดียว (dropdown ซ่อน) → ต่อ อ./จ. ด้วย "46/23 ม.7 ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ" (16/09/69)
@@ -494,7 +498,7 @@ function buildCar(c: Row, type: number, insured: boolean): string {
     el('DRI_DRVDATE_START', toXmlCE(insured ? c.driver_license_start : c.license_start)) +
     el('DRI_DRVDATE_END', toXmlCE(insured ? c.driver_license_end : c.license_end)) +
     el('DRI_ORDER', '') +
-    el('DRI_BIRTHDAY', insured ? toXmlCE(c.driver_birthdate) : (toXmlCE(c.birthdate) || todayCE())) +
+    el('DRI_BIRTHDAY', insured ? toXmlCE(normBirth(c.driver_birthdate)) : (toXmlCE(normBirth(c.birthdate)) || todayCE())) +
     el('DRI_GENDER', genderCode(g('driver_gender', 'gender'))) +
     // insurer เก็บเป็นข้อความไทย — "ไม่มีบริษัทประกันภัย" ต้องนับว่า "ไม่มีประกัน" ไม่ใช่ truthy = 1
     el('HAVE_INSURANCE', insured ? '' : (c.insurer && c.insurer !== 'ไม่มีบริษัทประกันภัย' ? '1' : '')) +
@@ -524,7 +528,7 @@ function buildAsset(a: Row, seq: number): string {
     el('ASSET_DAMAGE', injText(a.detail, true)) +        // รายละเอียดความเสียหาย
     el('COST_DAMAGE', money(injNum(a.estimated_cost))) +
     // เจ้าของทรัพย์สิน (21/09/69): คำนำหน้าแยกช่อง (บริษัทเว้นว่าง) → "นาย สมชาย ใจดี" · ที่อยู่แยก 5 ช่องประกอบสูตรเดียวกับคู่กรณี
-    el('OWNER', injText(withTitle(a.owner_title, a.owner_name), true)) +
+    el('OWNER', nameOrUnknown(withTitle(a.owner_title, a.owner_name))) +   // ไม่ทราบชื่อ → "ไม่ทราบชื่อ" (21/09/69)
     el('ADDRESS', injText(addressLineOrDash(a.owner_address, a.owner_moo, a.owner_subdistrict, a.owner_district, a.owner_province))) +
     el('TEL_NO', tel50(injNum(a.owner_phone))) +
     '</TXN_SURV_ASSET>';
@@ -566,7 +570,7 @@ function buildInjure(p: Row, seq: number, ctx: InjureCtx = { insuredPlate: '', o
   return '<TXN_SURV_INJ>' +
     el('INJ_SEQ', seq) +
     // คำนำหน้าแยกช่อง (21/09/69) → "นาย สมชาย ใจดี" สูตรเดียวกับคู่กรณี (withTitle: ตัวแทนค่า/ไม่ทราบชื่อ ไม่ต่อคำนำหน้า · คำนำหน้าที่ติดในชื่ออยู่แล้วไม่ซ้ำ)
-    el('NAME', injText(withTitle(p.title, p.name), true)) +
+    el('NAME', nameOrUnknown(withTitle(p.title, p.name))) +   // ไม่ทราบชื่อ → "ไม่ทราบชื่อ" (21/09/69)
     el('AGE', injNum(p.age)) +
     el('CITIZEN_ID', injText(p.cid, true)) +
     el('DRI_RELATION_ID', lookup(RELATION, p.relation)) + // ความสัมพันธ์ (รหัส 1-35)

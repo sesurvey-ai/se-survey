@@ -601,15 +601,24 @@ check('การ์ดทรัพย์สิน: คำนำหน้าเ�
       && rec.includes('addrKey="owner_address" mooKey="owner_moo"'));
 check('ประตูอนุมัติ: ผู้บาดเจ็บ/ทรัพย์สินนับด้วย injuredMissing/propertyMissing (รวมช่องบังคับแบบมีเงื่อนไข) · ตำบลโหลดผ่าน useTumbonOptions ร่วมกัน 3 การ์ด',
       src.includes('n + injuredMissing(it).length') && src.includes('n + propertyMissing(it).length')
-      && rec.includes('export const injuredMissing = (rec: LooseRecord): string[] => recordMissing(INJURED_FIELDS, INJURED_REQUIRED, rec);')
+      && rec.includes('export const injuredMissing = (rec: LooseRecord): string[] =>')
       && (rec.match(/useTumbonOptions\(items,/g) || []).length === 3);
 // backend: ไฟล์ XML + report ให้บอท ประกอบชื่อ/ที่อยู่ผู้บาดเจ็บ-เจ้าของทรัพย์สินสูตรเดียวกับคู่กรณี · ทะเบียนผู้บาดเจ็บไม่มี → ตามประเภท/00
 check('XML/report: NAME=withTitle(title,name) · ADDRESS=opponentAddressLine(5 ช่อง) ทั้งผู้บาดเจ็บและทรัพย์สิน · CAR_REGNO ผู้บาดเจ็บผ่าน injuredPlate (00)',
-      xml2.includes("el('NAME', injText(withTitle(p.title, p.name), true))")
+      xml2.includes("el('NAME', nameOrUnknown(withTitle(p.title, p.name)))")
       && xml2.includes("el('ADDRESS', injText(addressLineOrDash(p.address, p.moo, p.subdistrict, p.district, p.home_province)))")
-      && xml2.includes("el('OWNER', injText(withTitle(a.owner_title, a.owner_name), true))")
+      && xml2.includes("el('OWNER', nameOrUnknown(withTitle(a.owner_title, a.owner_name)))")
       && xml2.includes("el('CAR_REGNO', injuredPlate(p, ctx))")
-      && fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'integration.routes.ts'), 'utf8').includes('name_emcs: withTitle(p.title, p.name),'));
+      && fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'integration.routes.ts'), 'utf8').includes('name_emcs: nameOrUnknown(withTitle(p.title, p.name)),'));
+
+// อายุ 0 / วันเกิดปีปัจจุบัน = ค่าที่คนพิมพ์แทน "ไม่ทราบ" (เคส #433 21/09/69): เตือน + กั้น + ปุ่มใช้ 01/01/2500 — คู่กรณี ผู้บาดเจ็บ (อายุ) ผู้ขับขี่รถประกัน
+check('อายุ 0 / วันเกิดปีปัจจุบัน: การ์ดเตือน (zeroAge/thisYearBirth) · คู่กรณีกั้น (opponentMissing) + ปุ่มใช้วันเกิด 01/01/2500 · ผู้บาดเจ็บกั้นอายุ 0 · ผู้ขับขี่รถประกันเตือน+กั้น+ปุ่ม',
+      rec.includes("const zeroAge = def.k === 'age' && v.trim() === '0';") && rec.includes("const thisYearBirth = def.k === 'birthdate' && isCurrentYearSeDate(v.trim());")
+      && rec.includes("...(isCurrentYearSeDate(rec.birthdate) ? ['birthdate'] : []),") && rec.includes("{ label: 'ใช้วันเกิด 01/01/2500', onClick: () => set(i, 'birthdate', PLACEHOLDER_BIRTHDATE) }")
+      && rec.includes("[...recordMissing(INJURED_FIELDS, INJURED_REQUIRED, rec), ...(String(rec.age ?? '').trim() === '0' ? ['age'] : [])]")
+      && src.includes("const drvBirthThisYear = isCurrentYearSeDate(drvDates.driver_birthdate);") && src.includes("isCurrentYearSeDate(bdEl.value)) names.push('driver_birthdate');")
+      && src.includes("setDrvDates({ ...drvDates, driver_birthdate: PLACEHOLDER_BIRTHDATE });")
+      && fs.readFileSync(path.join(__dirname, '..', '..', 'web', 'src', 'components', 'cases', 'caseOptions.ts'), 'utf8').includes('export function isCurrentYearSeDate(v: unknown): boolean'));
 
 console.log(`\n${failed === 0 ? '✅ ผ่านทั้งหมด' : `❌ ล้มเหลว ${failed} รายการ`}`);
 process.exit(failed ? 1 : 0);

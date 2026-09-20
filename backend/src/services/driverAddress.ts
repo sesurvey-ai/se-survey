@@ -30,6 +30,11 @@ const tidy = (addr: string): string => addr.replace(/\s+/g, ' ').replace(/\s*,\s
 const PLACEHOLDERS = new Set(['-', 'รอตรวจสอบ']);
 const isPlaceholder = (v: unknown): boolean => { const t = String(v ?? '').trim(); return PLACEHOLDERS.has(t) || /^-+$/.test(t); };   // "--" ที่ ISURVEY ส่งมาแทนไม่ทราบ ก็นับ (20/09/69)
 
+/** ชื่อผู้ขับขี่คู่กรณี / ผู้บาดเจ็บ / เจ้าของทรัพย์สิน ที่ไม่ทราบ (ว่าง · "รอตรวจสอบ" · ขีดกี่ขีดก็ตาม) → "ไม่ทราบชื่อ" (user เคาะ 21/09/69 เคส #433 — เดิม "-")
+ *  ⛔ ไม่ใช้กับผู้ขับขี่รถประกันและเจ้าของรถคู่กรณี (ยังเป็น "-") · เรียกหลัง withTitle (ตัวแทนค่าไม่ต่อคำนำหน้าอยู่แล้ว จึงไม่มี "คุณ ไม่ทราบชื่อ") */
+export const UNKNOWN_NAME = 'ไม่ทราบชื่อ';
+export function nameOrUnknown(v: unknown): string { const t = s(v); return !t || isPlaceholder(t) ? UNKNOWN_NAME : t; }
+
 /** จับ "หมู่ที่ 7" / "หมู่ 7" / "หมู่7" / "ม.7" / "ม. 7" ที่ขึ้นต้นข้อความ หลังช่องว่าง/จุลภาค หรือติดหลังตัวเลข ("261ม.2") — "หมู่บ้าน…" ไม่ติด (ต้องตามด้วยตัวเลข) */
 const MOO_RE = /(?:^|(?<=[\s,\d]))(?:หมู่ที่|หมู่|ม\.)\s*(\d{1,3})(?=$|[\s,])/u;
 const MOO_PREFIX = /^(หมู่ที่|หมู่|ม\.)\s*/u;

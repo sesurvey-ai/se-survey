@@ -10,7 +10,7 @@ import { CAR_BRANDS_BY_TYPE, BRAND_ALIASES, THAI_BRANDS, CAR_TYPE_LABELS } from 
 import { notifyCaseChanged } from '../services/caseEvents';
 import { emcsQueueService } from '../services/emcsQueue.service';
 import { botReleaseKeys, BOT_VERSION_RE } from '../services/botRelease';
-import { driverAddressLine, opponentAddressLine, withTitle, addressLineOrDash } from '../services/driverAddress';
+import { driverAddressLine, opponentAddressLine, withTitle, addressLineOrDash, nameOrUnknown } from '../services/driverAddress';
 
 // ── routes สำหรับเครื่องมือภายใน (se-autokey) — auth ด้วย service token ไม่ผูกบัญชีพนักงาน ──
 // เปิดใช้โดยตั้ง env INTEGRATION_TOKEN (ยาว ≥24 ตัว); ไม่ตั้ง = ทุก route ตอบ 401
@@ -405,10 +405,10 @@ const emcsRecordViews = (r: Record<string, unknown>) => {
       owner_name_emcs: withTitle(o.owner_title, o.owner_name),
       address_emcs: opponentAddressLine(o.address, o.moo, o.subdistrict, o.district, o.home_province) })),
     injured: map(r.injured_persons, (p) => ({ ...p,
-      name_emcs: withTitle(p.title, p.name),
+      name_emcs: nameOrUnknown(withTitle(p.title, p.name)),
       address_emcs: addressLineOrDash(p.address, p.moo, p.subdistrict, p.district, p.home_province) })),
     property: map(r.damaged_property, (a) => ({ ...a,
-      owner_name_emcs: withTitle(a.owner_title, a.owner_name),
+      owner_name_emcs: nameOrUnknown(withTitle(a.owner_title, a.owner_name)),
       address_emcs: addressLineOrDash(a.owner_address, a.owner_moo, a.owner_subdistrict, a.owner_district, a.owner_province) })),
   };
 };

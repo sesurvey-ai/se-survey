@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import PhotoGallery from './PhotoGallery';
 import { PROVINCE_OPTIONS, carBrandOptions, CAR_COLOR_OPTIONS, EV_TYPE_OPTIONS, ACC_CAUSE_OPTIONS, ACC_DAMAGE_TYPE_OPTIONS, POLICY_TYPE_OPTIONS, CLAIM_TYPE_LABELS, CLAIM_TYPE_OPTIONS,
-         brandTypeIssue, CAR_TYPE_LABELS, isValidSeDate, ageFromSeDate, emcsPlate } from './caseOptions';
+         brandTypeIssue, CAR_TYPE_LABELS, isValidSeDate, ageFromSeDate, emcsPlate, isCurrentYearSeDate } from './caseOptions';
 import { districtOptions } from './districtOptions';
 import api from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
@@ -566,7 +566,7 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
   // → เตือนใต้ช่อง + ปุ่ม "ใช้ N" + นับเป็นยังไม่ครบ (กั้นอนุมัติ ดู paint) — กติกาเดียวกับการ์ดคู่กรณี (ageMismatch)
   const drvAgeExp = ageMismatch(drvAge, drvDates.driver_birthdate);
   const drvAgeZero = /^0+$/.test(drvAge.trim());
-  const drvAgeFix = drvAgeZero ? ageFromSeDate(drvDates.driver_birthdate) : drvAgeExp;
+  const drvAgeFix = (() => { const f = drvAgeZero ? ageFromSeDate(drvDates.driver_birthdate) : drvAgeExp; return f && f !== '0' ? f : ''; })();   // วันเกิดปีปัจจุบันคำนวณได้ 0 — ไม่เสนอ "ใช้ 0"
   const drvAgeWarn = drvAgeZero
     ? `อายุ 0 ไม่ใช่อายุจริง (EMCS ไม่รับ 0)${drvAgeFix ? ` — จากวันเกิดควรเป็น ${drvAgeFix}` : ' — แก้วันเกิดหรืออายุ'}`
     : drvAgeExp ? `อายุไม่ตรงกับวันเกิด (ควรเป็น ${drvAgeExp})` : '';
@@ -584,7 +584,10 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
     const v = drvDates[k].trim();
     return v !== '' && v !== '-' && !isValidSeDate(v);
   });
-  const drvDateWarn = (k: string) => (badDrvDates.includes(k) ? 'ไม่ใช่วันที่จริง (วว/ดด/ปปปป พ.ศ.) — EMCS ปัดตกไฟล์นำเข้าทั้งไฟล์' : '');
+  // วันเกิดปีปัจจุบัน (01/01/2569 ที่คนพิมพ์แทน "ไม่ทราบ" — เคส #433/#460) ไม่ใช่วันเกิดจริง → เตือน + กั้น + ปุ่มใช้ 01/01/2500 (21/09/69)
+  const drvBirthThisYear = isCurrentYearSeDate(drvDates.driver_birthdate);
+  const drvDateWarn = (k: string) => (badDrvDates.includes(k) ? 'ไม่ใช่วันที่จริง (วว/ดด/ปปปป พ.ศ.) — EMCS ปัดตกไฟล์นำเข้าทั้งไฟล์'
+    : (k === 'driver_birthdate' && drvBirthThisYear) ? 'วันเกิดเป็นปีปัจจุบัน ไม่ใช่วันเกิดจริง — ไม่ทราบให้ใช้ 01/01/2500' : '');
   // ⛔ ช่อง input ต้องเขียน name="..." เป็นตัวอักษรตรง ๆ (ไม่ผ่านตัวแปร) — contract test ไล่จับดอกจันกับชื่อช่องจากข้อความ
   const drvDateCls = (k: string) => `${CTL(d)} ${drvDateWarn(k) ? 'border-red-500 ring-1 ring-red-300' : ''}`;
   const drvDateChange = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1386,6 +1389,7 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
         const ageV = String(ageEl?.value ?? '').trim();
         const locked = mainFromFirstRef.current && mainLockedRef.current.has('driver_age');   // ข้อมูลหลักจากครั้งที่ 1
         if (ageEl && !locked && !names.includes('driver_age') && (/^0+$/.test(ageV) || ageMismatch(ageV, bdEl?.value))) names.push('driver_age');
+        if (bdEl && !locked && !names.includes('driver_birthdate') && isCurrentYearSeDate(bdEl.value)) names.push('driver_birthdate');   // วันเกิดปีปัจจุบัน (21/09/69)
       }
       // ครั้งที่ 2+: ผลการดำเนินงานของครั้งนี้ (ช่องในรางขวา) ต้องมี — อ่านสดจากช่องทุกครั้งที่พิมพ์
       const rsEl = form.querySelector('[name="survey_result"]') as HTMLTextAreaElement | null;
@@ -2819,6 +2823,10 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
                 <input type="text" disabled={d} name="driver_birthdate" value={drvDates.driver_birthdate} onChange={drvDateChange('driver_birthdate')}
                   title={drvDateWarn('driver_birthdate') || undefined} className={drvDateCls('driver_birthdate')} />
                 {drvDateWarnEl('driver_birthdate')}
+                {!d && drvBirthThisYear && (
+                  <button type="button" onClick={() => { setDrvDates({ ...drvDates, driver_birthdate: PLACEHOLDER_BIRTHDATE }); const a = ageFromSeDate(PLACEHOLDER_BIRTHDATE); if (a) setDrvAge(a); }}
+                    className="mt-1 px-1.5 py-0.5 text-[0.6875rem] border border-red-300 rounded-none bg-white text-red-700 hover:bg-red-50">ใช้ 01/01/2500</button>
+                )}
               </F>
               <F label="อายุ" req={<Req of="driver_age" />}>
                 <input type="text" disabled={d} name="driver_age" value={drvAge} onChange={(e) => setDrvAge(e.target.value)} title={drvAgeWarn || undefined}

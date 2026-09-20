@@ -74,7 +74,7 @@ const read = (p: string) => fs.readFileSync(path.join(ROOT, p), 'utf8');
   const xml = read('backend/src/services/xmlExport.service.ts');
   check('XML: DRI_ADDRESS ผู้ขับขี่รถประกันประกอบผ่าน driverAddressLine · คู่กรณีผ่าน opponentAddressLine',
     xml.includes("el('DRI_ADDRESS', insured ? driverAddressLine(c.driver_address, c.driver_moo, c.driver_subdistrict) : opponentAddressLine(c.address, c.moo, c.subdistrict, c.district, c.home_province))")
-    && xml.includes("import { driverAddressLine, opponentAddressLine, addressLineOrDash, withTitle } from './driverAddress'"));   // 21/09/69 + addressLineOrDash (ผู้บาดเจ็บ/ทรัพย์สิน)
+    && xml.includes("import { driverAddressLine, opponentAddressLine, addressLineOrDash, withTitle, nameOrUnknown } from './driverAddress'"));   // 21/09/69 + addressLineOrDash/nameOrUnknown (ผู้บาดเจ็บ/ทรัพย์สิน)
   const integ = read('backend/src/routes/integration.routes.ts');
   check('integration /report ส่ง driver_address_emcs', integ.includes('driver_address_emcs: driverAddressLine(r.driver_address, r.driver_moo, r.driver_subdistrict)'));
 }
@@ -173,7 +173,7 @@ const read = (p: string) => fs.readFileSync(path.join(ROOT, p), 'utf8');
     && opp.includes("'moo': _ctl('moo').text.trim()") && opp.includes("'subdistrict': _subdistrict") && opp.includes('tumbonsData'));
   const form = read('mobile/lib/screens/survey_form_screen.dart');
   check('มือถือ: ฟอร์มหลักส่งรายการตำบลให้ editor คู่กรณี (2 จุด) · รายการช่องบังคับใช้ชื่อ "เจ้าของรถคู่กรณี"',
-    (form.match(/tumbonsData: _tumbonsData/g) ?? []).length === 2 && form.includes("'owner_name': 'เจ้าของรถคู่กรณี'"));
+    (form.match(/tumbonsData: _tumbonsData/g) ?? []).length === 6 && form.includes("'owner_name': 'เจ้าของรถคู่กรณี'"));
   check('เว็บ+มือถือ: จังหวัด/อำเภอ/ตำบล ของที่อยู่ผู้ขับขี่คู่กรณี บังคับเมื่อมีข้อมูลที่อยู่ (opponentHasAddress / addrHasData) · "รอตรวจสอบ"/ว่างทั้งหมด ยกเว้น (user เคาะ 16/09/69)',
     (web.match(/reqWhen: opponentHasAddress/g) ?? []).length === 3 && web.includes("a !== 'รอตรวจสอบ'") && web.includes('if (r.pending === true) return false')
     && opp.includes('static bool addrHasData(') && opp.includes("if (_hasAddr && _subdistrict.isEmpty) 'ตำบล/แขวง (ที่อยู่ผู้ขับขี่)'") && (opp.match(/req: _hasAddr/g) ?? []).length === 3

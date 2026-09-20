@@ -17,7 +17,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import api from '@/lib/api';
 import { PROVINCE_OPTIONS, CAR_COLOR_OPTIONS, EV_TYPE_OPTIONS, POLICY_TYPE_OPTIONS, carBrandOptions,
-         brandTypeIssue, CAR_TYPE_LABELS, isValidSeDate, carTypeCode, ALL_BRAND, ageFromSeDate, emcsPlate } from './caseOptions';
+         brandTypeIssue, CAR_TYPE_LABELS, isValidSeDate, carTypeCode, ALL_BRAND, ageFromSeDate, emcsPlate, isCurrentYearSeDate } from './caseOptions';
 import { districtOptions } from './districtOptions';
 import { insurerOptions, isEmcsInsurer } from './insurerOptions';
 import DamageDialog from './DamageDialog';
@@ -198,6 +198,9 @@ function Field({ def, value, onChange, warnOverride, quickFix, rec }: {
   const badCid = def.k === 'cid' && v.trim() !== '' && v.trim() !== PENDING_TEXT && !/^-+$/.test(v.trim()) && rec?.id_type !== 'foreign' && !cidChecksum(v);
   // อายุ/วันที่ต้องเป็นรูปแบบที่ระบบประกันรับ — "-" ในช่องอายุทำ EMCS ปัดตกทั้งไฟล์ XML (เคส #282 10/09/69)
   const badAge = def.k === 'age' && v.trim() !== '' && !/^\d{1,3}$/.test(v.trim());
+  // อายุ 0 / วันเกิดปีปัจจุบัน = ค่าที่คนพิมพ์แทน "ไม่ทราบ" (เคส #433 21/09/69) → เตือน + กั้น (คู่กรณี/ผู้บาดเจ็บ) ให้ใช้ 01/01/2500 แทน
+  const zeroAge = def.k === 'age' && v.trim() === '0';
+  const thisYearBirth = def.k === 'birthdate' && isCurrentYearSeDate(v.trim());
   // วันที่ต้องเป็น "วันจริง" ไม่ใช่แค่รูปแบบ — "00/00/2569" ผ่านรูปแบบแต่ EMCS ปัดตกทั้งไฟล์ (เคส #299 15/09/69)
   const badDate = ['birthdate', 'license_start', 'license_end'].includes(def.k)
     && v.trim() !== '' && (v.trim() === '-' || !isValidSeDate(v.trim()));
@@ -214,6 +217,8 @@ function Field({ def, value, onChange, warnOverride, quickFix, rec }: {
       : offList ? 'ชื่อนี้ไม่มีใน EMCS — เลือกใหม่จากลิสต์'
         : badCid ? 'เลขบัตรไม่ถูกต้อง — EMCS จะไม่ยอมบันทึกทั้งบล็อก'
           : badAge ? 'อายุต้องเป็นตัวเลข — ใส่ "-" แล้ว EMCS ปัดตกทั้งไฟล์ (ไม่รู้ = เว้นว่าง)'
+          : zeroAge ? 'อายุ 0 ไม่ใช่อายุจริง — ไม่ทราบ: คู่กรณีใช้วันเกิด 01/01/2500 (อายุคำนวณให้) · ผู้บาดเจ็บเว้นว่าง'
+          : thisYearBirth ? 'วันเกิดเป็นปีปัจจุบัน ไม่ใช่วันเกิดจริง — ไม่ทราบให้ใช้ 01/01/2500'
             : badDate ? (def.k === 'birthdate'
               ? 'วันเกิดไม่ใช่วันจริง (ISURVEY/XML ส่งมาเป็น 00/00 หรือใส่ "-") — ใส่ วว/ดด/ปปปป จริง หรือติ๊ก "รอตรวจสอบ" ถ้าไม่ทราบ · ปล่อยไว้อนุมัติไม่ผ่าน'
               : 'ต้องเป็นวันที่จริง วว/ดด/ปปปป (พ.ศ.) — 00/00 หรือ "-" ไม่ได้ EMCS ปัดตกทั้งไฟล์ (ไม่รู้ = เว้นว่าง)')
@@ -557,7 +562,7 @@ export const OPPONENT_REQUIRED = [
 export const ageMismatch = (age: unknown, birthdate: unknown): string => {
   const a = String(age ?? '').trim();
   const exp = ageFromSeDate(birthdate);
-  if (!/^\d{1,3}$/.test(a) || exp === '') return '';
+  if (!/^\d{1,3}$/.test(a) || exp === '' || exp === '0') return '';   // วันเกิดปีปัจจุบันคำนวณได้ 0 — ไม่เสนอ "ใช้ 0" (มีตัวเตือนวันเกิดปีปัจจุบันแทน 21/09/69)
   return Math.abs(Number(a) - Number(exp)) > 1 ? exp : '';
 };
 // ใช้ร่วมกับผู้ขับขี่รถประกันในหน้าเคส (20/09/69 เคส #460) — กติกาเดียวกัน
@@ -583,6 +588,9 @@ export const opponentMissing = (rec: LooseRecord): string[] => [
   ...(brandTypeIssue(rec.car_type, rec.car_brand) ? ['car_brand'] : []),
   // อายุไม่ตรงกับวันเกิด (ต่างเกิน 1 ปี) — กั้นอนุมัติให้หัวหน้าแก้ก่อน (20/09/69)
   ...(opponentAgeMismatch(rec) ? ['age'] : []),
+  // อายุ 0 / วันเกิดปีปัจจุบัน = ค่าที่คนพิมพ์แทน "ไม่ทราบ" (เคส #433 21/09/69) → ยังไม่ครบ (ปุ่มใต้ช่องเปลี่ยนเป็น 01/01/2500)
+  ...(String(rec.age ?? '').trim() === '0' ? ['age'] : []),
+  ...(isCurrentYearSeDate(rec.birthdate) ? ['birthdate'] : []),
   // ความเสียหายทุกชิ้นต้องมีระดับ L/M/H/X — EMCS บังคับ ว่าง/คำไทย ("แผลเบา" จาก ISURVEY) ทำ popup ค้าง (เคส #343 15/09/69)
   ...((Array.isArray(rec.damage) ? rec.damage : []) as Array<Record<string, unknown>>)
     .filter((d) => d && String(d.part ?? '').trim() && !['L', 'M', 'H', 'X'].includes(String(d.level ?? '').trim()))
@@ -603,7 +611,8 @@ const recordMissing = (defs: FieldDef[], required: string[], rec: LooseRecord): 
   ...required.filter((k) => !String(rec[k] ?? '').trim()),
   ...defs.filter((f) => f.reqWhen && f.reqWhen(rec) && !chosen(rec[f.k])).map((f) => f.k),
 ];
-export const injuredMissing = (rec: LooseRecord): string[] => recordMissing(INJURED_FIELDS, INJURED_REQUIRED, rec);
+export const injuredMissing = (rec: LooseRecord): string[] =>
+  [...recordMissing(INJURED_FIELDS, INJURED_REQUIRED, rec), ...(String(rec.age ?? '').trim() === '0' ? ['age'] : [])];   // อายุ 0 ไม่ใช่อายุจริง (21/09/69)
 export const propertyMissing = (rec: LooseRecord): string[] => recordMissing(PROPERTY_FIELDS, PROPERTY_REQUIRED, rec);
 
 /** เจ้าของรถคู่กรณี: คำนำหน้า (เลือก ไม่บังคับ — เจ้าของเป็นบริษัทได้) + ชื่อ ในช่องเดียว (16/09/69) → EMCS/XML รวมเป็น "นาย บุญเลี้ยง ชงสุวรรณ" */
@@ -766,6 +775,8 @@ export function OpponentEditor({ items, onChange }: {
                 const issue = f.k === 'car_brand' ? brandTypeIssue(it.car_type, it.car_brand) : null;
                 // อายุไม่ตรงกับวันเกิด (20/09/69) — เตือนใต้ช่องอายุ + ปุ่มใช้ค่าที่คำนวณได้
                 const ageExp = f.k === 'age' ? opponentAgeMismatch(it) : '';
+                // อายุ 0 / วันเกิดปีปัจจุบัน (21/09/69 เคส #433) → ปุ่ม "ใช้วันเกิด 01/01/2500" (set() คำนวณอายุ 69 ให้เอง)
+                const useBirthPh = (f.k === 'age' && String(it.age ?? '').trim() === '0') || (f.k === 'birthdate' && isCurrentYearSeDate(String(it.birthdate ?? '')));
                 const options = f.k === 'subdistrict' ? tumbonOptions(it) : (f.optionsFrom ? f.optionsFrom(it) : f.options);
                 return (
                   <Field
@@ -777,7 +788,8 @@ export function OpponentEditor({ items, onChange }: {
                     quickFix={issue?.suggestion
                       ? { label: `เปลี่ยนประเภทรถเป็น ${CAR_TYPE_LABELS[issue.suggestion]}`,
                           onClick: () => set(i, 'car_type', CAR_TYPE_LABELS[issue.suggestion as string]) }
-                      : ageExp ? { label: `ใช้ ${ageExp}`, onClick: () => set(i, 'age', ageExp) } : undefined}
+                      : ageExp ? { label: `ใช้ ${ageExp}`, onClick: () => set(i, 'age', ageExp) }
+                      : useBirthPh ? { label: 'ใช้วันเกิด 01/01/2500', onClick: () => set(i, 'birthdate', PLACEHOLDER_BIRTHDATE) } : undefined}
                   />
                 );
               })}

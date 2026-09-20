@@ -383,7 +383,7 @@ console.log('\n── การ์ด: เงินฝั่งพนักง�
 {
   const inj0 = (row.injured_persons as any[])[0];
   const x = generateSurveyXml({ ...row, injured_persons: [{ ...inj0, name: 'รอตรวจสอบ', cid: '', hospital: '  ', symptom: 'รอตรวจสอบ', age: 'รอตรวจสอบ', occupation: 'รอตรวจสอบ', treat_cost: 'รอตรวจสอบ', address: '' }] } as never);
-  check('บาดเจ็บ: ชื่อ/บัตร/รพ./อาการ ว่างหรือ "รอตรวจสอบ" → "-"', x.includes('<NAME>-</NAME>') && x.includes('<CITIZEN_ID>-</CITIZEN_ID>') && x.includes('<HOS_NAME>-</HOS_NAME>') && x.includes('<INJURE>-</INJURE>'));
+  check('บาดเจ็บ: ชื่อว่าง/"รอตรวจสอบ" → "ไม่ทราบชื่อ" (21/09/69) · บัตร/รพ./อาการ → "-"', x.includes('<NAME>ไม่ทราบชื่อ</NAME>') && x.includes('<CITIZEN_ID>-</CITIZEN_ID>') && x.includes('<HOS_NAME>-</HOS_NAME>') && x.includes('<INJURE>-</INJURE>'));
   check('บาดเจ็บ: ช่องไม่บังคับ "รอตรวจสอบ" → "-" (อาชีพ) · ช่องตัวเลข → ว่าง (อายุ/ค่ารักษา) · ว่างคงว่าง (ที่อยู่)',
         x.includes('<JOB>-</JOB>') && x.includes('<AGE> </AGE>') && x.includes('<COST> </COST>') && x.includes('<ADDRESS> </ADDRESS>') && !x.includes('รอตรวจสอบ'));
 }
@@ -396,8 +396,8 @@ console.log('\n── การ์ด: เงินฝั่งพนักง�
   // บล็อกคู่กรณี = TXN_SURV_CAR ที่ OPO_NAME ไม่ว่าง (บล็อกรถประกันมี OPO_NAME ว่าง)
   const opp = (x.match(/<TXN_SURV_CAR>[\s\S]*?<\/TXN_SURV_CAR>/g) || []).find((b) => /<OPO_NAME>\S/.test(b)) || '';
   const tag = (t: string) => (opp.match(new RegExp('<' + t + '>([^<]*)<')) || ['', '?'])[1];
-  check('XML คู่กรณี: OPO_NAME=- (ไม่ใช่ "คุณ -") · DRI_NAME=- · DRI_CARDID=- · DRI_DRVID=- · DRI_ADDRESS ไม่มี "รอตรวจสอบ"',
-        tag('OPO_NAME') === '-' && tag('DRI_NAME') === '-' && tag('DRI_CARDID') === '-' && tag('DRI_DRVID') === '-'
+  check('XML คู่กรณี: OPO_NAME=- (ไม่ใช่ "คุณ -") · DRI_NAME=ไม่ทราบชื่อ (21/09/69) · DRI_CARDID=- · DRI_DRVID=- · DRI_ADDRESS ไม่มี "รอตรวจสอบ"',
+        tag('OPO_NAME') === '-' && tag('DRI_NAME') === 'ไม่ทราบชื่อ' && tag('DRI_CARDID') === '-' && tag('DRI_DRVID') === '-'
         && tag('DRI_ADDRESS') === 'ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ' && !opp.includes('รอตรวจสอบ'),
         `${tag('OPO_NAME')} | ${tag('DRI_NAME')} | ${tag('DRI_CARDID')} | ${tag('DRI_ADDRESS')}`);
 }
@@ -409,8 +409,8 @@ console.log('\n── การ์ด: เงินฝั่งพนักง�
   const opp = (x.match(/<TXN_SURV_CAR>[\s\S]*?<\/TXN_SURV_CAR>/g) || []).find((b) => /<OPO_NAME>\S/.test(b)) || '';
   const tag = (t: string) => (opp.match(new RegExp('<' + t + '>([^<]*)<')) || ['', '?'])[1];
   const expAge = String(new Date().getFullYear() + 543 - 2500);
-  check('XML คู่กรณี: ชื่อ "--" → DRI_NAME=- · ทะเบียน "--" → CAR_REGNO=00 · วันเกิด 01/01/2500 + อายุ 1 → DRI_AGE คำนวณ',
-        tag('DRI_NAME') === '-' && tag('CAR_REGNO') === '00' && tag('DRI_AGE') === expAge, `${tag('DRI_NAME')} | ${tag('CAR_REGNO')} | ${tag('DRI_AGE')} (ควร ${expAge})`);
+  check('XML คู่กรณี: ชื่อ "--" → DRI_NAME=ไม่ทราบชื่อ · ทะเบียน "--" → CAR_REGNO=00 · วันเกิด 01/01/2500 + อายุ 1 → DRI_AGE คำนวณ',
+        tag('DRI_NAME') === 'ไม่ทราบชื่อ' && tag('CAR_REGNO') === '00' && tag('DRI_AGE') === expAge, `${tag('DRI_NAME')} | ${tag('CAR_REGNO')} | ${tag('DRI_AGE')} (ควร ${expAge})`);
 }
 
 // ผู้ขับขี่รถประกัน (user สั่ง 20/09/69 เคส #460): เลขบัตร/ใบขับขี่/ที่ออกใบขับขี่/โทร "รอตรวจสอบ"/"--" → "-" · อายุ 0 + วันเกิด 01/01/2500 → DRI_AGE คำนวณ
@@ -432,8 +432,8 @@ console.log('\n── การ์ด: เงินฝั่งพนักง�
                                                              owner_name: 'รอตรวจสอบ', owner_address: 'รอตรวจสอบ', owner_phone: 'รอตรวจสอบ' }] } as never);
   const ast = (x.match(/<TXN_SURV_ASSET>[\s\S]*?<\/TXN_SURV_ASSET>/g) || [])[0] || '';
   const tag = (t: string) => (ast.match(new RegExp('<' + t + '>([^<]*)<')) || ['', '?'])[1];
-  check('XML ทรัพย์สิน: ASSET_DESC/ASSET_DAMAGE_CAUSE/ASSET_DAMAGE/OWNER=- · ADDRESS=- · TEL_NO ว่าง · COST_DAMAGE ไม่มีคำไทย · ไม่มี "รอตรวจสอบ"',
-        tag('ASSET_DESC') === '-' && tag('ASSET_DAMAGE_CAUSE') === '-' && tag('ASSET_DAMAGE') === '-' && tag('OWNER') === '-' && tag('ADDRESS') === '-'
+  check('XML ทรัพย์สิน: ASSET_DESC/ASSET_DAMAGE_CAUSE/ASSET_DAMAGE=- · OWNER=ไม่ทราบชื่อ (21/09/69) · ADDRESS=- · TEL_NO ว่าง · COST_DAMAGE ไม่มีคำไทย · ไม่มี "รอตรวจสอบ"',
+        tag('ASSET_DESC') === '-' && tag('ASSET_DAMAGE_CAUSE') === '-' && tag('ASSET_DAMAGE') === '-' && tag('OWNER') === 'ไม่ทราบชื่อ' && tag('ADDRESS') === '-'
         && tag('TEL_NO').trim() === '' && !/รอตรวจสอบ/.test(ast) && !/[ก-๙]/.test(tag('COST_DAMAGE')),
         `${tag('ASSET_DESC')} | ${tag('ASSET_DAMAGE_CAUSE')} | ${tag('ASSET_DAMAGE')} | ${tag('OWNER')} | ${tag('ADDRESS')} | ${tag('TEL_NO')} | ${tag('COST_DAMAGE')}`);
   const y = generateSurveyXml({ ...row, damaged_property: [{ item: 'เสาไฟฟ้า', cause: 'รถชน', detail: 'หัก', estimated_cost: '1500', owner_name: 'การไฟฟ้า', owner_address: '', owner_phone: '021234567' }] } as never);
@@ -464,7 +464,7 @@ console.log('\n── การ์ด: เงินฝั่งพนักง�
   check('XML ผู้บาดเจ็บ: บ้านเลขที่ "รอตรวจสอบ" อย่างเดียว (ประกอบแล้วว่าง) → ADDRESS "-"', tg(zb, 'ADDRESS') === '-', tg(zb, 'ADDRESS'));
   check('XML ผู้บาดเจ็บ: ที่อยู่ข้อความเดียวแบบเก่าคงเดิม · บุคคลภายนอกรถ → CAR_REGNO 00 · ชื่อ "-" ไม่ต่อคำนำหน้า · ทะเบียนที่กรอกเองถูกตัดเครื่องหมาย',
         tg(blocks[2], 'ADDRESS') === '99 ถ.สุขุมวิท ต.บางนา อ.บางนา จ.กรุงเทพฯ' && tg(blocks[2], 'CAR_REGNO') === '00' && tg(blocks[2], 'NAME') === 'สมชาย ใจดี'
-        && tg(blocks[3], 'NAME') === '-' && tg(blocks[3], 'CAR_REGNO') === 'กข5511',
+        && tg(blocks[3], 'NAME') === 'ไม่ทราบชื่อ' && tg(blocks[3], 'CAR_REGNO') === 'กข5511',
         `${tg(blocks[2], 'ADDRESS')} | ${tg(blocks[2], 'CAR_REGNO')} | ${tg(blocks[3], 'NAME')} | ${tg(blocks[3], 'CAR_REGNO')}`);
   const y = generateSurveyXml({ ...row, damaged_property: [
     { item: 'เสาไฟฟ้า', cause: 'รถชน', detail: 'หัก', owner_title: 'นาย', owner_name: 'สมศักดิ์ มั่นคง', owner_address: '12/3', owner_moo: '2', owner_subdistrict: 'ท้ายบ้าน', owner_district: 'อำเภอเมือง', owner_province: 'สมุทรปราการ', owner_phone: '0812345678' },
@@ -475,6 +475,22 @@ console.log('\n── การ์ด: เงินฝั่งพนักง�
         ab.length === 2 && tg(ab[0], 'OWNER') === 'นาย สมศักดิ์ มั่นคง' && tg(ab[0], 'ADDRESS') === '12/3 ม.2 ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ'
         && tg(ab[1], 'OWNER') === 'บริษัท เอบีซี จำกัด' && tg(ab[1], 'ADDRESS') === '99 ถ.สุขุมวิท กรุงเทพฯ',
         ab.length ? `${tg(ab[0], 'OWNER')} | ${tg(ab[0], 'ADDRESS')} | ${tg(ab[1], 'OWNER')} | ${tg(ab[1], 'ADDRESS')}` : 'no blocks');
+}
+
+// วันเกิดปีปัจจุบัน (01/01/ปีนี้) + อายุ 0 ที่คนพิมพ์แทน "ไม่ทราบ" (เคส #433 21/09/69) → ไฟล์ใช้ 01/01/2500 + อายุ 69 ทั้งคู่กรณีและผู้ขับขี่รถประกัน
+{
+  const thisBE = new Date().getFullYear() + 543;
+  const expAge = String(thisBE - 2500);
+  const o = { ...(row.opposing_parties as any[])[0], title: 'คุณ', first_name: 'รอตรวจสอบ', last_name: '', birthdate: `01/01/${thisBE}`, age: '0' };
+  const x = generateSurveyXml({ ...row, opposing_parties: [o], driver_birthdate: `15/06/${thisBE}`, driver_age: 0 } as never);
+  const blocks = x.match(/<TXN_SURV_CAR>[\s\S]*?<\/TXN_SURV_CAR>/g) || [];
+  const opp = blocks.find((b) => /<OPO_NAME>\S/.test(b)) || '';
+  const ins = blocks.find((b) => !/<OPO_NAME>\S/.test(b)) || '';
+  const tg = (b: string, t: string) => (b.match(new RegExp('<' + t + '>([^<]*)<')) || ['', '?'])[1];
+  check('XML: วันเกิดปีปัจจุบัน → DRI_BIRTHDAY 1957-01-01 + DRI_AGE 69 (คู่กรณี + รถประกัน) · ชื่อผู้ขับขี่คู่กรณี "รอตรวจสอบ" → ไม่ทราบชื่อ (ไม่มีคำนำหน้า)',
+        tg(opp, 'DRI_BIRTHDAY').startsWith('1957-01-01') && tg(opp, 'DRI_AGE') === expAge && tg(opp, 'DRI_NAME') === 'ไม่ทราบชื่อ'
+        && tg(ins, 'DRI_BIRTHDAY').startsWith('1957-01-01') && tg(ins, 'DRI_AGE') === expAge,
+        `${tg(opp, 'DRI_BIRTHDAY')} | ${tg(opp, 'DRI_AGE')} | ${tg(opp, 'DRI_NAME')} | ${tg(ins, 'DRI_BIRTHDAY')} | ${tg(ins, 'DRI_AGE')} (ควร ${expAge})`);
 }
 
 console.log(`\n${failed === 0 ? '✅ ผ่านทั้งหมด' : `❌ ล้มเหลว ${failed} รายการ`}`);
