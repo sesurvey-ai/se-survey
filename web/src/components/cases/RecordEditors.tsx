@@ -188,7 +188,7 @@ function Field({ def, value, onChange, warnOverride, quickFix }: {
   const badPlate = def.k === 'plate' && v.trim() !== '' && plateClean !== v.trim();
   // "รอตรวจสอบ" ในช่องเลขบัตร = ค่าที่แอป/เว็บเติมตอนคู่กรณีหลบหนี ไม่ใช่เลขผิด (16/09/69)
   // "-" = ไม่ทราบ ตามกติกาช่องข้อความบังคับของ EMCS (ผู้บาดเจ็บ/คู่กรณี user เคาะ 20/09/69) ไม่ใช่เลขผิด
-  const badCid = def.k === 'cid' && v.trim() !== '' && v.trim() !== PENDING_TEXT && v.trim() !== '-' && !cidChecksum(v);
+  const badCid = def.k === 'cid' && v.trim() !== '' && v.trim() !== PENDING_TEXT && !/^-+$/.test(v.trim()) && !cidChecksum(v);
   // อายุ/วันที่ต้องเป็นรูปแบบที่ระบบประกันรับ — "-" ในช่องอายุทำ EMCS ปัดตกทั้งไฟล์ XML (เคส #282 10/09/69)
   const badAge = def.k === 'age' && v.trim() !== '' && !/^\d{1,3}$/.test(v.trim());
   // วันที่ต้องเป็น "วันจริง" ไม่ใช่แค่รูปแบบ — "00/00/2569" ผ่านรูปแบบแต่ EMCS ปัดตกทั้งไฟล์ (เคส #299 15/09/69)
@@ -203,7 +203,7 @@ function Field({ def, value, onChange, warnOverride, quickFix }: {
   const offList = def.k === 'insurer' && !isEmcsInsurer(v);
   const warn = warnOverride ? warnOverride
     : badChars ? `EMCS ไม่รับอักขระ ${badChars}`
-      : badPlate ? `EMCS ไม่รับเครื่องหมาย/คำพ่วงในทะเบียน — บอทจะกรอก "${plateClean || '(ว่าง)'}" ถ้าไม่ใช่ แก้ที่นี่`
+      : badPlate ? `EMCS ไม่รับเครื่องหมาย/คำพ่วงในทะเบียน — บอทจะกรอก "${plateClean || '00'}" ถ้าไม่ใช่ แก้ที่นี่`
       : offList ? 'ชื่อนี้ไม่มีใน EMCS — เลือกใหม่จากลิสต์'
         : badCid ? 'เลขบัตรไม่ถูกต้อง — EMCS จะไม่ยอมบันทึกทั้งบล็อก'
           : badAge ? 'อายุต้องเป็นตัวเลข — ใส่ "-" แล้ว EMCS ปัดตกทั้งไฟล์ (ไม่รู้ = เว้นว่าง)'
@@ -383,7 +383,7 @@ export const dropEmptyRecords = (items: RecordItem[]): RecordItem[] =>
 export const opponentHasAddress = (r: LooseRecord): boolean => {
   if (r.pending === true) return false;
   const a = String(r.address ?? '').trim();
-  return (a !== '' && a !== '-' && a !== 'รอตรวจสอบ') || String(r.moo ?? '').trim() !== '' || chosen(r.home_province) || chosen(r.district) || chosen(r.subdistrict);
+  return (a !== '' && !/^-+$/.test(a) && a !== 'รอตรวจสอบ') || String(r.moo ?? '').trim() !== '' || chosen(r.home_province) || chosen(r.district) || chosen(r.subdistrict);
 };
 
 const OPPONENT_FIELDS: FieldDef[] = [
@@ -469,6 +469,8 @@ const OPPONENT_COST_FIELD: FieldDef = OPPONENT_FIELDS.find((f) => f.k === 'estim
 const NO_INSURER = 'ไม่มีบริษัทประกันภัย';
 /** ค่าที่แอป/เว็บเคยเติมตอนติ๊ก "รอตรวจสอบ" (ชุด 16/09/69 — 17/09 เปลี่ยนเป็น "-"/"00"/"ไม่ทราบชื่อ") ยังอยู่ในคันเก่า → ใช้ยกเว้นเตือนเลขบัตร/ที่อยู่ */
 const PENDING_TEXT = 'รอตรวจสอบ';
+/** วันเกิดตัวแทนค่าของชุดรอตรวจสอบ (17/09/69) — อายุต้องเป็นค่าที่คำนวณจากวันนี้เสมอ (user เคาะ 20/09/69) */
+const PLACEHOLDER_BIRTHDATE = '01/01/2500';
 
 /** 8 ช่องที่ `vlidOpoCar` บล็อกทุกบริษัท — ใช้นับป้าย "ยังขาด N ช่องบังคับ" */
 export const OPPONENT_REQUIRED = [
@@ -612,8 +614,16 @@ export function OpponentEditor({ items, onChange }: {
 
   // ระเบียนที่มีอยู่แล้ว (แอปเก่าส่ง policy_no ว่างมากับ "ไม่มีบริษัทประกันภัย") → เติม "-" ตอนเปิดหน้าให้ด้วย
   useEffect(() => {
-    const fixed = items.map((it) =>
-      String(it.insurer ?? '') === NO_INSURER && !String(it.policy_no ?? '').trim() ? { ...it, policy_no: '-' } : it);
+    const fixed = items.map((it) => {
+      let next = it;
+      if (String(it.insurer ?? '') === NO_INSURER && !String(it.policy_no ?? '').trim()) next = { ...next, policy_no: '-' };
+      // วันเกิดตัวแทนค่า 01/01/2500 → อายุ = ค่าที่คำนวณจากปีนั้น แก้ให้เองตอนเปิดหน้า (เคส #528 อายุ 1 ค้างจากกติกาเก่า) — user เคาะ 20/09/69
+      if (String(it.birthdate ?? '').trim() === PLACEHOLDER_BIRTHDATE) {
+        const exp = ageFromSeDate(PLACEHOLDER_BIRTHDATE);
+        if (exp && String(it.age ?? '').trim() !== exp) next = { ...next, age: exp };
+      }
+      return next;
+    });
     if (fixed.some((x, i) => x !== items[i])) onChange(fixed);
   }, [items, onChange]);
 

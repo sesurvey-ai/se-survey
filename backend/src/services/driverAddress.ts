@@ -28,7 +28,7 @@ const escapeRe = (x: string): string => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const tidy = (addr: string): string => addr.replace(/\s+/g, ' ').replace(/\s*,\s*/g, ',').replace(/^[\s,]+|[\s,]+$/g, '');
 /** ตัวแทนค่า "ไม่ทราบ" ที่คนพิมพ์/ระบบเติม ไม่ใช่ข้อมูลจริง (user เคาะ 20/09/69 หลังเคส #528): "รอตรวจสอบ" ถือเท่ากับ "-" — ไม่เอามาประกอบที่อยู่/ต่อคำนำหน้า */
 const PLACEHOLDERS = new Set(['-', 'รอตรวจสอบ']);
-const isPlaceholder = (v: unknown): boolean => PLACEHOLDERS.has(String(v ?? '').trim());
+const isPlaceholder = (v: unknown): boolean => { const t = String(v ?? '').trim(); return PLACEHOLDERS.has(t) || /^-+$/.test(t); };   // "--" ที่ ISURVEY ส่งมาแทนไม่ทราบ ก็นับ (20/09/69)
 
 /** จับ "หมู่ที่ 7" / "หมู่ 7" / "หมู่7" / "ม.7" / "ม. 7" ที่ขึ้นต้นข้อความ หลังช่องว่าง/จุลภาค หรือติดหลังตัวเลข ("261ม.2") — "หมู่บ้าน…" ไม่ติด (ต้องตามด้วยตัวเลข) */
 const MOO_RE = /(?:^|(?<=[\s,\d]))(?:หมู่ที่|หมู่|ม\.)\s*(\d{1,3})(?=$|[\s,])/u;

@@ -402,5 +402,16 @@ console.log('\n── การ์ด: เงินฝั่งพนักง�
         `${tag('OPO_NAME')} | ${tag('DRI_NAME')} | ${tag('DRI_CARDID')} | ${tag('DRI_ADDRESS')}`);
 }
 
+// user สั่ง 20/09/69: "--" ของ ISURVEY = ตัวแทนค่า · ทะเบียนคู่กรณีว่าง/"--" → 00 · วันเกิด 01/01/2500 → อายุคำนวณเสมอ (ไม่ใช้อายุ 1 ที่ค้าง)
+{
+  const o = { ...(row.opposing_parties as any[])[0], title: 'คุณ', first_name: '--', last_name: '', plate: '--', birthdate: '01/01/2500', age: '1' };
+  const x = generateSurveyXml({ ...row, opposing_parties: [o] } as never);
+  const opp = (x.match(/<TXN_SURV_CAR>[\s\S]*?<\/TXN_SURV_CAR>/g) || []).find((b) => /<OPO_NAME>\S/.test(b)) || '';
+  const tag = (t: string) => (opp.match(new RegExp('<' + t + '>([^<]*)<')) || ['', '?'])[1];
+  const expAge = String(new Date().getFullYear() + 543 - 2500);
+  check('XML คู่กรณี: ชื่อ "--" → DRI_NAME=- · ทะเบียน "--" → CAR_REGNO=00 · วันเกิด 01/01/2500 + อายุ 1 → DRI_AGE คำนวณ',
+        tag('DRI_NAME') === '-' && tag('CAR_REGNO') === '00' && tag('DRI_AGE') === expAge, `${tag('DRI_NAME')} | ${tag('CAR_REGNO')} | ${tag('DRI_AGE')} (ควร ${expAge})`);
+}
+
 console.log(`\n${failed === 0 ? '✅ ผ่านทั้งหมด' : `❌ ล้มเหลว ${failed} รายการ`}`);
 process.exit(failed === 0 ? 0 : 1);

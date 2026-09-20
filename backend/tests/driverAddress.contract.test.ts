@@ -179,7 +179,7 @@ const read = (p: string) => fs.readFileSync(path.join(ROOT, p), 'utf8');
     && opp.includes('static bool addrHasData(') && opp.includes("if (_hasAddr && _subdistrict.isEmpty) 'ตำบล/แขวง (ที่อยู่ผู้ขับขี่)'") && (opp.match(/req: _hasAddr/g) ?? []).length === 3
     && form.includes("OpponentEditor.addrHasData(s('address'), s('moo'), s('home_province'), s('district'), s('subdistrict'))") && form.includes("if (it['pending'] == true) return const <String>[];"));
   check('เว็บ: ติ๊ก "รอตรวจสอบ" + ป้ายที่หัวการ์ดคู่กรณี (pending เดียวกับแอป) · เลขบัตร "รอตรวจสอบ" (ชุดเก่า) ไม่เตือน (user สั่ง 16/09/69)',
-    web.includes('setPending(i, e.target.checked)') && web.includes('{it.pending === true && (') && web.includes("v.trim() !== PENDING_TEXT && v.trim() !== '-' && !cidChecksum(v)"));
+    web.includes('setPending(i, e.target.checked)') && web.includes('{it.pending === true && (') && web.includes("v.trim() !== PENDING_TEXT && !/^-+$/.test(v.trim()) && !cidChecksum(v)"));
   // ชุดค่าที่เติมเมื่อติ๊ก — user เคาะ 17/09/69: เจ้าของ "-" · ทะเบียน "00" · รถอื่นๆ (ยี่ห้อว่าง) · จังหวัด อื่นๆ · ชาย + "ไม่ทราบชื่อ" (ไม่ใส่คำนำหน้า/นามสกุล)
   // · 01/01/2500 · ไม่มีบริษัทประกันภัย · กรมธรรม์ "-" — ต้องตรงกันเว็บ/แอป และห้ามกลับไปชุด 16/09 ("รอตรวจสอบ"/เก๋งเอเชีย/-ALL-/อื่นๆ/2525)
   check('เว็บ+มือถือ: ชุดค่า "รอตรวจสอบ" ตรงกัน (user เคาะ 17/09/69) · ไม่เติมคำนำหน้า/นามสกุล/ที่อยู่/เลขบัตร · ยี่ห้อไม่บังคับเมื่อ pending',
@@ -198,6 +198,9 @@ const read = (p: string) => fs.readFileSync(path.join(ROOT, p), 'utf8');
 
 // ตัวแทนค่า (user เคาะ 20/09/69 หลังเคส #528): "-"/"รอตรวจสอบ"/"ไม่ทราบชื่อ" ไม่ต่อคำนำหน้า · บ้านเลขที่ตัวแทนค่าไม่เอามาประกอบที่อยู่ · เว็บบังคับเพศ + กั้นอายุไม่ตรงวันเกิด
 {
+  check('ตัวแทนค่า "--" (ISURVEY) นับด้วย · เว็บ: เปิดหน้าแล้ววันเกิด 01/01/2500 → อายุคำนวณให้เอง',
+    withTitle('คุณ', '--') === '-' && opponentAddressLine('--', '', 'ท้ายบ้าน', 'อำเภอเมือง', 'สมุทรปราการ') === 'ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ'
+    && fs.readFileSync(path.join(__dirname, '..', '..', 'web', 'src', 'components', 'cases', 'RecordEditors.tsx'), 'utf8').includes("if (String(it.birthdate ?? '').trim() === PLACEHOLDER_BIRTHDATE) {"));
   check('withTitle: ตัวแทนค่าไม่ต่อคำนำหน้า (เคยได้ "คุณ -")',
     withTitle('คุณ', '-') === '-' && withTitle('คุณ', 'รอตรวจสอบ') === '-' && withTitle('นาย', 'ไม่ทราบชื่อ') === 'ไม่ทราบชื่อ' && withTitle('', 'รอตรวจสอบ') === '-'
     && withTitle('นาย', 'บุญเลี้ยง ชงสุวรรณ') === 'นาย บุญเลี้ยง ชงสุวรรณ');

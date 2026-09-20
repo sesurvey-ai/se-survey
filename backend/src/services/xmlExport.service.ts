@@ -360,6 +360,9 @@ export function parseSe(dateStr: unknown, timeStr?: unknown): { d: string; m: st
  * ไม่มีเลข → คิดจากวันเกิด (พ.ศ.) · ไม่มีทั้งคู่ → ว่าง ให้ไปติดด่านบล็อกคู่กรณีบน EMCS แทน (คนต้องเติมค่าจริง)
  */
 const xmlAge = (age: unknown, birthdate: unknown, noBirthFallback = ''): string => {
+  // วันเกิดตัวแทนค่า 01/01/2500 (ชุดรอตรวจสอบ 17/09/69) → อายุคำนวณจากปีนั้นเสมอ ไม่ใช้อายุที่เก็บไว้ (เคส #528 อายุ 1 ค้างจากกติกาเก่า) — user เคาะ 20/09/69
+  const pb = parseSe(birthdate);
+  if (pb && pb.yBE === 2500 && Number(pb.m) === 1 && Number(pb.d) === 1) age = '';
   const m = /\d{1,3}/.exec(String(age ?? ''));
   // อายุ 0 = ไม่ทราบ (ISURVEY ให้ 0 คู่กับวันเกิด 00/00/00 — เคส #324 15/09/69) ไม่ใช่อายุคนขับจริง และ EMCS ไม่รับ 0 (#282)
   if (m && Number(m[0]) > 0) return m[0];
@@ -451,7 +454,8 @@ function buildCar(c: Row, type: number, insured: boolean): string {
     el('OPO_NAME', insured ? '' : withTitle(c.owner_title, c.owner_name)) +
     el('OPO_ADDRESS', insured ? '' : c.owner_address) +
     el('OPO_TYPE', insured ? 'รถประกัน' : 'รถคู่กรณี') +
-    el('CAR_REGNO', emcsPlate(insured ? c.license_plate : c.plate)) +   // EMCS ไม่รับขีด/เครื่องหมาย (20/09/69)
+    // EMCS ไม่รับขีด/เครื่องหมาย (20/09/69) · คู่กรณีไม่มีทะเบียน/"--" → 00 ตามชุดรอตรวจสอบ (user เคาะ 20/09/69)
+    el('CAR_REGNO', insured ? emcsPlate(c.license_plate) : (emcsPlate(c.plate) || '00')) +
     el('CAR_PROVINCE', provinceCode(insured ? c.car_province : c.province)) +
     // เลขตัวถังว่าง → "-" (EMCS ต้องการค่า ไม่รับ Null/ช่องว่าง; คู่กรณีมักไม่ทราบเลขตัวถัง)
     el('CHASSISNO', String((insured ? c.chassis_no : c.vin) ?? '').trim() || '-') +
@@ -534,13 +538,13 @@ function buildAsset(a: Row, seq: number): string {
 /** ช่องผู้บาดเจ็บ (user เคาะ 20/09/69): คนพิมพ์ "รอตรวจสอบ" แทนไม่ทราบ → "-" · ช่องบังคับ (ชื่อ/บัตร/รพ./อาการ) ว่าง → "-" ตามกติกาช่องข้อความบังคับของ EMCS · ชุดเดียวกับบอท emcs._inj_text */
 const injText = (v: unknown, required = false): string => {
   const s = String(v ?? '').trim();
-  const t = s === 'รอตรวจสอบ' ? '-' : s;
+  const t = s && (s === 'รอตรวจสอบ' || /^-+$/.test(s)) ? '-' : s;
   return required && !t ? '-' : t;
 };
 /** ช่องตัวเลข/โทร/ทะเบียน/วันที่ของผู้บาดเจ็บ: "รอตรวจสอบ" → ว่าง (ใส่ "-" ไม่ได้ EMCS ปัดตก) */
-const injNum = (v: unknown): string => { const s = String(v ?? '').trim(); return s === 'รอตรวจสอบ' ? '' : s; };
+const injNum = (v: unknown): string => { const s = String(v ?? '').trim(); return s === 'รอตรวจสอบ' || /^-+$/.test(s) ? '' : s; };
 /** ช่องข้อความคู่กรณี (user เคาะ 20/09/69): "รอตรวจสอบ" ที่คนพิมพ์ = ไม่ทราบ → "-" (ชุดเดียวกับบอท _opp_clean) */
-const oppText = (v: unknown): string => { const t = String(v ?? '').trim(); return t === 'รอตรวจสอบ' ? '-' : t; };
+const oppText = (v: unknown): string => { const t = String(v ?? '').trim(); if (!t) return ''; return t === 'รอตรวจสอบ' || /^-+$/.test(t) ? '-' : t; };   // "--" ของ ISURVEY = ไม่ทราบ ด้วย
 
 function buildInjure(p: Row, seq: number): string {
   return '<TXN_SURV_INJ>' +
