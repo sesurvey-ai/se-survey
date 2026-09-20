@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import PhotoGallery from './PhotoGallery';
 import { PROVINCE_OPTIONS, carBrandOptions, CAR_COLOR_OPTIONS, EV_TYPE_OPTIONS, ACC_CAUSE_OPTIONS, ACC_DAMAGE_TYPE_OPTIONS, POLICY_TYPE_OPTIONS, CLAIM_TYPE_LABELS, CLAIM_TYPE_OPTIONS,
-         brandTypeIssue, CAR_TYPE_LABELS, isValidSeDate, ageFromSeDate } from './caseOptions';
+         brandTypeIssue, CAR_TYPE_LABELS, isValidSeDate, ageFromSeDate, emcsPlate } from './caseOptions';
 import { districtOptions } from './districtOptions';
 import api from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
@@ -1387,6 +1387,20 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
         RING.forEach((c) => el.classList.toggle(c, Boolean(bad)));
       }
 
+      // ทะเบียนรถประกัน: EMCS ไม่รับ "-"/เครื่องหมาย/คำพ่วง — บอทตัดให้เอง (emcsPlate) ทาแดง + บอกค่าที่จะกรอกไว้ให้เห็น (20/09/69)
+      {
+        const el = form.querySelector('[name="license_plate"]') as HTMLInputElement | null;
+        if (el && !names.includes('license_plate')) {
+          const raw = String(el.value ?? '').trim();
+          const clean = emcsPlate(raw);
+          const badP = raw !== '' && clean !== raw;
+          el.title = badP ? `EMCS ไม่รับเครื่องหมาย/คำพ่วงในทะเบียน — บอทจะกรอก "${clean || '(ว่าง)'}" ถ้าไม่ใช่ แก้ที่นี่` : '';
+          if (!el.dataset.bg0) el.dataset.bg0 = BG_ORIG.find((c) => el.classList.contains(c)) || 'bg-white';
+          el.classList.toggle('border-gray-300', !badP);
+          el.classList.toggle(el.dataset.bg0, !badP);
+          RING.forEach((c) => el.classList.toggle(c, badP));
+        }
+      }
       setList(setMissing, names);
       setList(setBadNames, badList);   // เปลี่ยนเฉพาะตอนชุดช่องที่แดงเปลี่ยนจริง → ป้ายหัวหมวดตามทัน
 

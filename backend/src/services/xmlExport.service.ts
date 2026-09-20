@@ -450,7 +450,7 @@ function buildCar(c: Row, type: number, insured: boolean): string {
     el('OPO_NAME', insured ? '' : withTitle(c.owner_title, c.owner_name)) +
     el('OPO_ADDRESS', insured ? '' : c.owner_address) +
     el('OPO_TYPE', insured ? 'รถประกัน' : 'รถคู่กรณี') +
-    el('CAR_REGNO', insured ? c.license_plate : c.plate) +
+    el('CAR_REGNO', emcsPlate(insured ? c.license_plate : c.plate)) +   // EMCS ไม่รับขีด/เครื่องหมาย (20/09/69)
     el('CAR_PROVINCE', provinceCode(insured ? c.car_province : c.province)) +
     // เลขตัวถังว่าง → "-" (EMCS ต้องการค่า ไม่รับ Null/ช่องว่าง; คู่กรณีมักไม่ทราบเลขตัวถัง)
     el('CHASSISNO', String((insured ? c.chassis_no : c.vin) ?? '').trim() || '-') +
@@ -538,7 +538,7 @@ function buildInjure(p: Row, seq: number): string {
     el('CITIZEN_ID', p.cid) +
     el('DRI_RELATION_ID', lookup(RELATION, p.relation)) + // ความสัมพันธ์ (รหัส 1-35)
     el('JOB', p.occupation) +
-    el('CAR_REGNO', p.car_reg) +
+    el('CAR_REGNO', emcsPlate(p.car_reg)) +
     el('ADDRESS', p.address) +
     el('TEL_NO', tel10(p.phone)) +
     el('WORK_PLACE', p.work_place) +
@@ -591,6 +591,20 @@ const alcChk = (test: unknown, result: unknown): string => {
  * (ผู้เอาประกัน txtAssured_Name **ไม่มี** ตัวกรองนี้ — ตรวจแล้ว ไม่ต้องเตือน)
  */
 const EMCS_NAME_OK = /^[ a-zA-Z0-9ก-์.-]*$/;
+
+/**
+ * ทะเบียนรถแบบที่ EMCS รับ — EMCS ไม่รับ "-" และเครื่องหมายในช่องทะเบียน (เคลม 2026013076932 คู่กรณี "83-2668" บันทึกไม่ผ่าน user พบ 20/09/69)
+ * และ ISURVEY ปล่อยให้พิมพ์คำพ่วง/ป้ายที่สอง ("6-7815 สภ.ศรีราชา(ป้ายแดง)" · "743100(หัว),716951" · "ก-0816/ปด")
+ * กติกา: ตัดตั้งแต่ ( / , เป็นต้นไป · ก้อนแรกที่มีตัวเลขคือทะเบียน ก้อนถัดไปที่ไม่มีตัวเลข = คำพ่วง ทิ้ง · ลบช่องว่างและทุกอักขระที่ไม่ใช่ตัวอักษร/ตัวเลข
+ * ⛔ สูตรซ้ำ 3 ที่ต้องตรงกัน: backend xmlExport.emcsPlate · web caseOptions.emcsPlate · บอท emcs._plate (contract test ล็อก)
+ */
+export function emcsPlate(v: unknown): string {
+  const head = String(v ?? '').trim().split(/[(/,]/)[0];
+  const toks = head.split(/\s+/).filter(Boolean);
+  const hasDigit = (x: string) => /\d/.test(x);
+  const kept = toks.length > 1 && hasDigit(toks[0]) ? [toks[0], ...toks.slice(1).filter(hasDigit)] : toks;
+  return kept.join('').replace(/[^0-9A-Za-zก-๙]/g, '');
+}
 
 export type EmcsNameWarning = { tag: string; label: string; value: string; bad: string };
 
@@ -654,10 +668,22 @@ export function sanitizeReportDates(report: Record<string, unknown>): string[] {
   return notes;
 }
 
+/** ทะเบียนที่มีขีด/เครื่องหมาย/คำพ่วง — บอทและไฟล์ XML ตัดให้เอง (emcsPlate) แต่บอกหัวหน้าไว้ก่อนว่าจะกรอกเป็นอะไร (20/09/69) */
+const plateWarn = (out: EmcsNameWarning[], tag: string, label: string, v: unknown) => {
+  const raw = String(v ?? '').trim();
+  if (!raw) return;
+  const clean = emcsPlate(raw);
+  if (clean === raw) return;
+  const bad = [...new Set([...raw].filter((c) => !/[0-9A-Za-zก-๙]/.test(c)))].join(' ');
+  const dropped = [...raw].filter((c) => /[0-9A-Za-zก-๙]/.test(c)).length > clean.length;
+  out.push({ tag, label, value: `${raw} → บอทจะกรอก ${clean || '(ว่าง)'}`, bad: (bad + (dropped ? ' คำพ่วง' : '')).trim() || 'คำพ่วง' });
+};
+
 /** ตรวจก่อนส่ง: ชื่อคนช่องไหนมีอักขระที่ EMCS จะล้างทิ้ง (ว่าง = ไม่มีปัญหา) + วันที่ไม่จริง + ยี่ห้อไม่ตรงประเภทรถ */
 export function emcsNameWarnings(r: Row): EmcsNameWarning[] {
   const out: EmcsNameWarning[] = [];
   brandWarn(out, 'CMFG', 'ยี่ห้อรถประกัน', r.car_type, r.car_brand);
+  plateWarn(out, 'CAR_REGNO', 'ทะเบียนรถประกัน', r.license_plate);
   dateWarn(out, 'DRI_BIRTHDAY', 'วันเกิดผู้ขับขี่รถประกัน', r.driver_birthdate);
   dateWarn(out, 'DRI_DRVDATE_START', 'ใบขับขี่ผู้ขับขี่รถประกัน ออกให้วันที่', r.driver_license_start);
   dateWarn(out, 'DRI_DRVDATE_END', 'ใบขับขี่ผู้ขับขี่รถประกัน หมดอายุวันที่', r.driver_license_end);
@@ -665,6 +691,7 @@ export function emcsNameWarnings(r: Row): EmcsNameWarning[] {
   dateWarn(out, 'POLICY_END', 'วันสิ้นสุดกรมธรรม์', r.policy_end);
   parseJsonArr(r.opposing_parties).forEach((o, i) => {
     brandWarn(out, 'CMFG', `ยี่ห้อรถคู่กรณีคันที่ ${i + 1}`, o.car_type, o.car_brand);
+    plateWarn(out, 'CAR_REGNO', `ทะเบียนรถคู่กรณีคันที่ ${i + 1}`, o.plate);
     dateWarn(out, 'DRI_BIRTHDAY', `วันเกิดผู้ขับขี่รถคู่กรณีคันที่ ${i + 1}`, o.birthdate);
     dateWarn(out, 'DRI_DRVDATE_START', `ใบขับขี่คู่กรณีคันที่ ${i + 1} ออกให้วันที่`, o.license_start);
     dateWarn(out, 'DRI_DRVDATE_END', `ใบขับขี่คู่กรณีคันที่ ${i + 1} หมดอายุวันที่`, o.license_end);

@@ -363,3 +363,17 @@ export const EV_TYPE_OPTIONS = [
   { value: 'MEV', label: 'MEV รถยนต์ไฟฟ้าดัดแปลง (รถยนต์สันดาปที่ดัดแปลงเป็นรถไฟฟ้า)' },
   { value: 'PHEV', label: 'PHEV รถยนต์ไฟฟ้า ปลั๊กอินไฮบริด (PHEV)' },
 ];
+
+/**
+ * ทะเบียนรถแบบที่ EMCS รับ — EMCS ไม่รับ "-" และเครื่องหมายในช่องทะเบียน (เคลม 2026013076932 คู่กรณี "83-2668" บันทึกไม่ผ่าน user พบ 20/09/69)
+ * และ ISURVEY ปล่อยให้พิมพ์คำพ่วง/ป้ายที่สอง ("6-7815 สภ.ศรีราชา(ป้ายแดง)" · "743100(หัว),716951" · "ก-0816/ปด")
+ * กติกา: ตัดตั้งแต่ ( / , เป็นต้นไป · ก้อนแรกที่มีตัวเลขคือทะเบียน ก้อนถัดไปที่ไม่มีตัวเลข = คำพ่วง ทิ้ง · ลบช่องว่างและทุกอักขระที่ไม่ใช่ตัวอักษร/ตัวเลข
+ * ⛔ สูตรซ้ำ 3 ที่ต้องตรงกัน: backend xmlExport.emcsPlate · web caseOptions.emcsPlate · บอท emcs._plate (contract test ล็อก)
+ */
+export function emcsPlate(v: unknown): string {
+  const head = String(v ?? '').trim().split(/[(/,]/)[0];
+  const toks = head.split(/\s+/).filter(Boolean);
+  const hasDigit = (x: string) => /\d/.test(x);
+  const kept = toks.length > 1 && hasDigit(toks[0]) ? [toks[0], ...toks.slice(1).filter(hasDigit)] : toks;
+  return kept.join('').replace(/[^0-9A-Za-zก-๙]/g, '');
+}

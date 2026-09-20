@@ -565,5 +565,11 @@ check('ผู้ขับขี่รถประกัน: แก้วัน�
       src.includes("if (k === 'driver_birthdate' && v !== drvDates.driver_birthdate) { const a = ageFromSeDate(v); if (a) setDrvAge(a); }")
       && src.includes('name="driver_age" value={drvAge} onChange={(e) => setDrvAge(e.target.value)}'));
 
+// ทะเบียนมีขีด/เครื่องหมาย/คำพ่วง (20/09/69): เว็บทาแดง + บอกค่าที่บอทจะกรอก ทั้งการ์ดคู่กรณีและช่องรถประกัน
+check('ทะเบียน: การ์ดคู่กรณีเตือน + รถประกันทาแดง (emcsPlate) · หัวกล่องเตือน EMCS บอกว่าทะเบียนบอทตัดให้เอง',
+      rec.includes("const badPlate = def.k === 'plate' && v.trim() !== '' && plateClean !== v.trim();")
+      && src.includes("form.querySelector('[name=\"license_plate\"]')") && src.includes('const clean = emcsPlate(raw);')
+      && fs.readFileSync(path.join(__dirname, '..', '..', 'web', 'src', 'app', 'inspector', 'cases', '[id]', 'page.tsx'), 'utf8').includes('ทะเบียนรถ: บอทตัดเครื่องหมาย/คำพ่วงให้เองตามที่แสดงหลัง'));
+
 console.log(`\n${failed === 0 ? '✅ ผ่านทั้งหมด' : `❌ ล้มเหลว ${failed} รายการ`}`);
 process.exit(failed ? 1 : 0);

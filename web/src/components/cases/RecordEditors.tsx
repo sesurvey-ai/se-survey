@@ -17,7 +17,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import api from '@/lib/api';
 import { PROVINCE_OPTIONS, CAR_COLOR_OPTIONS, EV_TYPE_OPTIONS, POLICY_TYPE_OPTIONS, carBrandOptions,
-         brandTypeIssue, CAR_TYPE_LABELS, isValidSeDate, carTypeCode, ALL_BRAND, ageFromSeDate } from './caseOptions';
+         brandTypeIssue, CAR_TYPE_LABELS, isValidSeDate, carTypeCode, ALL_BRAND, ageFromSeDate, emcsPlate } from './caseOptions';
 import { districtOptions } from './districtOptions';
 import { insurerOptions, isEmcsInsurer } from './insurerOptions';
 import DamageDialog from './DamageDialog';
@@ -183,6 +183,9 @@ function Field({ def, value, onChange, warnOverride, quickFix }: {
 }) {
   const v = String(value ?? '');
   const badChars = badNameChars(def.k, v);
+  // ทะเบียน: EMCS ไม่รับ "-"/เครื่องหมาย/คำพ่วง (เคลม 2026013076932 "83-2668" บันทึกคู่กรณีไม่ผ่าน 20/09/69) — บอทตัดให้เอง (emcsPlate) บอกหัวหน้าไว้ก่อน
+  const plateClean = def.k === 'plate' ? emcsPlate(v) : '';
+  const badPlate = def.k === 'plate' && v.trim() !== '' && plateClean !== v.trim();
   // "รอตรวจสอบ" ในช่องเลขบัตร = ค่าที่แอป/เว็บเติมตอนคู่กรณีหลบหนี ไม่ใช่เลขผิด (16/09/69)
   const badCid = def.k === 'cid' && v.trim() !== '' && v.trim() !== PENDING_TEXT && !cidChecksum(v);
   // อายุ/วันที่ต้องเป็นรูปแบบที่ระบบประกันรับ — "-" ในช่องอายุทำ EMCS ปัดตกทั้งไฟล์ XML (เคส #282 10/09/69)
@@ -199,6 +202,7 @@ function Field({ def, value, onChange, warnOverride, quickFix }: {
   const offList = def.k === 'insurer' && !isEmcsInsurer(v);
   const warn = warnOverride ? warnOverride
     : badChars ? `EMCS ไม่รับอักขระ ${badChars}`
+      : badPlate ? `EMCS ไม่รับเครื่องหมาย/คำพ่วงในทะเบียน — บอทจะกรอก "${plateClean || '(ว่าง)'}" ถ้าไม่ใช่ แก้ที่นี่`
       : offList ? 'ชื่อนี้ไม่มีใน EMCS — เลือกใหม่จากลิสต์'
         : badCid ? 'เลขบัตรไม่ถูกต้อง — EMCS จะไม่ยอมบันทึกทั้งบล็อก'
           : badAge ? 'อายุต้องเป็นตัวเลข — ใส่ "-" แล้ว EMCS ปัดตกทั้งไฟล์ (ไม่รู้ = เว้นว่าง)'

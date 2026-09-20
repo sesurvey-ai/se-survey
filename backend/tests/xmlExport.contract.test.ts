@@ -11,7 +11,8 @@
  * รัน: npm test   (backend/)
  */
 import fs from 'fs';
-import { generateSurveyXml } from '../src/services/xmlExport.service';
+import { generateSurveyXml, emcsPlate, emcsNameWarnings } from '../src/services/xmlExport.service';
+import { emcsPlate as webEmcsPlate } from '../../web/src/components/cases/caseOptions';
 
 let failed = 0;
 function check(name: string, cond: boolean, detail = '') {
@@ -358,6 +359,24 @@ console.log('\n── การ์ด: เงินฝั่งพนักง�
   // เคส #324 เคลม 2026013075977 (15/09/69): ISURVEY ให้วันเกิดคู่กรณี "00/00/00" + อายุ 0 → อายุ 0 ต้องถือว่าไม่ทราบ (EMCS ไม่รับ 0)
   check('อายุ 0 + วันเกิด 00/00/00 (ไม่ทราบ) → อายุ 1 คู่กับวันเกิดวันนี้', String(opp('0', '00/00/00')).trim() === '1', `ได้ ${JSON.stringify(opp('0', '00/00/00'))}`);
   check('อายุ 0 + วันเกิดจริง → คิดอายุจากวันเกิด ไม่ส่ง 0', /^[1-9]\d{0,2}$/.test(String(opp(0, '20/02/2527'))), `ได้ ${opp(0, '20/02/2527')}`);
+}
+
+// ทะเบียนแบบที่ EMCS รับ (20/09/69 เคลม 2026013076932 คู่กรณี "83-2668" บันทึกไม่ผ่าน): ตัดขีด/เครื่องหมาย/คำพ่วง · สูตร backend = web · CAR_REGNO ใช้ค่าที่ตัดแล้ว · มีคำเตือน
+{
+  const samples: [string, string][] = [['83-2668', '832668'], ['8กจ-5386', '8กจ5386'], ['9กฆ 5003', '9กฆ5003'], [' กท 1234 ', 'กท1234'],
+    ['6-7815 สภ.ศรีราชา(ป้ายแดง)', '67815'], ['743100(หัว),716951', '743100'], ['ข-8052 (ป้ายแดง)', 'ข8052'], ['ก-0816/ปด', 'ก0816'],
+    ['2กฌ-4799 สก.', '2กฌ4799'], ['ก1006อุทัย ปด.', 'ก1006อุทัย'], ['--', ''], ['00', '00'], ['', ''], ['ษข9066', 'ษข9066']];
+  check('emcsPlate: ตัดขีด/เครื่องหมาย/คำพ่วง ตามตัวอย่างจริงใน DB', samples.every(([a, b]) => emcsPlate(a) === b),
+        samples.filter(([a, b]) => emcsPlate(a) !== b).map(([a]) => `${a}→${emcsPlate(a)}`).join(' | '));
+  check('emcsPlate: web = backend ทุกตัวอย่าง', samples.every(([a]) => webEmcsPlate(a) === emcsPlate(a)));
+  const dirty = { ...row, license_plate: 'ข-8052 (ป้ายแดง)', opposing_parties: [{ ...(row.opposing_parties as any[])[0], plate: '83-2668' }] } as never;
+  const x = generateSurveyXml(dirty);
+  check('XML: CAR_REGNO รถประกัน/คู่กรณี ใช้ทะเบียนที่ตัดแล้ว', x.includes('<CAR_REGNO>ข8052</CAR_REGNO>') && x.includes('<CAR_REGNO>832668</CAR_REGNO>') && !x.includes('83-2668'));
+  const w = emcsNameWarnings(dirty);
+  check('คำเตือน EMCS: ทะเบียนที่ถูกตัดขึ้นรายการพร้อมค่าที่บอทจะกรอก',
+        w.some((q) => q.tag === 'CAR_REGNO' && q.label === 'ทะเบียนรถประกัน' && q.value.includes('→ บอทจะกรอก ข8052'))
+        && w.some((q) => q.label === 'ทะเบียนรถคู่กรณีคันที่ 1' && q.value.includes('832668') && q.bad.includes('-')));
+  check('คำเตือน EMCS: ทะเบียนปกติไม่ขึ้น', !emcsNameWarnings(row as never).some((q) => q.tag === 'CAR_REGNO'));
 }
 
 console.log(`\n${failed === 0 ? '✅ ผ่านทั้งหมด' : `❌ ล้มเหลว ${failed} รายการ`}`);

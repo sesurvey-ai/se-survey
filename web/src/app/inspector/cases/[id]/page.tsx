@@ -116,7 +116,7 @@ export default function CaseDetailPage() {
       {nameWarnings.length > 0 && (
         <div className="mb-4 rounded-none border border-amber-300 bg-amber-50 px-4 py-3">
           <p className="text-sm font-semibold text-amber-900">
-            ⚠️ ชื่อ {nameWarnings.length} รายการมีอักขระที่ EMCS ไม่รับ
+            ⚠️ {nameWarnings.length} ช่องมีอักขระที่ EMCS ไม่รับ (ทะเบียนรถ: บอทตัดเครื่องหมาย/คำพ่วงให้เองตามที่แสดงหลัง →)
           </p>
           <p className="mt-1 text-xs text-amber-800">
             EMCS จะ<strong>ลบข้อความทั้งช่องทิ้ง</strong>ทันทีที่มีคนคลิกเข้า-ออกช่องนั้น
