@@ -247,6 +247,16 @@ class _OpponentEditorState extends State<OpponentEditor> {
       ];
 
   Future<void> _save() async {
+    // เลขบัตรผิดตามชนิดบัตรที่เลือก = กั้นแข็ง (ไม่ใช่ "ข้อมูลไม่ครบ" แต่เป็นเลขผิด — แก้ได้ทันที: พิมพ์ใหม่
+    // หรือเอาติ๊ก "ไทย" ออกถ้าเป็นพาสปอร์ต/บัตรต่างชาติ) · ชุดเดียวกับประตูอนุมัติบนเว็บ (user สั่ง 21/09/69)
+    final cidBad = cidIssue(_ctl('cid').text, thai: _cidThai);
+    if (cidBad.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('เลขบัตรประชาชนผู้ขับขี่ไม่ถูกต้อง — $cidBad'),
+        backgroundColor: Colors.red.shade700,
+        duration: const Duration(seconds: 5)));
+      return;
+    }
     final miss = _missing();
     // ไม่บล็อกตาย — คู่กรณีหนีหรือยังไม่ให้ข้อมูล ก็ต้องเก็บทะเบียน/ความเสียหายไว้ก่อน
     // (บล็อกตาย = พนักงานลบคันทิ้งแล้วข้อมูลที่ถ่ายมาหายหมด) แต่ต้องเห็นก่อนออกจากที่เกิดเหตุ
@@ -370,6 +380,7 @@ class _OpponentEditorState extends State<OpponentEditor> {
       onTypeChanged: (v) => setState(() => _cidThai = v),
       checksum: cidChecksum,
       label: 'เลขบัตรประชาชน',
+      issue: cidIssue(_ctl('cid').text, thai: _cidThai),   // เหตุผลใต้ช่อง + กั้นบันทึก (21/09/69)
       onChanged: (_) => setState(() {}));
 
   @override

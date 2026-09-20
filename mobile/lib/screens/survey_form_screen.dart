@@ -16,7 +16,7 @@ import '../app_icons.dart';
 import '../widgets/car_damage_diagram.dart';
 import 'damage_notice_screen.dart';
 import '../data/survey_master.dart'
-    show cidChecksum, kWounds, kLicenseTypes, kCarColors, carBrandsFor, kEmcsPhotoQuota, kEmcsPhotoWarn,
+    show cidChecksum, cidIssue, kWounds, kLicenseTypes, kCarColors, carBrandsFor, kEmcsPhotoQuota, kEmcsPhotoWarn,
          kTitles, kRelations, kCarTypeCodeToLabel, kEvCodeToLabel, kPolicyTypes;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:image_picker/image_picker.dart';
@@ -2834,11 +2834,11 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
   ///    ตอนตรวจ — user รับทราบและเลือกทางนี้
   bool _claimRequired() => _faultIs('คู่กรณีผิด') || _faultIs('ฝ่ายถูกและผิด');
   // คนไทย = ต้องผ่าน checksum 13 หลัก · ต่างชาติ = ขอแค่ไม่ว่าง (บัตรต่างด้าว/พาสปอร์ต
-  // ไม่มีสูตรตรวจ) — user สรุป 2026-08-06
+  // ไม่มีสูตรตรวจ) — user สรุป 2026-08-06 · 21/09/69 ใช้ cidIssue ชุดเดียวกับเว็บ/คู่กรณี/ผู้บาดเจ็บ (ชนิดบัตรที่คนเลือกเป็นตัวคุม)
   bool _driverCidValid() {
     final t = _driverIdCardCtl.text.trim();
     if (t.isEmpty) return false;
-    return _driverIdThai ? cidChecksum(t) : true;
+    return cidIssue(t, thai: _driverIdThai).isEmpty;
   }
 
   // รายการ "ที่ยังขาด" ของแต่ละหมวด (label ที่ผู้ใช้อ่านเข้าใจ)
@@ -3039,10 +3039,15 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
       // ที่อยู่ผู้ขับขี่คู่กรณี (16/09/69): มีข้อมูลส่วนใดส่วนหนึ่ง → จังหวัด/อำเภอ/ตำบล ต้องครบ · ว่างทั้งหมด/"รอตรวจสอบ" = ไม่บังคับ
       // (กติกาเดียวกับ OpponentEditor._missing และเว็บ opponentHasAddress) — ตรวจที่นี่ด้วยเพื่อให้ป้าย "ขาด N" ของ Hub และประตูส่งงานนับ
       alsoMissing: (it) {
-        if (it['pending'] == true) return const <String>[];
         String s(String k) => (it[k] ?? '').toString().trim();
-        if (!OpponentEditor.addrHasData(s('address'), s('moo'), s('home_province'), s('district'), s('subdistrict'))) return const <String>[];
+        // เลขบัตรผู้ขับขี่คู่กรณีตามชนิดบัตรที่เลือก (id_type) — ระเบียนจาก draft/แอปเก่าหลุดด่านใน editor ได้ ดักที่ประตูส่งงานด้วย (21/09/69)
+        final cidBad = cidIssue(s('cid'), thai: s('id_type') != 'foreign');
+        if (it['pending'] == true) return [if (cidBad.isNotEmpty) 'เลขบัตรประชาชนไม่ถูกต้อง'];
+        if (!OpponentEditor.addrHasData(s('address'), s('moo'), s('home_province'), s('district'), s('subdistrict'))) {
+          return [if (cidBad.isNotEmpty) 'เลขบัตรประชาชนไม่ถูกต้อง'];
+        }
         return [
+          if (cidBad.isNotEmpty) 'เลขบัตรประชาชนไม่ถูกต้อง',
           if (s('home_province').isEmpty) 'จังหวัด (ที่อยู่ผู้ขับขี่)',
           if (s('district').isEmpty) 'เขต/อำเภอ (ที่อยู่ผู้ขับขี่)',
           if (s('subdistrict').isEmpty) 'ตำบล/แขวง (ที่อยู่ผู้ขับขี่)',
@@ -3060,7 +3065,10 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
         String s(String k) => (it[k] ?? '').toString().trim();
         // ที่อยู่ผู้บาดเจ็บ (21/09/69): มีส่วนใดส่วนหนึ่ง → จังหวัด/อำเภอ/ตำบล ต้องครบ (กติกาเดียวกับคู่กรณี · InjuredEditor._missing)
         final addr = OpponentEditor.addrHasData(s('address'), s('moo'), s('home_province'), s('district'), s('subdistrict'));
+        // เลขบัตรผู้บาดเจ็บตามชนิดบัตรที่เลือก (ต่างชาติใช้กติกาฟอร์ม EMCS) — ชุดเดียวกับ InjuredEditor._save (21/09/69)
+        final cidBad = cidIssue(s('cid'), thai: s('id_type') != 'foreign', injured: true);
         return [
+          if (cidBad.isNotEmpty) 'เลขบัตรประชาชนไม่ถูกต้อง',
           if (pt.isNotEmpty && pt != 'บุคคลภายนอกรถ' && reg.isEmpty) 'เลขทะเบียนรถ',
           if (addr && s('home_province').isEmpty) 'จังหวัด (ที่อยู่)',
           if (addr && s('district').isEmpty) 'เขต/อำเภอ (ที่อยู่)',
@@ -3944,6 +3952,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
         isThai: _driverIdThai,
         onTypeChanged: (v) => setState(() { _driverIdThai = v; _autosave(); }),
         checksum: cidChecksum,
+        issue: cidIssue(_driverIdCardCtl.text, thai: _driverIdThai),   // เหตุผลใต้ช่อง (21/09/69)
         onChanged: (_) => setState(() { _ocrConf.remove('driver_id_card'); _autosave(); }),
       );
 

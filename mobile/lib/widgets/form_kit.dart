@@ -266,6 +266,9 @@ Widget kCidField(
   String foreignLabel = 'เลขบัตรต่างด้าว/หนังสือเดินทาง',
   bool req = true,
   ValueChanged<String>? onChanged,
+  // เหตุที่เลขนี้ไม่ผ่านตามชนิดบัตรที่เลือก (cidIssue ใน survey_master.dart) — '' = ผ่าน (21/09/69)
+  // โชว์เป็นข้อความแดงใต้ช่อง ให้พนักงานรู้ก่อนกดบันทึกว่าต้องพิมพ์ใหม่หรือเอาติ๊ก "ไทย" ออก
+  String issue = '',
 }) {
   final digits = c.text.replaceAll(RegExp(r'\D'), '');
   final ok = digits.length == kCidMaxLen && checksum(c.text);
@@ -312,7 +315,9 @@ Widget kCidField(
             suffixIcon: (isThai && digits.length == kCidMaxLen)
                 ? Icon(ok ? Icons.check_circle : Icons.error_outline,
                     size: 18, color: ok ? kOk : kDanger)
-                : null),
+                : null)
+            .copyWith(errorText: issue.isEmpty ? null : issue, errorMaxLines: 3,
+                errorStyle: const TextStyle(fontSize: 11.5, color: kDanger, height: 1.25)),
         keyboardType: isThai ? TextInputType.number : TextInputType.text,
         textCapitalization:
             isThai ? TextCapitalization.none : TextCapitalization.characters,

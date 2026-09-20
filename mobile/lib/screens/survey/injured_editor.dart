@@ -121,6 +121,15 @@ class _InjuredEditorState extends State<InjuredEditor> {
       ];
 
   void _save() {
+    // เลขบัตรผิดตามชนิดบัตรที่เลือก = กั้นแข็ง (ไทย 13 หลัก+หลักตรวจสอบ · ต่างชาติตามที่ฟอร์ม EMCS ตรวจ) — ชุดเดียวกับเว็บ (user สั่ง 21/09/69)
+    final cidBad = cidIssue(_ctl('cid').text, thai: _cidThai, injured: true);
+    if (cidBad.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('เลขบัตรประชาชนไม่ถูกต้อง — $cidBad'),
+        backgroundColor: Colors.red.shade700,
+        duration: const Duration(seconds: 5)));
+      return;
+    }
     final miss = _missing();
     if (miss.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -191,6 +200,7 @@ class _InjuredEditorState extends State<InjuredEditor> {
             onTypeChanged: (v) => setState(() => _cidThai = v),
             checksum: cidChecksum,
             label: 'เลขบัตรประชาชน',
+            issue: cidIssue(_ctl('cid').text, thai: _cidThai, injured: true),   // เหตุผลใต้ช่อง + กั้นบันทึก (21/09/69)
             onChanged: (_) => setState(() {})),
         // เลขทะเบียน: EMCS เติมให้เองแบบ readOnly (setDefault_CarRegNo ดึงจากรถประกัน/รถคู่กรณี
         // ตามประเภทผู้บาดเจ็บ) — เลิกบังคับพนักงานพิมพ์เอง
