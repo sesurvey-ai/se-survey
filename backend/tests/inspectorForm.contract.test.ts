@@ -445,6 +445,11 @@ check('ตัวล้าง placeholder เดินลง array/object ขอ�
 check('JSONB ผ่านตัวล้างก่อนเก็บ (เดิมข้ามไปเลย)',
       /JSON\.stringify\(stripSentinel\(/.test(svc3));
 check('รวม "-- เขต --" เป็น placeholder ด้วย', /'-- เขต --'/.test(svc3) && /'-- เขต --'/.test(rec));
+// ดรอปดาวน์ที่ใช้ "0" เป็น "-- ระบุ --" (ประเภทใบขับขี่/คำนำหน้า/ความสัมพันธ์ผู้ขับขี่) ต้องถูกล้างเป็นค่าว่างทั้ง 2 เส้นบันทึก (เคส #460 20/09/69) · ev_type "0" เป็นค่าจริง ห้ามล้าง
+check('ค่า "0" ของดรอปดาวน์ผู้ขับขี่ 3 ช่องถูกล้างเป็นว่างตอนบันทึก (bindVal + เส้น update) · ไม่แตะ ev_type',
+      /const ZERO_PLACEHOLDER_FIELDS = new Set\(\['driver_license_type', 'driver_title', 'driver_relation'\]\);/.test(svc3)
+      && /const bindVal = \(f: string, v: unknown\): unknown => \{\s*v = stripZero\(f, v\);/.test(svc3)
+      && svc3.includes('const sv = stripSentinel(stripZero(key, val));'));
 check('เวลา "บ.ประกันแจ้งสำรวจภัย" ไม่ถูกคอลัมน์เก่าทับ',
       xml4.includes("el('INS_CALLING_SURV_DATE', toXmlCE(r.acc_insurance_notify_date))"));
 

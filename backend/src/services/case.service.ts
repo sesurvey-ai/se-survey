@@ -41,6 +41,11 @@ const JSONB_FIELDS = new Set([
 // ข้อความ placeholder ของ dropdown ในแอป — ต้องไม่ถูกบันทึกเป็นค่าจริง (เคยหลุดเข้า acc_province/
 // car_color → รหัสจังหวัดใน XML ที่ส่งเข้า EMCS ว่าง) → normalize เป็นค่าว่างที่ชั้น bind (กันทุกฟิลด์)
 const PLACEHOLDER_SENTINELS = new Set(['-- ระบุ --', '-- เลือก --', '-- เขต --']);
+// ดรอปดาวน์บนหน้าเคสเว็บที่ใช้ค่า "0" เป็น "-- ระบุ --" (ประเภทใบขับขี่ · คำนำหน้า · ความสัมพันธ์ ผู้ขับขี่รถประกัน)
+// "0" ของช่องพวกนี้ = ยังไม่เลือก → ล้างเป็นค่าว่างเหมือน sentinel อื่น (เคส #460 20/09/69: บอทเห็น "0" แล้วหยุดถาม
+// ประเภทใบขับขี่ทั้งที่ EMCS ไม่บังคับ) ⛔ ระบุรายชื่อช่องเท่านั้น — ev_type "0" = ไม่ใช่รถไฟฟ้า เป็นค่าจริง
+const ZERO_PLACEHOLDER_FIELDS = new Set(['driver_license_type', 'driver_title', 'driver_relation']);
+const stripZero = (f: string, v: unknown): unknown => (ZERO_PLACEHOLDER_FIELDS.has(f) && typeof v === 'string' && v.trim() === '0' ? '' : v);
 /**
  * ⛔ ต้องเดินลงใน array/object ด้วย — คู่กรณี/ผู้บาดเจ็บ/ทรัพย์สิน เก็บเป็น JSONB
  *    ค่า placeholder ที่หลุดเข้าไปในนั้นไม่เคยถูกล้างเลย (เดิมเช็คแค่ typeof v === 'string')
@@ -67,6 +72,7 @@ const arrivalCategory = (fileName: string): string | null =>
 
 // แปลงค่า field ให้พร้อม bind: JSONB → stringify (ยกเว้นเป็น string อยู่แล้ว), อื่นๆ → ตามเดิม
 const bindVal = (f: string, v: unknown): unknown => {
+  v = stripZero(f, v);
   if (JSONB_FIELDS.has(f)) {
     if (v === undefined || v === null) return null;
     // ⛔ JSONB ก็ต้องผ่านตัวล้าง placeholder — เดิมข้ามไปเลย ค่า '-- ระบุ --' ในตาราง
@@ -1956,7 +1962,7 @@ export const caseService = {
       if (validCols.has(key) && val !== undefined) {
         fields.push(`${key} = $${idx++}`);
         // กัน placeholder "-- ระบุ --" จากฟอร์มเว็บ inspector (select ที่ยังไม่เลือก ส่ง label มาเป็นค่า)
-        const sv = stripSentinel(val);
+        const sv = stripSentinel(stripZero(key, val));
         // JSONB คอลัมน์ต้อง stringify (และถือ '' เป็น null) กัน error type mismatch
         params.push(JSONB_FIELDS.has(key) ? (sv === '' ? null : bindVal(key, sv)) : (sv === '' ? null : sv));
       }
