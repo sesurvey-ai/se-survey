@@ -11,7 +11,7 @@ import { setFormDirty } from '@/lib/dirtyGuard';
 import { useSocket } from '@/hooks/useSocket';
 import { DamageItem, DamageList, autoDamageDesc } from './DamageEditor';
 import DamageDialog from './DamageDialog';
-import { opponentMissing, INJURED_REQUIRED, PROPERTY_REQUIRED, cidChecksum } from './RecordEditors';
+import { opponentMissing, INJURED_REQUIRED, PROPERTY_REQUIRED, cidChecksum, ageMismatch, PLACEHOLDER_BIRTHDATE } from './RecordEditors';
 import { InjuredEditor, PropertyEditor, OpponentEditor, dropEmptyRecords, dropEmptyOpponents, emcsBadChars, RecordItem, LooseRecord } from './RecordEditors';
 import PolicyInfoModal from './PolicyInfoModal';
 
@@ -562,6 +562,21 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
   });
   // อายุผู้ขับขี่รถประกัน — เป็น state เพื่อให้คำนวณใหม่ได้ตอนแก้วันเกิด (user สั่ง 19/09/69) · ยังพิมพ์ทับได้ · ชื่อช่อง driver_age ส่งกับฟอร์มเหมือนเดิม
   const [drvAge, setDrvAge] = useState<string>(report.driver_age != null ? String(report.driver_age) : '');
+  // อายุผู้ขับขี่รถประกัน (user สั่ง 20/09/69 เคส #460: วันเกิด 01/01/2569 + อายุ 0 หลุดอนุมัติ): อายุ 0 หรือต่างจากวันเกิดเกิน 1 ปี
+  // → เตือนใต้ช่อง + ปุ่ม "ใช้ N" + นับเป็นยังไม่ครบ (กั้นอนุมัติ ดู paint) — กติกาเดียวกับการ์ดคู่กรณี (ageMismatch)
+  const drvAgeExp = ageMismatch(drvAge, drvDates.driver_birthdate);
+  const drvAgeZero = /^0+$/.test(drvAge.trim());
+  const drvAgeFix = drvAgeZero ? ageFromSeDate(drvDates.driver_birthdate) : drvAgeExp;
+  const drvAgeWarn = drvAgeZero
+    ? `อายุ 0 ไม่ใช่อายุจริง (EMCS ไม่รับ 0)${drvAgeFix ? ` — จากวันเกิดควรเป็น ${drvAgeFix}` : ' — แก้วันเกิดหรืออายุ'}`
+    : drvAgeExp ? `อายุไม่ตรงกับวันเกิด (ควรเป็น ${drvAgeExp})` : '';
+  // วันเกิดตัวแทนค่า 01/01/2500 → อายุ = ค่าที่คำนวณจากปีนั้น แก้ให้เองตอนเปิดหน้า (ชุดเดียวกับการ์ดคู่กรณี 20/09/69)
+  useEffect(() => {
+    if (String(report.driver_birthdate ?? '').trim() !== PLACEHOLDER_BIRTHDATE) return;
+    const exp = ageFromSeDate(PLACEHOLDER_BIRTHDATE);
+    if (exp && String(report.driver_age ?? '').trim() !== exp) setDrvAge(exp);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const DRV_DATE_LABEL: Record<string, string> = {
     driver_birthdate: 'วันเกิดผู้ขับขี่', driver_license_start: 'ใบขับขี่ ออกให้วันที่', driver_license_end: 'ใบขับขี่ หมดอายุวันที่',
   };
@@ -607,7 +622,7 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
   const [drvCidThai, setDrvCidThai] = useState<boolean>((report.driver_id_type || 'thai') !== 'foreign');
   const drvCidWarn = (() => {
     const v = drvCid.trim();
-    if (!v || v === '-') return '';
+    if (!v || v === '-' || v === 'รอตรวจสอบ' || /^-+$/.test(v)) return '';   // ตัวแทนค่า = ไม่ทราบ → บอท/XML กรอก "-" ให้ (20/09/69 เคส #460)
     if (v.length > 13) return `ยาว ${v.length} ตัว — ช่อง EMCS รับ 13 ตัว นำเข้าไฟล์ไม่ผ่านทั้งไฟล์ (บัตรไทยมี 13 หลัก)`;
     if (drvCidThai && !cidChecksum(v)) return 'เลขบัตรไทยไม่ถูกต้อง (ต้อง 13 หลักและผ่านหลักตรวจสอบ) — ตรวจกับบัตรอีกครั้ง';
     return '';
@@ -1361,6 +1376,14 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
       for (const nm of REQ_RADIO_GROUPS) {
         if (mainFromFirstRef.current && mainLockedRef.current.has(nm)) continue;   // ข้อมูลหลักจากครั้งที่ 1
         if (!form.querySelector(`input[name="${nm}"]:checked`)) names.push(nm);
+      }
+      // อายุผู้ขับขี่รถประกัน 0 / ไม่ตรงวันเกิด → นับเป็นยังไม่ครบ (user สั่ง 20/09/69 เคส #460) — อ่านสดจากช่อง
+      {
+        const ageEl = form.elements.namedItem('driver_age') as HTMLInputElement | null;
+        const bdEl = form.elements.namedItem('driver_birthdate') as HTMLInputElement | null;
+        const ageV = String(ageEl?.value ?? '').trim();
+        const locked = mainFromFirstRef.current && mainLockedRef.current.has('driver_age');   // ข้อมูลหลักจากครั้งที่ 1
+        if (ageEl && !locked && !names.includes('driver_age') && (/^0+$/.test(ageV) || ageMismatch(ageV, bdEl?.value))) names.push('driver_age');
       }
       // ครั้งที่ 2+: ผลการดำเนินงานของครั้งนี้ (ช่องในรางขวา) ต้องมี — อ่านสดจากช่องทุกครั้งที่พิมพ์
       const rsEl = form.querySelector('[name="survey_result"]') as HTMLTextAreaElement | null;
@@ -2796,7 +2819,17 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
                 {drvDateWarnEl('driver_birthdate')}
               </F>
               <F label="อายุ" req={<Req of="driver_age" />}>
-                <input type="text" disabled={d} name="driver_age" value={drvAge} onChange={(e) => setDrvAge(e.target.value)} className={CTL(d)} />
+                <input type="text" disabled={d} name="driver_age" value={drvAge} onChange={(e) => setDrvAge(e.target.value)} title={drvAgeWarn || undefined}
+                  className={`${CTL(d)} ${drvAgeWarn ? 'border-red-500 ring-1 ring-red-300' : ''}`} />
+                {drvAgeWarn && (
+                  <div className="mt-1 text-[0.6875rem] leading-tight text-red-600 flex items-center gap-2 flex-wrap">
+                    <span>⚠ {drvAgeWarn}</span>
+                    {!d && drvAgeFix && (
+                      <button type="button" onClick={() => setDrvAge(drvAgeFix)}
+                        className="px-1.5 py-0.5 border border-red-300 rounded-none bg-white text-red-700 hover:bg-red-50">ใช้ {drvAgeFix}</button>
+                    )}
+                  </div>
+                )}
               </F>
               <F label="โทรศัพท์" req={<Req of="driver_phone" />}>
                 <input type="text" disabled={d} name="driver_phone" defaultValue={report.driver_phone || ''} className={CTL(d)} />

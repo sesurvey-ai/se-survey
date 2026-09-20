@@ -470,7 +470,7 @@ const NO_INSURER = 'ไม่มีบริษัทประกันภัย
 /** ค่าที่แอป/เว็บเคยเติมตอนติ๊ก "รอตรวจสอบ" (ชุด 16/09/69 — 17/09 เปลี่ยนเป็น "-"/"00"/"ไม่ทราบชื่อ") ยังอยู่ในคันเก่า → ใช้ยกเว้นเตือนเลขบัตร/ที่อยู่ */
 const PENDING_TEXT = 'รอตรวจสอบ';
 /** วันเกิดตัวแทนค่าของชุดรอตรวจสอบ (17/09/69) — อายุต้องเป็นค่าที่คำนวณจากวันนี้เสมอ (user เคาะ 20/09/69) */
-const PLACEHOLDER_BIRTHDATE = '01/01/2500';
+export const PLACEHOLDER_BIRTHDATE = '01/01/2500';
 
 /** 8 ช่องที่ `vlidOpoCar` บล็อกทุกบริษัท — ใช้นับป้าย "ยังขาด N ช่องบังคับ" */
 export const OPPONENT_REQUIRED = [
@@ -479,12 +479,14 @@ export const OPPONENT_REQUIRED = [
 
 /** อายุไม่ตรงกับวันเกิด (ต่างเกิน 1 ปี — 1 ปีคืออายุ ณ วันเกิดเหตุกับวันนี้ต่างกันได้) → คืนอายุที่ควรเป็น, '' = ไม่มีปัญหา
  *  (user เคาะ 20/09/69 เคส #528: วันเกิด 01/01/2500 แต่อายุ 1 → EMCS คำนวณเองได้ 69 แล้วบอทกรอกทับด้วย 1) */
-export const opponentAgeMismatch = (rec: LooseRecord): string => {
-  const a = String(rec.age ?? '').trim();
-  const exp = ageFromSeDate(rec.birthdate);
+export const ageMismatch = (age: unknown, birthdate: unknown): string => {
+  const a = String(age ?? '').trim();
+  const exp = ageFromSeDate(birthdate);
   if (!/^\d{1,3}$/.test(a) || exp === '') return '';
   return Math.abs(Number(a) - Number(exp)) > 1 ? exp : '';
 };
+// ใช้ร่วมกับผู้ขับขี่รถประกันในหน้าเคส (20/09/69 เคส #460) — กติกาเดียวกัน
+export const opponentAgeMismatch = (rec: LooseRecord): string => ageMismatch(rec.age, rec.birthdate);
 
 /**
  * ช่องบังคับของคู่กรณีคันนี้ที่ยังว่าง — รวมช่องบังคับแบบมีเงื่อนไข (ยี่ห้อ เมื่อเลือกประเภทรถแล้ว)

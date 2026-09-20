@@ -571,5 +571,16 @@ check('ทะเบียน: การ์ดคู่กรณีเตือ�
       && src.includes("form.querySelector('[name=\"license_plate\"]')") && src.includes('const clean = emcsPlate(raw);')
       && fs.readFileSync(path.join(__dirname, '..', '..', 'web', 'src', 'app', 'inspector', 'cases', '[id]', 'page.tsx'), 'utf8').includes('ทะเบียนรถ: บอทตัดเครื่องหมาย/คำพ่วงให้เองตามที่แสดงหลัง'));
 
+// ผู้ขับขี่รถประกัน (user สั่ง 20/09/69 เคส #460): อายุ 0 / ไม่ตรงวันเกิด → เตือน+ปุ่มใช้ N+กั้นอนุมัติ · วันเกิด 01/01/2500 → อายุคำนวณตอนเปิดหน้า · เลขบัตรตัวแทนค่าไม่เตือนผิด
+check('ผู้ขับขี่รถประกัน: ageMismatch ใช้ร่วมกับคู่กรณี · เตือนอายุ 0/ไม่ตรงวันเกิด + ปุ่มใช้ N · นับ driver_age เป็นยังไม่ครบ · 01/01/2500 → อายุคำนวณตอนเปิด · เลขบัตร "รอตรวจสอบ" ไม่เตือน',
+      rec.includes('export const ageMismatch = (age: unknown, birthdate: unknown): string =>')
+      && rec.includes('export const opponentAgeMismatch = (rec: LooseRecord): string => ageMismatch(rec.age, rec.birthdate);')
+      && src.includes('const drvAgeExp = ageMismatch(drvAge, drvDates.driver_birthdate);')
+      && src.includes("const drvAgeZero = /^0+$/.test(drvAge.trim());")
+      && src.includes("(/^0+$/.test(ageV) || ageMismatch(ageV, bdEl?.value))) names.push('driver_age');")
+      && src.includes('onClick={() => setDrvAge(drvAgeFix)}')
+      && src.includes("if (String(report.driver_birthdate ?? '').trim() !== PLACEHOLDER_BIRTHDATE) return;")
+      && src.includes("if (!v || v === '-' || v === 'รอตรวจสอบ' || /^-+$/.test(v)) return '';"));
+
 console.log(`\n${failed === 0 ? '✅ ผ่านทั้งหมด' : `❌ ล้มเหลว ${failed} รายการ`}`);
 process.exit(failed ? 1 : 0);

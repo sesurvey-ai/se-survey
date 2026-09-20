@@ -485,11 +485,12 @@ function buildCar(c: Row, type: number, insured: boolean): string {
     // DRI_TELNO บน EMCS เป็น varchar(10) — ยาวกว่านั้น importer ตีกลับทั้งไฟล์
     // ("ข้อมูลนำเข้ามีขนาดเกิน") ช่องโทรศัพท์อื่นใช้ tel10 กันหมดแล้ว ตกหล่นเฉพาะช่องนี้
     // เจอจริง 2026-08-10 เคส #124: ผู้ขับคู่กรณีถูกกรอกเลข 13 หลักลงช่องโทรศัพท์
-    el('DRI_TELNO', tel10(insured ? c.driver_phone : oppText(c.phone))) +
-    el('DRI_CARDID', insured ? c.driver_id_card : oppText(c.cid)) +
-    el('DRI_DRVID', insured ? c.driver_license_no : oppText(c.license_no)) +
+    // ผู้ขับขี่รถประกันก็ผ่าน oppText (20/09/69 เคส #460: หัวหน้าพิมพ์ "รอตรวจสอบ" ในเลขบัตร/ที่อยู่) — "รอตรวจสอบ"/"--" → "-" เหมือนคู่กรณี
+    el('DRI_TELNO', tel10(oppText(insured ? c.driver_phone : c.phone))) +
+    el('DRI_CARDID', oppText(insured ? c.driver_id_card : c.cid)) +
+    el('DRI_DRVID', oppText(insured ? c.driver_license_no : c.license_no)) +
     el('DRI_DRVTYPE', lookup(LICENSE_TYPE, insured ? c.driver_license_type : c.license_type)) +
-    el('DRI_DRVPLACE', insured ? c.driver_license_place : oppText(c.license_place)) +
+    el('DRI_DRVPLACE', oppText(insured ? c.driver_license_place : c.license_place)) +
     el('DRI_DRVDATE_START', toXmlCE(insured ? c.driver_license_start : c.license_start)) +
     el('DRI_DRVDATE_END', toXmlCE(insured ? c.driver_license_end : c.license_end)) +
     el('DRI_ORDER', '') +

@@ -413,5 +413,18 @@ console.log('\n── การ์ด: เงินฝั่งพนักง�
         tag('DRI_NAME') === '-' && tag('CAR_REGNO') === '00' && tag('DRI_AGE') === expAge, `${tag('DRI_NAME')} | ${tag('CAR_REGNO')} | ${tag('DRI_AGE')} (ควร ${expAge})`);
 }
 
+// ผู้ขับขี่รถประกัน (user สั่ง 20/09/69 เคส #460): เลขบัตร/ใบขับขี่/ที่ออกใบขับขี่/โทร "รอตรวจสอบ"/"--" → "-" · อายุ 0 + วันเกิด 01/01/2500 → DRI_AGE คำนวณ
+{
+  const x = generateSurveyXml({ ...row, driver_id_card: 'รอตรวจสอบ', driver_license_no: '--', driver_license_place: 'รอตรวจสอบ', driver_phone: 'รอตรวจสอบ',
+                                driver_birthdate: '01/01/2500', driver_age: 0 } as never);
+  // บล็อกรถประกัน = TXN_SURV_CAR ที่ OPO_NAME ว่าง
+  const ins = (x.match(/<TXN_SURV_CAR>[\s\S]*?<\/TXN_SURV_CAR>/g) || []).find((b) => !/<OPO_NAME>\S/.test(b)) || '';
+  const tag = (t: string) => (ins.match(new RegExp('<' + t + '>([^<]*)<')) || ['', '?'])[1];
+  const expAge = String(new Date().getFullYear() + 543 - 2500);
+  check('XML รถประกัน: DRI_CARDID=- · DRI_DRVID=- · DRI_DRVPLACE=- · DRI_TELNO ว่าง (ตัวแทนค่า) · DRI_AGE คำนวณจาก 01/01/2500 ไม่ใช่ 0',
+        tag('DRI_CARDID') === '-' && tag('DRI_DRVID') === '-' && tag('DRI_DRVPLACE') === '-' && tag('DRI_TELNO').trim() === '' && tag('DRI_AGE') === expAge && !ins.includes('รอตรวจสอบ'),
+        `${tag('DRI_CARDID')} | ${tag('DRI_DRVID')} | ${tag('DRI_DRVPLACE')} | ${tag('DRI_TELNO')} | ${tag('DRI_AGE')} (ควร ${expAge})`);
+}
+
 console.log(`\n${failed === 0 ? '✅ ผ่านทั้งหมด' : `❌ ล้มเหลว ${failed} รายการ`}`);
 process.exit(failed === 0 ? 0 : 1);
