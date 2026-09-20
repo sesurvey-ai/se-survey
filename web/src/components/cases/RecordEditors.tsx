@@ -172,11 +172,18 @@ const cls = (def: FieldDef, value: string, warn: string) =>
  */
 /** เลขบัตรในการ์ด (ผู้บาดเจ็บ/คู่กรณี) "ผิด" = ไม่ใช่ตัวแทนค่า และ (ยาวเกิน 13 — EMCS DRI_CARDID รับ 13 ตัว ไฟล์ปัดตกทั้งไฟล์
  *  · หรือ บัตรไทย (id_type ไม่ใช่ foreign) ไม่ผ่านหลักตรวจสอบ) — ใช้ทั้งเตือนใต้ช่องและประตูอนุมัติ (21/09/69 เคส #504) */
-export const cidBad = (cid: unknown, idType?: unknown): boolean => {
+export const cidBad = (cid: unknown, idType?: unknown, injured = false): boolean => {
   const v = String(cid ?? '').trim();
   if (!v || v === PENDING_TEXT_CID || /^-+$/.test(v)) return false;
-  if (v.length > 13) return true;
-  return idType !== 'foreign' && !cidChecksum(v);
+  if (injured) {
+    // ผู้บาดเจ็บ = กติกาของ EMCS เอง (CheckTextBoxCitizenValid ในฟอร์มผู้บาดเจ็บ): สั้นกว่า 13 และเป็นเลขล้วน/อักษรอังกฤษล้วน
+    // → "จำนวนหลักไม่ครบ" ไม่บันทึกทั้งบล็อก (ไม่มีบัตรไทยให้ใช้ "-") · 13 ตัว → หลักตรวจสอบบัตรไทยทุกชนิด · อื่น ๆ (พาสปอร์ตมีตัวอักษร) รับ
+    if (v.length < 13) return /^\d+$/.test(v) || /^[A-Za-z]+$/.test(v);
+    if (v.length === 13) return !cidChecksum(v);
+    return false;
+  }
+  if (v.length > 13) return true;                    // DRI_CARDID 13 ตัว — ไฟล์ XML ปัดตกทั้งไฟล์
+  return idType !== 'foreign' && !cidChecksum(v);    // คู่กรณี: บัตรไทยต้องผ่านหลักตรวจสอบ · ต่างชาติไม่ตรวจ
 };
 const PENDING_TEXT_CID = 'รอตรวจสอบ';
 export const cidChecksum = (raw: string): boolean => {
@@ -204,7 +211,8 @@ function Field({ def, value, onChange, warnOverride, quickFix, rec }: {
   // "รอตรวจสอบ" ในช่องเลขบัตร = ค่าที่แอป/เว็บเติมตอนคู่กรณีหลบหนี ไม่ใช่เลขผิด (16/09/69)
   // "-" = ไม่ทราบ ตามกติกาช่องข้อความบังคับของ EMCS (ผู้บาดเจ็บ/คู่กรณี user เคาะ 20/09/69) ไม่ใช่เลขผิด
   // ผู้บาดเจ็บชนิดบัตร "ต่างชาติ/พาสปอร์ต" (id_type foreign — ชุดเดียวกับแอป 21/09/69) ไม่มีสูตรตรวจ → ไม่เตือน
-  const badCid = def.k === 'cid' && cidBad(v, rec?.id_type);   // ยาวเกิน 13 หรือบัตรไทยไม่ผ่านหลักตรวจสอบ (21/09/69 ใช้ตัวเดียวกับประตูอนุมัติ)
+  const injuredRec = !!rec && 'person_type' in rec;   // ระเบียนผู้บาดเจ็บ (มี person_type) ใช้กติกา EMCS ของฟอร์มผู้บาดเจ็บ
+  const badCid = def.k === 'cid' && cidBad(v, rec?.id_type, injuredRec);   // ตัวเดียวกับประตูอนุมัติ (21/09/69)
   // อายุ/วันที่ต้องเป็นรูปแบบที่ระบบประกันรับ — "-" ในช่องอายุทำ EMCS ปัดตกทั้งไฟล์ XML (เคส #282 10/09/69)
   const badAge = def.k === 'age' && v.trim() !== '' && !/^\d{1,3}$/.test(v.trim());
   // อายุ 0 / วันเกิดปีปัจจุบัน = ค่าที่คนพิมพ์แทน "ไม่ทราบ" (เคส #433 21/09/69) → เตือน + กั้น (คู่กรณี/ผู้บาดเจ็บ) ให้ใช้ 01/01/2500 แทน
@@ -224,7 +232,9 @@ function Field({ def, value, onChange, warnOverride, quickFix, rec }: {
     : badChars ? `EMCS ไม่รับอักขระ ${badChars}`
       : badPlate ? `EMCS ไม่รับเครื่องหมาย/คำพ่วงในทะเบียน — บอทจะกรอก "${plateClean || '00'}" ถ้าไม่ใช่ แก้ที่นี่`
       : offList ? 'ชื่อนี้ไม่มีใน EMCS — เลือกใหม่จากลิสต์'
-        : badCid ? (v.trim().length > 13 ? `เลขบัตรยาว ${v.trim().length} ตัว — EMCS รับ 13 ตัว (ไฟล์ปัดตกทั้งไฟล์) ตรวจกับบัตรอีกครั้ง` : 'เลขบัตรไม่ถูกต้อง — EMCS จะไม่ยอมบันทึกทั้งบล็อก')
+        : badCid ? (v.trim().length > 13 ? `เลขบัตรยาว ${v.trim().length} ตัว — EMCS รับ 13 ตัว (ไฟล์ปัดตกทั้งไฟล์) ตรวจกับบัตรอีกครั้ง`
+            : (injuredRec && v.trim().length < 13) ? 'EMCS ไม่รับเลขล้วน/อักษรล้วนที่สั้นกว่า 13 ตัว (จำนวนหลักไม่ครบ) — ไม่มีบัตรไทยให้ใช้ "-"'
+            : 'เลขบัตรไม่ถูกต้อง — EMCS จะไม่ยอมบันทึกทั้งบล็อก')
           : badAge ? 'อายุต้องเป็นตัวเลข — ใส่ "-" แล้ว EMCS ปัดตกทั้งไฟล์ (ไม่รู้ = เว้นว่าง)'
           : zeroAge ? 'อายุ 0 ไม่ใช่อายุจริง — ไม่ทราบ: คู่กรณีใช้วันเกิด 01/01/2500 (อายุคำนวณให้) · ผู้บาดเจ็บเว้นว่าง'
           : thisYearBirth ? 'วันเกิดเป็นปีปัจจุบัน ไม่ใช่วันเกิดจริง — ไม่ทราบให้ใช้ 01/01/2500'
@@ -624,7 +634,7 @@ const recordMissing = (defs: FieldDef[], required: string[], rec: LooseRecord): 
 ];
 export const injuredMissing = (rec: LooseRecord): string[] =>
   [...recordMissing(INJURED_FIELDS, INJURED_REQUIRED, rec), ...(String(rec.age ?? '').trim() === '0' ? ['age'] : []),
-   ...(cidBad(rec.cid, rec.id_type) ? ['cid'] : [])];   // อายุ 0 ไม่ใช่อายุจริง · เลขบัตรผิด/ยาวเกิน (EMCS ไม่บันทึกบล็อก / ไฟล์ปัดตก) 21/09/69
+   ...(cidBad(rec.cid, rec.id_type, true) ? ['cid'] : [])];   // อายุ 0 ไม่ใช่อายุจริง · เลขบัตรผิด/ยาวเกิน (EMCS ไม่บันทึกบล็อก / ไฟล์ปัดตก) 21/09/69
 export const propertyMissing = (rec: LooseRecord): string[] => recordMissing(PROPERTY_FIELDS, PROPERTY_REQUIRED, rec);
 
 /** เจ้าของรถคู่กรณี: คำนำหน้า (เลือก ไม่บังคับ — เจ้าของเป็นบริษัทได้) + ชื่อ ในช่องเดียว (16/09/69) → EMCS/XML รวมเป็น "นาย บุญเลี้ยง ชงสุวรรณ" */

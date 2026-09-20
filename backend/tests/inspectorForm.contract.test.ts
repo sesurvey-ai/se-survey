@@ -623,11 +623,12 @@ check('อายุ 0 / วันเกิดปีปัจจุบัน: ก
 // เลขบัตรเข้าประตูอนุมัติ (เคส #504 21/09/69: 14 หลักถูกตีเป็นต่างชาติแล้วหลุดอนุมัติ) — ผู้ขับขี่รถประกัน (เตือนทุกชนิด + ต่างชาติเลขล้วนไม่ครบ 13) · ผู้บาดเจ็บ cidBad · คู่กรณียาวเกิน 13
 check('เลขบัตร: ผู้ขับขี่รถประกันกั้นอนุมัติเมื่อมีคำเตือน (+ ต่างชาติเลขล้วนไม่ครบ 13) · ผู้บาดเจ็บ/คู่กรณีใช้ cidBad/ยาวเกิน 13 ในประตู · การ์ดเตือนยาวเกิน',
       src.includes("...(drvCidWarn ? [`เลขบัตรผู้ขับขี่รถประกัน: ${drvCidWarn}`] : []),")
-      && src.includes("if (!drvCidThai && /^\\d+$/.test(v) && v.length !== 13) return")
-      && rec.includes('export const cidBad = (cid: unknown, idType?: unknown): boolean => {')
-      && rec.includes("...(cidBad(rec.cid, rec.id_type) ? ['cid'] : [])];")
+      && src.includes("v.length !== 13 && /[ก-๙]/.test(`${report.driver_first_name ?? ''}${report.driver_last_name ?? ''}${report.driver_name ?? ''}`)) return")   // กั้นเฉพาะชื่อไทย (คนต่างชาติเลขล้วน 7–12 หลักผ่าน)
+      && rec.includes('export const cidBad = (cid: unknown, idType?: unknown, injured = false): boolean => {')
+      && rec.includes("...(cidBad(rec.cid, rec.id_type, true) ? ['cid'] : [])];")
       && rec.includes("...(String(rec.cid ?? '').trim().length > 13 ? ['cid'] : []),")
-      && rec.includes("const badCid = def.k === 'cid' && cidBad(v, rec?.id_type);"));
+      && rec.includes("const badCid = def.k === 'cid' && cidBad(v, rec?.id_type, injuredRec);")
+      && rec.includes("if (v.length < 13) return /^\\d+$/.test(v) || /^[A-Za-z]+$/.test(v);"));   // ผู้บาดเจ็บ = กติกา EMCS
 
 console.log(`\n${failed === 0 ? '✅ ผ่านทั้งหมด' : `❌ ล้มเหลว ${failed} รายการ`}`);
 process.exit(failed ? 1 : 0);
