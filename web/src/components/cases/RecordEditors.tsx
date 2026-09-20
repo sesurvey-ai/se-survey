@@ -187,7 +187,8 @@ function Field({ def, value, onChange, warnOverride, quickFix }: {
   const plateClean = def.k === 'plate' ? emcsPlate(v) : '';
   const badPlate = def.k === 'plate' && v.trim() !== '' && plateClean !== v.trim();
   // "รอตรวจสอบ" ในช่องเลขบัตร = ค่าที่แอป/เว็บเติมตอนคู่กรณีหลบหนี ไม่ใช่เลขผิด (16/09/69)
-  const badCid = def.k === 'cid' && v.trim() !== '' && v.trim() !== PENDING_TEXT && !cidChecksum(v);
+  // "-" = ไม่ทราบ ตามกติกาช่องข้อความบังคับของ EMCS (ผู้บาดเจ็บ/คู่กรณี user เคาะ 20/09/69) ไม่ใช่เลขผิด
+  const badCid = def.k === 'cid' && v.trim() !== '' && v.trim() !== PENDING_TEXT && v.trim() !== '-' && !cidChecksum(v);
   // อายุ/วันที่ต้องเป็นรูปแบบที่ระบบประกันรับ — "-" ในช่องอายุทำ EMCS ปัดตกทั้งไฟล์ XML (เคส #282 10/09/69)
   const badAge = def.k === 'age' && v.trim() !== '' && !/^\d{1,3}$/.test(v.trim());
   // วันที่ต้องเป็น "วันจริง" ไม่ใช่แค่รูปแบบ — "00/00/2569" ผ่านรูปแบบแต่ EMCS ปัดตกทั้งไฟล์ (เคส #299 15/09/69)

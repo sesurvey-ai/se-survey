@@ -530,25 +530,34 @@ function buildAsset(a: Row, seq: number): string {
 // → ตรง EMCS canonical 20/20 tag. DRI_RELATION_ID/WORK_PLACE/POSITION/INCOME/FROM_DATE/TO_DATE
 // = สคีมา EMCS จริง (เดิมเดา TREAT_FROM/TREAT_TO/RELATION ผิด). bot fill_injuries กรอกฟอร์มเป็น
 // backup ผ่าน id จาก ผู้บาดเจ็บ.html; EMCS importer น่าจะเติมเองจาก XML ที่ตรงสคีมาแล้ว
+/** ช่องผู้บาดเจ็บ (user เคาะ 20/09/69): คนพิมพ์ "รอตรวจสอบ" แทนไม่ทราบ → "-" · ช่องบังคับ (ชื่อ/บัตร/รพ./อาการ) ว่าง → "-" ตามกติกาช่องข้อความบังคับของ EMCS · ชุดเดียวกับบอท emcs._inj_text */
+const injText = (v: unknown, required = false): string => {
+  const s = String(v ?? '').trim();
+  const t = s === 'รอตรวจสอบ' ? '-' : s;
+  return required && !t ? '-' : t;
+};
+/** ช่องตัวเลข/โทร/ทะเบียน/วันที่ของผู้บาดเจ็บ: "รอตรวจสอบ" → ว่าง (ใส่ "-" ไม่ได้ EMCS ปัดตก) */
+const injNum = (v: unknown): string => { const s = String(v ?? '').trim(); return s === 'รอตรวจสอบ' ? '' : s; };
+
 function buildInjure(p: Row, seq: number): string {
   return '<TXN_SURV_INJ>' +
     el('INJ_SEQ', seq) +
-    el('NAME', p.name) +
-    el('AGE', p.age) +
-    el('CITIZEN_ID', p.cid) +
+    el('NAME', injText(p.name, true)) +
+    el('AGE', injNum(p.age)) +
+    el('CITIZEN_ID', injText(p.cid, true)) +
     el('DRI_RELATION_ID', lookup(RELATION, p.relation)) + // ความสัมพันธ์ (รหัส 1-35)
-    el('JOB', p.occupation) +
-    el('CAR_REGNO', emcsPlate(p.car_reg)) +
-    el('ADDRESS', p.address) +
-    el('TEL_NO', tel10(p.phone)) +
-    el('WORK_PLACE', p.work_place) +
-    el('POSITION', p.position) +
-    el('INCOME', money(p.income)) +                  // ประกอบค่าขาดรายได้ (EMCS num() ไม่รับ comma)
-    el('HOS_NAME', p.hospital) +
-    el('FROM_DATE', toXmlCE(p.treat_from)) +         // ช่วงวันรักษา (จาก)
-    el('TO_DATE', toXmlCE(p.treat_to)) +             // ช่วงวันรักษา (ถึง)
-    el('COST', money(p.treat_cost)) +                // ค่ารักษา (ต้องผ่าน money ไม่งั้น EMCS ล้างทิ้ง)
-    el('INJURE', p.symptom) +           // อาการบาดเจ็บ
+    el('JOB', injText(p.occupation)) +
+    el('CAR_REGNO', emcsPlate(injNum(p.car_reg))) +
+    el('ADDRESS', injText(p.address)) +
+    el('TEL_NO', tel10(injNum(p.phone))) +
+    el('WORK_PLACE', injText(p.work_place)) +
+    el('POSITION', injText(p.position)) +
+    el('INCOME', money(injNum(p.income))) +                  // ประกอบค่าขาดรายได้ (EMCS num() ไม่รับ comma)
+    el('HOS_NAME', injText(p.hospital, true)) +
+    el('FROM_DATE', toXmlCE(injNum(p.treat_from))) +         // ช่วงวันรักษา (จาก)
+    el('TO_DATE', toXmlCE(injNum(p.treat_to))) +             // ช่วงวันรักษา (ถึง)
+    el('COST', money(injNum(p.treat_cost))) +                // ค่ารักษา (ต้องผ่าน money ไม่งั้น EMCS ล้างทิ้ง)
+    el('INJURE', injText(p.symptom, true)) +           // อาการบาดเจ็บ
     el('GENDER', genderCode(p.gender)) +
     el('PERSON_TYPE', lookup(PERSON_TYPE, p.person_type)) + // DV=ผู้ขับรถประกัน, ON=บุคคลอื่น
     el('WOUNDED_TYPE', lookup(WOUND, p.wound_level)) +

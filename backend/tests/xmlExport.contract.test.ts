@@ -379,5 +379,14 @@ console.log('\n── การ์ด: เงินฝั่งพนักง�
   check('คำเตือน EMCS: ทะเบียนปกติไม่ขึ้น', !emcsNameWarnings(row as never).some((q) => q.tag === 'CAR_REGNO'));
 }
 
+// ผู้บาดเจ็บ (user เคาะ 20/09/69): ช่องบังคับว่าง → "-" · "รอตรวจสอบ" → "-" (ช่องตัวเลข/วันที่ → ว่าง) — ชุดเดียวกับบอท v1.1.13
+{
+  const inj0 = (row.injured_persons as any[])[0];
+  const x = generateSurveyXml({ ...row, injured_persons: [{ ...inj0, name: 'รอตรวจสอบ', cid: '', hospital: '  ', symptom: 'รอตรวจสอบ', age: 'รอตรวจสอบ', occupation: 'รอตรวจสอบ', treat_cost: 'รอตรวจสอบ', address: '' }] } as never);
+  check('บาดเจ็บ: ชื่อ/บัตร/รพ./อาการ ว่างหรือ "รอตรวจสอบ" → "-"', x.includes('<NAME>-</NAME>') && x.includes('<CITIZEN_ID>-</CITIZEN_ID>') && x.includes('<HOS_NAME>-</HOS_NAME>') && x.includes('<INJURE>-</INJURE>'));
+  check('บาดเจ็บ: ช่องไม่บังคับ "รอตรวจสอบ" → "-" (อาชีพ) · ช่องตัวเลข → ว่าง (อายุ/ค่ารักษา) · ว่างคงว่าง (ที่อยู่)',
+        x.includes('<JOB>-</JOB>') && x.includes('<AGE> </AGE>') && x.includes('<COST> </COST>') && x.includes('<ADDRESS> </ADDRESS>') && !x.includes('รอตรวจสอบ'));
+}
+
 console.log(`\n${failed === 0 ? '✅ ผ่านทั้งหมด' : `❌ ล้มเหลว ${failed} รายการ`}`);
 process.exit(failed === 0 ? 0 : 1);
