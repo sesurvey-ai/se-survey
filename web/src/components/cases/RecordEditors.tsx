@@ -170,21 +170,28 @@ const cls = (def: FieldDef, value: string, warn: string) =>
  *    "กรุณาระบุเลขที่บัตรประชาชน ของ::คนที่ 1 ให้ถูกต้อง" (เจอจากการทดสอบสด 19/08/69)
  *    แอปมือถือกันไว้ตั้งแต่หน้ากรอกแล้ว เว็บเป็นทางเดียวที่ปล่อยเลขมั่วผ่านไปได้
  */
-/** เลขบัตรในการ์ด (ผู้บาดเจ็บ/คู่กรณี) "ผิด" = ไม่ใช่ตัวแทนค่า และ (ยาวเกิน 13 — EMCS DRI_CARDID รับ 13 ตัว ไฟล์ปัดตกทั้งไฟล์
- *  · หรือ บัตรไทย (id_type ไม่ใช่ foreign) ไม่ผ่านหลักตรวจสอบ) — ใช้ทั้งเตือนใต้ช่องและประตูอนุมัติ (21/09/69 เคส #504) */
-export const cidBad = (cid: unknown, idType?: unknown, injured = false): boolean => {
+/** เลขบัตร: ชนิดบัตรที่ "คนเลือก" (id_type thai/foreign) เป็นตัวคุม ไม่คำนวณจากเลข (user เคาะ 21/09/69)
+ *  คนไทย → ต้องเป็นตัวเลข 13 หลักผ่านหลักตรวจสอบ (มีตัวอักษร/ไม่ครบ/ผิด = ข้อความเตือน) · ต่างชาติ → ผ่าน · ทุกชนิด → เกิน 13 ตัวไม่ผ่าน (EMCS DRI_CARDID 13 ตัว ไฟล์ปัดตก)
+ *  ผู้บาดเจ็บ+ต่างชาติ: ฟอร์มผู้บาดเจ็บของ EMCS ไม่รับเลขล้วน/อักษรอังกฤษล้วนที่สั้นกว่า 13 (จำนวนหลักไม่ครบ) และตรวจหลักตรวจสอบเมื่อครบ 13 → ต้องใช้ "-"
+ *  คืนข้อความเตือน ('' = ผ่าน) — ใช้ทั้งเตือนใต้ช่องและประตูอนุมัติ */
+export const cidIssue = (cid: unknown, idType?: unknown, injured = false): string => {
   const v = String(cid ?? '').trim();
-  if (!v || v === PENDING_TEXT_CID || /^-+$/.test(v)) return false;
-  if (injured) {
-    // ผู้บาดเจ็บ = กติกาของ EMCS เอง (CheckTextBoxCitizenValid ในฟอร์มผู้บาดเจ็บ): สั้นกว่า 13 และเป็นเลขล้วน/อักษรอังกฤษล้วน
-    // → "จำนวนหลักไม่ครบ" ไม่บันทึกทั้งบล็อก (ไม่มีบัตรไทยให้ใช้ "-") · 13 ตัว → หลักตรวจสอบบัตรไทยทุกชนิด · อื่น ๆ (พาสปอร์ตมีตัวอักษร) รับ
-    if (v.length < 13) return /^\d+$/.test(v) || /^[A-Za-z]+$/.test(v);
-    if (v.length === 13) return !cidChecksum(v);
-    return false;
+  if (!v || v === PENDING_TEXT_CID || /^-+$/.test(v)) return '';
+  if (v.length > 13) return `เลขบัตรยาว ${v.length} ตัว — EMCS รับ 13 ตัว (ไฟล์ปัดตกทั้งไฟล์) ตรวจกับบัตรอีกครั้ง`;
+  const thai = idType !== 'foreign';
+  if (thai) {
+    if (!/^\d+$/.test(v)) return 'บัตรไทยต้องเป็นตัวเลข 13 หลัก — ถ้าเป็นพาสปอร์ต/บัตรต่างชาติ เลือกชนิดบัตร "ต่างชาติ"';
+    if (v.length !== 13) return `เลขบัตรประชาชนไม่ครบ 13 หลัก (${v.length} หลัก)`;
+    if (!cidChecksum(v)) return 'เลขบัตรไทยไม่ถูกต้อง (ไม่ผ่านหลักตรวจสอบ) — ตรวจกับบัตรอีกครั้ง';
+    return '';
   }
-  if (v.length > 13) return true;                    // DRI_CARDID 13 ตัว — ไฟล์ XML ปัดตกทั้งไฟล์
-  return idType !== 'foreign' && !cidChecksum(v);    // คู่กรณี: บัตรไทยต้องผ่านหลักตรวจสอบ · ต่างชาติไม่ตรวจ
+  if (injured) {
+    if (v.length < 13 && (/^\d+$/.test(v) || /^[A-Za-z]+$/.test(v))) return 'EMCS ไม่รับเลขล้วน/อักษรล้วนที่สั้นกว่า 13 ตัวในช่องผู้บาดเจ็บ (จำนวนหลักไม่ครบ) — ไม่มีบัตรไทยให้ใช้ "-"';
+    if (v.length === 13 && !cidChecksum(v)) return 'EMCS ตรวจหลักตรวจสอบเมื่อครบ 13 ตัว — เลขนี้ไม่ผ่าน ถ้าเป็นบัตรต่างชาติใช้ "-"';
+  }
+  return '';
 };
+export const cidBad = (cid: unknown, idType?: unknown, injured = false): boolean => cidIssue(cid, idType, injured) !== '';
 const PENDING_TEXT_CID = 'รอตรวจสอบ';
 export const cidChecksum = (raw: string): boolean => {
   const d = raw.replace(/\D/g, '');
@@ -232,9 +239,7 @@ function Field({ def, value, onChange, warnOverride, quickFix, rec }: {
     : badChars ? `EMCS ไม่รับอักขระ ${badChars}`
       : badPlate ? `EMCS ไม่รับเครื่องหมาย/คำพ่วงในทะเบียน — บอทจะกรอก "${plateClean || '00'}" ถ้าไม่ใช่ แก้ที่นี่`
       : offList ? 'ชื่อนี้ไม่มีใน EMCS — เลือกใหม่จากลิสต์'
-        : badCid ? (v.trim().length > 13 ? `เลขบัตรยาว ${v.trim().length} ตัว — EMCS รับ 13 ตัว (ไฟล์ปัดตกทั้งไฟล์) ตรวจกับบัตรอีกครั้ง`
-            : (injuredRec && v.trim().length < 13) ? 'EMCS ไม่รับเลขล้วน/อักษรล้วนที่สั้นกว่า 13 ตัว (จำนวนหลักไม่ครบ) — ไม่มีบัตรไทยให้ใช้ "-"'
-            : 'เลขบัตรไม่ถูกต้อง — EMCS จะไม่ยอมบันทึกทั้งบล็อก')
+        : badCid ? cidIssue(v, rec?.id_type, injuredRec)
           : badAge ? 'อายุต้องเป็นตัวเลข — ใส่ "-" แล้ว EMCS ปัดตกทั้งไฟล์ (ไม่รู้ = เว้นว่าง)'
           : zeroAge ? 'อายุ 0 ไม่ใช่อายุจริง — ไม่ทราบ: คู่กรณีใช้วันเกิด 01/01/2500 (อายุคำนวณให้) · ผู้บาดเจ็บเว้นว่าง'
           : thisYearBirth ? 'วันเกิดเป็นปีปัจจุบัน ไม่ใช่วันเกิดจริง — ไม่ทราบให้ใช้ 01/01/2500'
@@ -539,7 +544,9 @@ const OPPONENT_FIELDS: FieldDef[] = [
   { k: 'age', label: 'อายุ *' },
   { k: 'relation', label: 'ความสัมพันธ์', optionsFrom: (r) => withCurrentOption(RELATIONS, r.relation) },
   { k: 'phone', label: 'โทรศัพท์' },
-  { k: 'cid', label: 'เลขบัตรประชาชน' },
+  { k: 'cid', label: 'เลขบัตรประชาชน / ต่างด้าว / พาสปอร์ต' },
+  // ชนิดบัตรที่คนเลือกเป็นตัวคุมการตรวจเลข (21/09/69) — คนไทย 13 หลัก+หลักตรวจสอบ · ต่างชาติผ่าน · ⛔ ไม่คำนวณจากเลข
+  { k: 'id_type', label: 'ชนิดบัตร', options: ['thai', 'foreign'], optionLabels: { thai: 'คนไทย', foreign: 'ต่างชาติ/พาสปอร์ต' }, defaultValue: 'thai' },
   { k: 'license_no', label: 'เลขใบขับขี่' },
   { k: 'license_type', label: 'ประเภทใบขับขี่', optionsFrom: (r) => withCurrentOption(LICENSE_TYPES, r.license_type) },
   { k: 'license_start', label: 'ใบขับขี่ ออกให้', placeholder: 'วว/ดด/ปปปป (พ.ศ.)' },
@@ -610,8 +617,8 @@ export const opponentMissing = (rec: LooseRecord): string[] => [
   // อายุ 0 / วันเกิดปีปัจจุบัน = ค่าที่คนพิมพ์แทน "ไม่ทราบ" (เคส #433 21/09/69) → ยังไม่ครบ (ปุ่มใต้ช่องเปลี่ยนเป็น 01/01/2500)
   ...(String(rec.age ?? '').trim() === '0' ? ['age'] : []),
   ...(isCurrentYearSeDate(rec.birthdate) ? ['birthdate'] : []),
-  // เลขบัตรผู้ขับขี่คู่กรณียาวเกิน 13 → ไฟล์ XML ถูกปัดตกทั้งไฟล์ (DRI_CARDID 13 ตัว) — กั้นเฉพาะยาวเกิน (คู่กรณี EMCS ไม่ตรวจหลักตรวจสอบ) 21/09/69
-  ...(String(rec.cid ?? '').trim().length > 13 ? ['cid'] : []),
+  // เลขบัตรผู้ขับขี่คู่กรณี: ชนิดบัตรที่คนเลือกเป็นตัวคุม (คนไทย 13 หลัก+หลักตรวจสอบ · ต่างชาติผ่าน · เกิน 13 ไม่ผ่าน) 21/09/69
+  ...(cidBad(rec.cid, rec.id_type) ? ['cid'] : []),
   // ความเสียหายทุกชิ้นต้องมีระดับ L/M/H/X — EMCS บังคับ ว่าง/คำไทย ("แผลเบา" จาก ISURVEY) ทำ popup ค้าง (เคส #343 15/09/69)
   ...((Array.isArray(rec.damage) ? rec.damage : []) as Array<Record<string, unknown>>)
     .filter((d) => d && String(d.part ?? '').trim() && !['L', 'M', 'H', 'X'].includes(String(d.level ?? '').trim()))
@@ -804,7 +811,7 @@ export function OpponentEditor({ items, onChange }: {
                   <Field
                     key={f.k}
                     def={{ ...f, options, label: labelFor(f, it) }}
-                    value={String(it[f.k] ?? '')}
+                    value={String(it[f.k] ?? '') || (f.defaultValue ?? '')}
                     onChange={(v) => set(i, f.k, v)}
                     warnOverride={issue?.message ?? (ageExp ? `อายุไม่ตรงกับวันเกิด (ควรเป็น ${ageExp})` : undefined)}
                     quickFix={issue?.suggestion

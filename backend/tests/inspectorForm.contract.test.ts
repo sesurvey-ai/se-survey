@@ -593,7 +593,7 @@ check('การ์ดผู้บาดเจ็บ: คำนำหน้า +
       && rec.includes("{ k: 'id_type', label: 'ชนิดบัตร', options: ['thai', 'foreign'], optionLabels: { thai: 'คนไทย', foreign: 'ต่างชาติ/พาสปอร์ต' }, defaultValue: 'thai' }")
       && rec.includes("{ k: 'home_province', label: 'จังหวัด (ที่อยู่)', options: PROVINCE_OPTIONS, reqWhen: injuredHasAddress }")
       && rec.includes("{ k: 'subdistrict', label: 'ตำบล/แขวง (ที่อยู่)', reqWhen: injuredHasAddress }")
-      && rec.includes("return idType !== 'foreign' && !cidChecksum(v);"));   // 21/09/69 cidBad
+      && rec.includes("const thai = idType !== 'foreign';"));   // 21/09/69 cidIssue: ชนิดที่คนเลือกเป็นตัวคุม
 check('การ์ดทรัพย์สิน: คำนำหน้าเจ้าของ (ไม่บังคับ) + ที่อยู่เจ้าของแยกช่อง owner_* (บังคับ 3 ช่องเมื่อมีที่อยู่)',
       rec.includes("{ k: 'owner_title', label: 'คำนำหน้าเจ้าของ', optionsFrom: (r) => withCurrentOption(TITLES, r.owner_title) }")
       && rec.includes("{ k: 'owner_province', label: 'จังหวัด (ที่อยู่เจ้าของ)', options: PROVINCE_OPTIONS, reqWhen: propertyHasAddress }")
@@ -623,12 +623,13 @@ check('อายุ 0 / วันเกิดปีปัจจุบัน: ก
 // เลขบัตรเข้าประตูอนุมัติ (เคส #504 21/09/69: 14 หลักถูกตีเป็นต่างชาติแล้วหลุดอนุมัติ) — ผู้ขับขี่รถประกัน (เตือนทุกชนิด + ต่างชาติเลขล้วนไม่ครบ 13) · ผู้บาดเจ็บ cidBad · คู่กรณียาวเกิน 13
 check('เลขบัตร: ผู้ขับขี่รถประกันกั้นอนุมัติเมื่อมีคำเตือน (+ ต่างชาติเลขล้วนไม่ครบ 13) · ผู้บาดเจ็บ/คู่กรณีใช้ cidBad/ยาวเกิน 13 ในประตู · การ์ดเตือนยาวเกิน',
       src.includes("...(drvCidWarn ? [`เลขบัตรผู้ขับขี่รถประกัน: ${drvCidWarn}`] : []),")
-      && src.includes("v.length !== 13 && /[ก-๙]/.test(`${report.driver_first_name ?? ''}${report.driver_last_name ?? ''}${report.driver_name ?? ''}`)) return")   // กั้นเฉพาะชื่อไทย (คนต่างชาติเลขล้วน 7–12 หลักผ่าน)
-      && rec.includes('export const cidBad = (cid: unknown, idType?: unknown, injured = false): boolean => {')
+      && src.includes("if (!drvCidThai) return '';") && src.includes("if (v.length !== 13) return `เลขบัตรประชาชนไม่ครบ 13 หลัก (${v.length} หลัก) — ตรวจกับบัตรอีกครั้ง`;")   // ชนิดที่คนเลือกเป็นตัวคุม (21/09/69)
+      && rec.includes('export const cidIssue = (cid: unknown, idType?: unknown, injured = false): string => {')
+      && rec.includes("{ k: 'id_type', label: 'ชนิดบัตร', options: ['thai', 'foreign'], optionLabels: { thai: 'คนไทย', foreign: 'ต่างชาติ/พาสปอร์ต' }, defaultValue: 'thai' },")
       && rec.includes("...(cidBad(rec.cid, rec.id_type, true) ? ['cid'] : [])];")
-      && rec.includes("...(String(rec.cid ?? '').trim().length > 13 ? ['cid'] : []),")
+      && rec.includes("...(cidBad(rec.cid, rec.id_type) ? ['cid'] : []),")
       && rec.includes("const badCid = def.k === 'cid' && cidBad(v, rec?.id_type, injuredRec);")
-      && rec.includes("if (v.length < 13) return /^\\d+$/.test(v) || /^[A-Za-z]+$/.test(v);"));   // ผู้บาดเจ็บ = กติกา EMCS
+      && rec.includes("if (v.length < 13 && (/^\\d+$/.test(v) || /^[A-Za-z]+$/.test(v))) return"));   // ผู้บาดเจ็บ+ต่างชาติ = กติกา EMCS
 
 console.log(`\n${failed === 0 ? '✅ ผ่านทั้งหมด' : `❌ ล้มเหลว ${failed} รายการ`}`);
 process.exit(failed ? 1 : 0);
