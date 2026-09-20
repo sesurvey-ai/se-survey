@@ -517,13 +517,15 @@ function buildCar(c: Row, type: number, insured: boolean): string {
 function buildAsset(a: Row, seq: number): string {
   return '<TXN_SURV_ASSET>' +
     el('ASSET_SEQ', seq) +
-    el('ASSET_DESC', a.item) +               // ชื่อทรัพย์สิน (เช่น เสาไฟฟ้า)
-    el('ASSET_DAMAGE_CAUSE', a.cause) +      // สาเหตุ (ลำดับตรง gold: cause ก่อน damage)
-    el('ASSET_DAMAGE', a.detail) +           // รายละเอียดความเสียหาย
-    el('COST_DAMAGE', money(a.estimated_cost)) +
-    el('OWNER', a.owner_name) +
-    el('ADDRESS', a.owner_address) +
-    el('TEL_NO', tel50(a.owner_phone)) +
+    // ทรัพย์สินใช้กติกาเดียวกับผู้บาดเจ็บ (user สั่ง 20/09/69): ช่องบังคับ (รายการ/สาเหตุ/รายละเอียด/เจ้าของ) ว่างหรือ "รอตรวจสอบ" → "-"
+    // ที่อยู่ "รอตรวจสอบ" → "-" · ค่าเสียหาย/โทร "รอตรวจสอบ" → ว่าง — ชุดเดียวกับบอท emcs._ast_text/_ast_num (v1.1.21)
+    el('ASSET_DESC', injText(a.item, true)) +            // ชื่อทรัพย์สิน (เช่น เสาไฟฟ้า)
+    el('ASSET_DAMAGE_CAUSE', injText(a.cause, true)) +   // สาเหตุ (ลำดับตรง gold: cause ก่อน damage)
+    el('ASSET_DAMAGE', injText(a.detail, true)) +        // รายละเอียดความเสียหาย
+    el('COST_DAMAGE', money(injNum(a.estimated_cost))) +
+    el('OWNER', injText(a.owner_name, true)) +
+    el('ADDRESS', injText(a.owner_address)) +
+    el('TEL_NO', tel50(injNum(a.owner_phone))) +
     '</TXN_SURV_ASSET>';
 }
 

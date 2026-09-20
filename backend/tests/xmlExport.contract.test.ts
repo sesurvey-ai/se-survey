@@ -426,5 +426,20 @@ console.log('\n── การ์ด: เงินฝั่งพนักง�
         `${tag('DRI_CARDID')} | ${tag('DRI_DRVID')} | ${tag('DRI_DRVPLACE')} | ${tag('DRI_TELNO')} | ${tag('DRI_AGE')} (ควร ${expAge})`);
 }
 
+// ทรัพย์สิน (user สั่ง 20/09/69 เหมือนผู้บาดเจ็บ): ช่องบังคับว่าง/"รอตรวจสอบ"/"--" → "-" · ที่อยู่ "รอตรวจสอบ" → "-" · โทร/ค่าเสียหาย "รอตรวจสอบ" → ว่าง
+{
+  const x = generateSurveyXml({ ...row, damaged_property: [{ item: 'รอตรวจสอบ', cause: '', detail: '--', estimated_cost: 'รอตรวจสอบ',
+                                                             owner_name: 'รอตรวจสอบ', owner_address: 'รอตรวจสอบ', owner_phone: 'รอตรวจสอบ' }] } as never);
+  const ast = (x.match(/<TXN_SURV_ASSET>[\s\S]*?<\/TXN_SURV_ASSET>/g) || [])[0] || '';
+  const tag = (t: string) => (ast.match(new RegExp('<' + t + '>([^<]*)<')) || ['', '?'])[1];
+  check('XML ทรัพย์สิน: ASSET_DESC/ASSET_DAMAGE_CAUSE/ASSET_DAMAGE/OWNER=- · ADDRESS=- · TEL_NO ว่าง · COST_DAMAGE ไม่มีคำไทย · ไม่มี "รอตรวจสอบ"',
+        tag('ASSET_DESC') === '-' && tag('ASSET_DAMAGE_CAUSE') === '-' && tag('ASSET_DAMAGE') === '-' && tag('OWNER') === '-' && tag('ADDRESS') === '-'
+        && tag('TEL_NO').trim() === '' && !/รอตรวจสอบ/.test(ast) && !/[ก-๙]/.test(tag('COST_DAMAGE')),
+        `${tag('ASSET_DESC')} | ${tag('ASSET_DAMAGE_CAUSE')} | ${tag('ASSET_DAMAGE')} | ${tag('OWNER')} | ${tag('ADDRESS')} | ${tag('TEL_NO')} | ${tag('COST_DAMAGE')}`);
+  const y = generateSurveyXml({ ...row, damaged_property: [{ item: 'เสาไฟฟ้า', cause: 'รถชน', detail: 'หัก', estimated_cost: '1500', owner_name: 'การไฟฟ้า', owner_address: '', owner_phone: '021234567' }] } as never);
+  const ast2 = (y.match(/<TXN_SURV_ASSET>[\s\S]*?<\/TXN_SURV_ASSET>/g) || [])[0] || '';
+  check('XML ทรัพย์สิน: ค่าจริงคงเดิม (ไม่ถูกแปลง)', ast2.includes('<ASSET_DESC>เสาไฟฟ้า</ASSET_DESC>') && ast2.includes('<OWNER>การไฟฟ้า</OWNER>') && ast2.includes('<TEL_NO>021234567</TEL_NO>'));
+}
+
 console.log(`\n${failed === 0 ? '✅ ผ่านทั้งหมด' : `❌ ล้มเหลว ${failed} รายการ`}`);
 process.exit(failed === 0 ? 0 : 1);
