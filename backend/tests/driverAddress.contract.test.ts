@@ -196,6 +196,20 @@ const read = (p: string) => fs.readFileSync(path.join(ROOT, p), 'utf8');
   check('มือถือ: สแกนบัตรประชาชนคู่กรณีแล้วเลือกจังหวัด/อำเภอ/ตำบลให้เอง', opp.includes("_matchProvince(f('province'))") && opp.includes("_matchTumbonInText(prov, dist, f('address'))"));
 }
 
+// ตัวแทนค่า (user เคาะ 20/09/69 หลังเคส #528): "-"/"รอตรวจสอบ"/"ไม่ทราบชื่อ" ไม่ต่อคำนำหน้า · บ้านเลขที่ตัวแทนค่าไม่เอามาประกอบที่อยู่ · เว็บบังคับเพศ + กั้นอายุไม่ตรงวันเกิด
+{
+  check('withTitle: ตัวแทนค่าไม่ต่อคำนำหน้า (เคยได้ "คุณ -")',
+    withTitle('คุณ', '-') === '-' && withTitle('คุณ', 'รอตรวจสอบ') === '-' && withTitle('นาย', 'ไม่ทราบชื่อ') === 'ไม่ทราบชื่อ' && withTitle('', 'รอตรวจสอบ') === '-'
+    && withTitle('นาย', 'บุญเลี้ยง ชงสุวรรณ') === 'นาย บุญเลี้ยง ชงสุวรรณ');
+  check('opponentAddressLine/driverAddressLine: บ้านเลขที่ "รอตรวจสอบ"/"-" = ไม่ทราบ (เคยได้ "รอตรวจสอบ ต.ท้ายบ้าน …")',
+    opponentAddressLine('รอตรวจสอบ', '', 'ท้ายบ้าน', 'อำเภอเมือง', 'สมุทรปราการ') === 'ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ' && opponentAddressLine('-', '', '', '', '') === ''
+    && driverAddressLine('รอตรวจสอบ', '', 'ท้ายบ้าน') === 'ต.ท้ายบ้าน');
+  const web2 = fs.readFileSync(path.join(__dirname, '..', '..', 'web', 'src', 'components', 'cases', 'RecordEditors.tsx'), 'utf8');
+  check('เว็บ: เพศผู้ขับขี่คู่กรณีบังคับ (OPPONENT_REQUIRED + ป้าย "เพศ *") · อายุไม่ตรงวันเกิดเกิน 1 ปี = ยังไม่ครบ + เตือน/ปุ่มใช้ค่าที่คำนวณ',
+    web2.includes("'owner_name', 'plate', 'province', 'insurer', 'policy_no', 'birthdate', 'age', 'car_type', 'gender',") && web2.includes("{ k: 'gender', label: 'เพศ *', optionsFrom")
+    && web2.includes("...(opponentAgeMismatch(rec) ? ['age'] : []),") && web2.includes('อายุไม่ตรงกับวันเกิด (ควรเป็น ${ageExp})') && web2.includes("{ label: `ใช้ ${ageExp}`, onClick: () => set(i, 'age', ageExp) }"));
+}
+
 // ── ฝั่งบอท (se-autokey ข้าง ๆ — ข้ามถ้าไม่มี) ──
 {
   const bot = path.join(ROOT, '..', 'se-autokey');

@@ -26,6 +26,9 @@
 const s = (v: unknown): string => (v === null || v === undefined ? '' : String(v)).trim();
 const escapeRe = (x: string): string => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const tidy = (addr: string): string => addr.replace(/\s+/g, ' ').replace(/\s*,\s*/g, ',').replace(/^[\s,]+|[\s,]+$/g, '');
+/** ตัวแทนค่า "ไม่ทราบ" ที่คนพิมพ์/ระบบเติม ไม่ใช่ข้อมูลจริง (user เคาะ 20/09/69 หลังเคส #528): "รอตรวจสอบ" ถือเท่ากับ "-" — ไม่เอามาประกอบที่อยู่/ต่อคำนำหน้า */
+const PLACEHOLDERS = new Set(['-', 'รอตรวจสอบ']);
+const isPlaceholder = (v: unknown): boolean => PLACEHOLDERS.has(String(v ?? '').trim());
 
 /** จับ "หมู่ที่ 7" / "หมู่ 7" / "หมู่7" / "ม.7" / "ม. 7" ที่ขึ้นต้นข้อความ หลังช่องว่าง/จุลภาค หรือติดหลังตัวเลข ("261ม.2") — "หมู่บ้าน…" ไม่ติด (ต้องตามด้วยตัวเลข) */
 const MOO_RE = /(?:^|(?<=[\s,\d]))(?:หมู่ที่|หมู่|ม\.)\s*(\d{1,3})(?=$|[\s,])/u;
@@ -59,7 +62,7 @@ function insertMoo(addr: string, m: string): string {
 }
 
 export function driverAddressLine(address: unknown, moo: unknown, subdistrict: unknown): string {
-  const split = splitMoo(address);
+  const split = splitMoo(isPlaceholder(address) ? '' : address);   // บ้านเลขที่ "-"/"รอตรวจสอบ" = ไม่ทราบ (20/09/69)
   let addr = split.address;
   const m = s(moo).replace(MOO_PREFIX, '').trim() || split.moo;   // ช่องหมู่ที่กรอกมาชนะเลขที่ปนในข้อความ
   const t = s(subdistrict).replace(TUMBON_PREFIX, '').trim();
@@ -73,7 +76,7 @@ export function driverAddressLine(address: unknown, moo: unknown, subdistrict: u
 
 /** ที่อยู่ปัจจุบันผู้ขับขี่รถคู่กรณี → "46/23 ม.7 ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ" (กรุงเทพ: แขวง/เขต/กรุงเทพฯ) */
 export function opponentAddressLine(address: unknown, moo: unknown, subdistrict: unknown, district: unknown, province: unknown): string {
-  const split = splitMoo(address);
+  const split = splitMoo(isPlaceholder(address) ? '' : address);   // บ้านเลขที่ "-"/"รอตรวจสอบ" = ไม่ทราบ (20/09/69)
   let addr = split.address;
   const m = s(moo).replace(MOO_PREFIX, '').trim() || split.moo;
   const t = s(subdistrict).replace(TUMBON_PREFIX, '').trim();
@@ -108,6 +111,9 @@ const THAI_FOLLOW = /^[ะ-ฺๅ็-๎]/u;
 export function withTitle(title: unknown, name: unknown): string {
   const t = s(title).replace(/\s+/g, ' ');
   const n = s(name).replace(/\s+/g, ' ');
+  // ตัวแทนค่า (user เคาะ 20/09/69): "-"/"รอตรวจสอบ" → "-" · "ไม่ทราบชื่อ" คงเดิม — ไม่ต่อคำนำหน้า (EMCS เคยได้ "คุณ -" เคส #528)
+  if (isPlaceholder(n)) return '-';
+  if (n === 'ไม่ทราบชื่อ') return n;
   if (!n) return '';
   if (!t) return n;
   let rest = n;

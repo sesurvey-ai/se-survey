@@ -436,11 +436,12 @@ function buildCar(c: Row, type: number, insured: boolean): string {
   // (ไฟล์จริงของระบบเก่าเป็นแบบนี้ทุกใบ) ถ้าใส่คำนำหน้าติดไปด้วย EMCS จะยัดทั้งก้อน
   // ลงช่อง "ชื่อ" แล้วช่อง "นามสกุล" ว่าง — เจอจริงเคส 125 'นางสาว ลัลนา สุวรรณอำไพ'
   // จึงเอาช่องที่แยกไว้แล้ว (first/last) ก่อน แล้วค่อยถอยไปตัดคำนำหน้าจากชื่อเต็ม
+  // คู่กรณี: ตัวแทนค่า "รอตรวจสอบ"/"-" ในชื่อ-นามสกุลไม่เอามาต่อ (เคยออก "รอตรวจสอบ -" เคส #528) · ไม่รู้ชื่อเลย = "-" (EMCS บังคับช่องนี้) — user เคาะ 20/09/69
+  const oppName = [oppText(c.first_name), oppText(c.last_name)].filter((x) => x && x !== '-').join(' ');
   const driName = insured
     ? (`${c.driver_first_name ?? ''} ${c.driver_last_name ?? ''}`.trim()
        || stripThaiTitle(String(c.driver_name ?? '')))
-    : (`${c.first_name ?? ''} ${c.last_name ?? ''}`.trim()
-       || stripThaiTitle(String(c.driver_name ?? '')));
+    : (oppName || stripThaiTitle(String(c.driver_name ?? '')) || '-');
 
   const g = (k: string, ok: string) => (insured ? c[k] : c[ok]);
 
@@ -480,11 +481,11 @@ function buildCar(c: Row, type: number, insured: boolean): string {
     // DRI_TELNO บน EMCS เป็น varchar(10) — ยาวกว่านั้น importer ตีกลับทั้งไฟล์
     // ("ข้อมูลนำเข้ามีขนาดเกิน") ช่องโทรศัพท์อื่นใช้ tel10 กันหมดแล้ว ตกหล่นเฉพาะช่องนี้
     // เจอจริง 2026-08-10 เคส #124: ผู้ขับคู่กรณีถูกกรอกเลข 13 หลักลงช่องโทรศัพท์
-    el('DRI_TELNO', tel10(insured ? c.driver_phone : c.phone)) +
-    el('DRI_CARDID', insured ? c.driver_id_card : c.cid) +
-    el('DRI_DRVID', insured ? c.driver_license_no : c.license_no) +
+    el('DRI_TELNO', tel10(insured ? c.driver_phone : oppText(c.phone))) +
+    el('DRI_CARDID', insured ? c.driver_id_card : oppText(c.cid)) +
+    el('DRI_DRVID', insured ? c.driver_license_no : oppText(c.license_no)) +
     el('DRI_DRVTYPE', lookup(LICENSE_TYPE, insured ? c.driver_license_type : c.license_type)) +
-    el('DRI_DRVPLACE', insured ? c.driver_license_place : c.license_place) +
+    el('DRI_DRVPLACE', insured ? c.driver_license_place : oppText(c.license_place)) +
     el('DRI_DRVDATE_START', toXmlCE(insured ? c.driver_license_start : c.license_start)) +
     el('DRI_DRVDATE_END', toXmlCE(insured ? c.driver_license_end : c.license_end)) +
     el('DRI_ORDER', '') +
@@ -538,6 +539,8 @@ const injText = (v: unknown, required = false): string => {
 };
 /** ช่องตัวเลข/โทร/ทะเบียน/วันที่ของผู้บาดเจ็บ: "รอตรวจสอบ" → ว่าง (ใส่ "-" ไม่ได้ EMCS ปัดตก) */
 const injNum = (v: unknown): string => { const s = String(v ?? '').trim(); return s === 'รอตรวจสอบ' ? '' : s; };
+/** ช่องข้อความคู่กรณี (user เคาะ 20/09/69): "รอตรวจสอบ" ที่คนพิมพ์ = ไม่ทราบ → "-" (ชุดเดียวกับบอท _opp_clean) */
+const oppText = (v: unknown): string => { const t = String(v ?? '').trim(); return t === 'รอตรวจสอบ' ? '-' : t; };
 
 function buildInjure(p: Row, seq: number): string {
   return '<TXN_SURV_INJ>' +

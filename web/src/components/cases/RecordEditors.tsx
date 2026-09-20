@@ -434,7 +434,8 @@ const OPPONENT_FIELDS: FieldDef[] = [
   { k: 'title', label: 'คำนำหน้า', optionsFrom: (r) => withCurrentOption(TITLES, r.title) },
   { k: 'first_name', label: 'ชื่อผู้ขับขี่' },
   { k: 'last_name', label: 'นามสกุล' },
-  { k: 'gender', label: 'เพศ *(บางบริษัท)', optionsFrom: (r) => withCurrentOption(GENDERS, r.gender) },
+  // เพศผู้ขับขี่คู่กรณี: บังคับเสมอ (user เคาะ 20/09/69 — ไอโออิบังคับจริง บอทเคยหยุดรอที่ EMCS เคส #528 · แอปบังคับอยู่แล้ว)
+  { k: 'gender', label: 'เพศ *', optionsFrom: (r) => withCurrentOption(GENDERS, r.gender) },
   { k: 'birthdate', label: 'วันเกิด *', placeholder: 'วว/ดด/ปปปป (พ.ศ.)' },
   { k: 'age', label: 'อายุ *' },
   { k: 'relation', label: 'ความสัมพันธ์', optionsFrom: (r) => withCurrentOption(RELATIONS, r.relation) },
@@ -471,8 +472,17 @@ const PENDING_TEXT = 'รอตรวจสอบ';
 
 /** 8 ช่องที่ `vlidOpoCar` บล็อกทุกบริษัท — ใช้นับป้าย "ยังขาด N ช่องบังคับ" */
 export const OPPONENT_REQUIRED = [
-  'owner_name', 'plate', 'province', 'insurer', 'policy_no', 'birthdate', 'age', 'car_type',
+  'owner_name', 'plate', 'province', 'insurer', 'policy_no', 'birthdate', 'age', 'car_type', 'gender',
 ];
+
+/** อายุไม่ตรงกับวันเกิด (ต่างเกิน 1 ปี — 1 ปีคืออายุ ณ วันเกิดเหตุกับวันนี้ต่างกันได้) → คืนอายุที่ควรเป็น, '' = ไม่มีปัญหา
+ *  (user เคาะ 20/09/69 เคส #528: วันเกิด 01/01/2500 แต่อายุ 1 → EMCS คำนวณเองได้ 69 แล้วบอทกรอกทับด้วย 1) */
+export const opponentAgeMismatch = (rec: LooseRecord): string => {
+  const a = String(rec.age ?? '').trim();
+  const exp = ageFromSeDate(rec.birthdate);
+  if (!/^\d{1,3}$/.test(a) || exp === '') return '';
+  return Math.abs(Number(a) - Number(exp)) > 1 ? exp : '';
+};
 
 /**
  * ช่องบังคับของคู่กรณีคันนี้ที่ยังว่าง — รวมช่องบังคับแบบมีเงื่อนไข (ยี่ห้อ เมื่อเลือกประเภทรถแล้ว)
@@ -492,6 +502,8 @@ export const opponentMissing = (rec: LooseRecord): string[] => [
   }),
   // ยี่ห้อไม่มีในลิสต์ของประเภทรถนั้นบน EMCS — บอทเลือกไม่ได้ (เคส #300 15/09/69)
   ...(brandTypeIssue(rec.car_type, rec.car_brand) ? ['car_brand'] : []),
+  // อายุไม่ตรงกับวันเกิด (ต่างเกิน 1 ปี) — กั้นอนุมัติให้หัวหน้าแก้ก่อน (20/09/69)
+  ...(opponentAgeMismatch(rec) ? ['age'] : []),
   // ความเสียหายทุกชิ้นต้องมีระดับ L/M/H/X — EMCS บังคับ ว่าง/คำไทย ("แผลเบา" จาก ISURVEY) ทำ popup ค้าง (เคส #343 15/09/69)
   ...((Array.isArray(rec.damage) ? rec.damage : []) as Array<Record<string, unknown>>)
     .filter((d) => d && String(d.part ?? '').trim() && !['L', 'M', 'H', 'X'].includes(String(d.level ?? '').trim()))
@@ -671,6 +683,8 @@ export function OpponentEditor({ items, onChange }: {
                 if (f.k === 'address') return <AddressMooCell key={f.k} it={it} set={(k, v) => set(i, k, v)} />;
                 // ยี่ห้อ ↔ ประเภทรถ ตามลิสต์ EMCS (15/09/69) — เตือนใต้ช่องยี่ห้อ + ปุ่มเปลี่ยนประเภทให้เมื่อชี้ได้แน่
                 const issue = f.k === 'car_brand' ? brandTypeIssue(it.car_type, it.car_brand) : null;
+                // อายุไม่ตรงกับวันเกิด (20/09/69) — เตือนใต้ช่องอายุ + ปุ่มใช้ค่าที่คำนวณได้
+                const ageExp = f.k === 'age' ? opponentAgeMismatch(it) : '';
                 const options = f.k === 'subdistrict' ? tumbonOptions(it) : (f.optionsFrom ? f.optionsFrom(it) : f.options);
                 return (
                   <Field
@@ -678,11 +692,11 @@ export function OpponentEditor({ items, onChange }: {
                     def={{ ...f, options, label: labelFor(f, it) }}
                     value={String(it[f.k] ?? '')}
                     onChange={(v) => set(i, f.k, v)}
-                    warnOverride={issue?.message}
+                    warnOverride={issue?.message ?? (ageExp ? `อายุไม่ตรงกับวันเกิด (ควรเป็น ${ageExp})` : undefined)}
                     quickFix={issue?.suggestion
                       ? { label: `เปลี่ยนประเภทรถเป็น ${CAR_TYPE_LABELS[issue.suggestion]}`,
                           onClick: () => set(i, 'car_type', CAR_TYPE_LABELS[issue.suggestion as string]) }
-                      : undefined}
+                      : ageExp ? { label: `ใช้ ${ageExp}`, onClick: () => set(i, 'age', ageExp) } : undefined}
                   />
                 );
               })}

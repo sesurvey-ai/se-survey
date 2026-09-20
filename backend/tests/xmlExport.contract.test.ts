@@ -388,5 +388,19 @@ console.log('\n── การ์ด: เงินฝั่งพนักง�
         x.includes('<JOB>-</JOB>') && x.includes('<AGE> </AGE>') && x.includes('<COST> </COST>') && x.includes('<ADDRESS> </ADDRESS>') && !x.includes('รอตรวจสอบ'));
 }
 
+// คู่กรณี ตัวแทนค่า (user เคาะ 20/09/69 เคส #528): OPO_NAME/DRI_NAME ไม่ต่อคำนำหน้า · DRI_CARDID "รอตรวจสอบ" → "-" · ที่อยู่ไม่เอาบ้านเลขที่ "รอตรวจสอบ" มาประกอบ
+{
+  const o = { ...(row.opposing_parties as any[])[0], owner_title: 'คุณ', owner_name: '-', title: 'คุณ', first_name: 'รอตรวจสอบ', last_name: '-', cid: 'รอตรวจสอบ',
+              address: 'รอตรวจสอบ', moo: '', subdistrict: 'ท้ายบ้าน', district: 'อำเภอเมือง', home_province: 'สมุทรปราการ', license_no: 'รอตรวจสอบ' };
+  const x = generateSurveyXml({ ...row, opposing_parties: [o] } as never);
+  // บล็อกคู่กรณี = TXN_SURV_CAR ที่ OPO_NAME ไม่ว่าง (บล็อกรถประกันมี OPO_NAME ว่าง)
+  const opp = (x.match(/<TXN_SURV_CAR>[\s\S]*?<\/TXN_SURV_CAR>/g) || []).find((b) => /<OPO_NAME>\S/.test(b)) || '';
+  const tag = (t: string) => (opp.match(new RegExp('<' + t + '>([^<]*)<')) || ['', '?'])[1];
+  check('XML คู่กรณี: OPO_NAME=- (ไม่ใช่ "คุณ -") · DRI_NAME=- · DRI_CARDID=- · DRI_DRVID=- · DRI_ADDRESS ไม่มี "รอตรวจสอบ"',
+        tag('OPO_NAME') === '-' && tag('DRI_NAME') === '-' && tag('DRI_CARDID') === '-' && tag('DRI_DRVID') === '-'
+        && tag('DRI_ADDRESS') === 'ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ' && !opp.includes('รอตรวจสอบ'),
+        `${tag('OPO_NAME')} | ${tag('DRI_NAME')} | ${tag('DRI_CARDID')} | ${tag('DRI_ADDRESS')}`);
+}
+
 console.log(`\n${failed === 0 ? '✅ ผ่านทั้งหมด' : `❌ ล้มเหลว ${failed} รายการ`}`);
 process.exit(failed === 0 ? 0 : 1);
