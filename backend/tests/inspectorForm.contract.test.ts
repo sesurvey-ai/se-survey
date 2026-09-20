@@ -593,7 +593,7 @@ check('การ์ดผู้บาดเจ็บ: คำนำหน้า +
       && rec.includes("{ k: 'id_type', label: 'ชนิดบัตร', options: ['thai', 'foreign'], optionLabels: { thai: 'คนไทย', foreign: 'ต่างชาติ/พาสปอร์ต' }, defaultValue: 'thai' }")
       && rec.includes("{ k: 'home_province', label: 'จังหวัด (ที่อยู่)', options: PROVINCE_OPTIONS, reqWhen: injuredHasAddress }")
       && rec.includes("{ k: 'subdistrict', label: 'ตำบล/แขวง (ที่อยู่)', reqWhen: injuredHasAddress }")
-      && rec.includes("rec?.id_type !== 'foreign' && !cidChecksum(v)"));
+      && rec.includes("return idType !== 'foreign' && !cidChecksum(v);"));   // 21/09/69 cidBad
 check('การ์ดทรัพย์สิน: คำนำหน้าเจ้าของ (ไม่บังคับ) + ที่อยู่เจ้าของแยกช่อง owner_* (บังคับ 3 ช่องเมื่อมีที่อยู่)',
       rec.includes("{ k: 'owner_title', label: 'คำนำหน้าเจ้าของ', optionsFrom: (r) => withCurrentOption(TITLES, r.owner_title) }")
       && rec.includes("{ k: 'owner_province', label: 'จังหวัด (ที่อยู่เจ้าของ)', options: PROVINCE_OPTIONS, reqWhen: propertyHasAddress }")
@@ -615,10 +615,19 @@ check('XML/report: NAME=withTitle(title,name) · ADDRESS=opponentAddressLine(5 �
 check('อายุ 0 / วันเกิดปีปัจจุบัน: การ์ดเตือน (zeroAge/thisYearBirth) · คู่กรณีกั้น (opponentMissing) + ปุ่มใช้วันเกิด 01/01/2500 · ผู้บาดเจ็บกั้นอายุ 0 · ผู้ขับขี่รถประกันเตือน+กั้น+ปุ่ม',
       rec.includes("const zeroAge = def.k === 'age' && v.trim() === '0';") && rec.includes("const thisYearBirth = def.k === 'birthdate' && isCurrentYearSeDate(v.trim());")
       && rec.includes("...(isCurrentYearSeDate(rec.birthdate) ? ['birthdate'] : []),") && rec.includes("{ label: 'ใช้วันเกิด 01/01/2500', onClick: () => set(i, 'birthdate', PLACEHOLDER_BIRTHDATE) }")
-      && rec.includes("[...recordMissing(INJURED_FIELDS, INJURED_REQUIRED, rec), ...(String(rec.age ?? '').trim() === '0' ? ['age'] : [])]")
+      && rec.includes("[...recordMissing(INJURED_FIELDS, INJURED_REQUIRED, rec), ...(String(rec.age ?? '').trim() === '0' ? ['age'] : []),")
       && src.includes("const drvBirthThisYear = isCurrentYearSeDate(drvDates.driver_birthdate);") && src.includes("isCurrentYearSeDate(bdEl.value)) names.push('driver_birthdate');")
       && src.includes("setDrvDates({ ...drvDates, driver_birthdate: PLACEHOLDER_BIRTHDATE });")
       && fs.readFileSync(path.join(__dirname, '..', '..', 'web', 'src', 'components', 'cases', 'caseOptions.ts'), 'utf8').includes('export function isCurrentYearSeDate(v: unknown): boolean'));
+
+// เลขบัตรเข้าประตูอนุมัติ (เคส #504 21/09/69: 14 หลักถูกตีเป็นต่างชาติแล้วหลุดอนุมัติ) — ผู้ขับขี่รถประกัน (เตือนทุกชนิด + ต่างชาติเลขล้วนไม่ครบ 13) · ผู้บาดเจ็บ cidBad · คู่กรณียาวเกิน 13
+check('เลขบัตร: ผู้ขับขี่รถประกันกั้นอนุมัติเมื่อมีคำเตือน (+ ต่างชาติเลขล้วนไม่ครบ 13) · ผู้บาดเจ็บ/คู่กรณีใช้ cidBad/ยาวเกิน 13 ในประตู · การ์ดเตือนยาวเกิน',
+      src.includes("...(drvCidWarn ? [`เลขบัตรผู้ขับขี่รถประกัน: ${drvCidWarn}`] : []),")
+      && src.includes("if (!drvCidThai && /^\\d+$/.test(v) && v.length !== 13) return")
+      && rec.includes('export const cidBad = (cid: unknown, idType?: unknown): boolean => {')
+      && rec.includes("...(cidBad(rec.cid, rec.id_type) ? ['cid'] : [])];")
+      && rec.includes("...(String(rec.cid ?? '').trim().length > 13 ? ['cid'] : []),")
+      && rec.includes("const badCid = def.k === 'cid' && cidBad(v, rec?.id_type);"));
 
 console.log(`\n${failed === 0 ? '✅ ผ่านทั้งหมด' : `❌ ล้มเหลว ${failed} รายการ`}`);
 process.exit(failed ? 1 : 0);
