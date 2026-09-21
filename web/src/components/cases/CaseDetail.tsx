@@ -3139,7 +3139,8 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
                      ⤢ ขยาย
                    </button>
                  }>
-                <textarea disabled={d} name="acc_detail" defaultValue={report.acc_detail || ''} className={`${CTL(d)} min-h-[5rem]`} rows={4} />
+                {/* สูงขึ้นเป็น ~11 บรรทัด (user ขอ 22/09/69: 4 บรรทัดแคบไป รายงานเหตุจาก ISURVEY ยาวเป็นสิบบรรทัด ต้องเลื่อนอ่าน) · ยังลากขยาย/กดขยายได้เหมือนเดิม */}
+                <textarea disabled={d} name="acc_detail" defaultValue={report.acc_detail || ''} className={`${CTL(d)} min-h-[15rem]`} rows={11} />
               </F>
               {/* "หมายเหตุ" จาก ISURVEY แท็บ 2 (ค่าพาหนะ/นัดหมาย/เงื่อนไขที่ช่างจด) — user ขอ 08/09/69
                   ⛔ แสดงอย่างเดียว ไม่มี name จึงไม่ถูกบันทึกทับ และไม่ไหลเข้า XML/EMCS (คอลัมน์ source_remark, migration 056) */}
