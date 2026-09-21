@@ -160,7 +160,9 @@ export const isurveyPullService = {
     const byKey = new Map<string, { id: number; status: string }>();
     for (const x of ex.rows as { claim_no: string; survey_job_no: string | null; id: number; status: string }[]) {
       byKey.set(`${x.claim_no}|${x.survey_job_no ?? ''}`, { id: x.id, status: x.status });
-      if (!byKey.has(`${x.claim_no}|`)) byKey.set(`${x.claim_no}|`, { id: x.id, status: x.status });
+      // สำรองด้วยเลขเคลมอย่างเดียว **เฉพาะเคสที่ไม่มีเลขเซอร์เวย์ในระบบ** (ข้อมูลเก่า) — เดิมใส่ให้ทุกเคส ทำให้งานครั้งถัดไป
+      // (เลขเซอร์เวย์ใหม่ เคลมเดิม) ถูกจับคู่กับใบครั้งที่ 1 ที่อนุมัติแล้ว → หน้างานรอตรวจซ่อนไป (เคลม 2026013077649 user พบ 22/09/69)
+      if (!String(x.survey_job_no ?? '').trim() && !byKey.has(`${x.claim_no}|`)) byKey.set(`${x.claim_no}|`, { id: x.id, status: x.status });
     }
     const out: Record<string, { id: number; status: string }> = {};
     for (const r of rows) {

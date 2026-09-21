@@ -88,5 +88,13 @@ check('เตือนอย่างเดียว ไม่โหลดทั
         && ir.indexOf("router.get('/cases/lookup'") < ir.indexOf("router.get('/cases/:id'"));
 }
 
+// 22/09/69: หน้างานรอตรวจซ่อนงานครั้งถัดไป (เคลม 2026013077649 ครั้งที่ 2) เพราะ importedStatus จับคู่สำรองด้วยเลขเคลมกับทุกเคส
+{
+  const svc = read('src', 'services', 'isurveyPull.service.ts');
+  check('importedStatus: คีย์สำรองเลขเคลมอย่างเดียว ใส่เฉพาะเคสที่ไม่มีเลขเซอร์เวย์ (งานครั้งถัดไปเลขใหม่ต้องเป็น "ยังไม่มี" ไม่ใช่ใบครั้งที่ 1 ที่อนุมัติแล้ว)',
+        svc.includes("if (!String(x.survey_job_no ?? '').trim() && !byKey.has(`${x.claim_no}|`)) byKey.set(`${x.claim_no}|`")
+        && !svc.includes("if (!byKey.has(`${x.claim_no}|`)) byKey.set(`${x.claim_no}|`"));
+}
+
 console.log(failed === 0 ? '\n✅ ผ่านทั้งหมด\n' : `\n❌ ไม่ผ่าน ${failed} ข้อ\n`);
 process.exit(failed === 0 ? 0 : 1);
