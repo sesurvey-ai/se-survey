@@ -1434,7 +1434,8 @@ export const caseService = {
        */
       photo_fee_suggest:
         report && caseResult.rows[0]?.source !== 'isurvey_xml'
-          ? standardPhotoFee(report)
+          // ครั้งที่ของใบนี้ (visit_no ที่เก็บ · ไม่มีก็ลำดับสร้าง) — ครั้งที่ 2+ ไม่มีค่ารูป (22/09/69)
+          ? standardPhotoFee({ ...report, visit_no: Number(caseResult.rows[0]?.visit_no) || visitCount })
           : null,
       // ชื่อคนที่มีอักขระซึ่ง EMCS จะล้างค่าทั้งช่องทิ้ง — เตือนคนตรวจก่อนส่งเข้า EMCS
       emcs_name_warnings: report ? emcsNameWarnings(report) : [],

@@ -56,6 +56,13 @@ function isThaiPaiboon(row: Record<string, unknown>): boolean {
  * ⛔ ห้ามเดาเป็น 0 หรือ 50 เมื่อไม่รู้ — ทั้งสองทางคือตัวเงินที่ผิดโดยไม่มีใครรู้
  */
 export function standardPhotoFee(row: Record<string, unknown>): PhotoFee | null {
+  // 0. งานครั้งที่ 2 ขึ้นไป (งานต่อเนื่อง/ติดตาม) → ไม่มีค่ารูป — ค่ารูปเบิกได้เฉพาะครั้งที่ 1 (user เคาะ 22/09/69
+  //    ตรวจกับ ISURVEY เคลม 2026013136010 ทั้ง 4 ครั้ง: รูป 50 เฉพาะครั้งที่ 1) · ค่าคัดประจำวันไม่เกี่ยว แล้วแต่งาน
+  //    row.visit_no = ครั้งที่ของใบนี้ (ผู้เรียกใส่มาจาก cases.visit_no หรือลำดับสร้าง) · ไม่ส่งมา = ถือเป็นครั้งที่ 1
+  const visit = Number(row.visit_no ?? 0);
+  if (Number.isFinite(visit) && visit >= 2) {
+    return { count: 0, price: 0, reason: `งานครั้งที่ ${visit} — ไม่มีค่ารูป (ค่ารูปเบิกเฉพาะครั้งที่ 1)` };
+  }
   // 1. ไทยไพบูลย์ → ไม่มีค่ารูปทุกกรณี (จบตั้งแต่ข้อนี้ ไม่ต้องดูอย่างอื่น)
   if (isThaiPaiboon(row)) return { count: 0, price: 0, reason: 'งานไทยไพบูลย์ — ไม่มีค่ารูป' };
 
