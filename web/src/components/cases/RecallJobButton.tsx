@@ -30,7 +30,8 @@ export default function RecallJobButton({ caseId, claimNo, surveyorName, onRecal
   const handle = async (e: React.MouseEvent) => {
     e.stopPropagation();   // แถว "รอมอบหมาย" คลิกแล้วเด้งไปหน้าจ่ายงาน — ปุ่มนี้อยู่บนแถวเดียวกันห้ามลาม
     if (busy) return;
-    const job = claimNo ? `เคลม ${claimNo}` : 'งานนี้';
+    // เว้นวรรคหลังเลขเคลม — "ดึงเคลม 2026013199030กลับ" อ่านติดกันเป็นเลขเดียว (เจอตอนเทสหน้าจริง 22/09/69)
+    const job = claimNo ? `เคลม ${claimNo} ` : 'งานนี้';
     const who = surveyorName ? ` จาก ${surveyorName}` : '';
     if (!window.confirm(`ดึง${job}กลับ${who}?\n\nงานจะกลับไป "รอมอบหมาย" และการ์ดรับงานบนเครื่องช่างจะถูกถอนออก`)) return;
     setBusy(true);
@@ -63,8 +64,8 @@ export default function RecallJobButton({ caseId, claimNo, surveyorName, onRecal
  * ถอนไม่ได้ (เครื่องไม่ได้ลงทะเบียนแจ้งเตือน) ต้องบอกให้โทรตาม ไม่งั้นช่างยังเห็นการ์ดค้างแล้ววิ่งไปหน้างานเก้อ
  */
 export function recallNotice(r: RecallResult, claimNo?: string, surveyorName?: string): string {
-  const job = claimNo ? `เคลม ${claimNo}` : 'งาน';
-  const who = surveyorName || 'ช่าง';
-  if (r.withdrawn === 'sent') return `ดึง${job}กลับแล้ว — ถอนการ์ดรับงานบนเครื่อง${who}แล้ว งานกลับไป "รอมอบหมาย"`;
-  return `ดึง${job}กลับแล้ว แต่ถอนการ์ดบนเครื่อง${who}ไม่ได้ (เครื่องไม่ได้ลงทะเบียนแจ้งเตือน) — โทรแจ้งช่างด้วย ไม่งั้นอาจยังเห็นการ์ดรับงานค้างอยู่`;
+  const job = claimNo ? `เคลม ${claimNo} ` : 'งาน';
+  const who = surveyorName ? `${surveyorName} ` : 'ช่าง';
+  if (r.withdrawn === 'sent') return `ดึง${job}กลับแล้ว — ถอนการ์ดรับงานบนเครื่อง ${who}แล้ว งานกลับไป "รอมอบหมาย"`;
+  return `ดึง${job}กลับแล้ว แต่ถอนการ์ดบนเครื่อง ${who}ไม่ได้ (เครื่องไม่ได้ลงทะเบียนแจ้งเตือน) — โทรแจ้งช่างด้วย ไม่งั้นอาจยังเห็นการ์ดรับงานค้างอยู่`;
 }
