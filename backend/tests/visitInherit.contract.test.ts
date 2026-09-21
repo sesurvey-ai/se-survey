@@ -159,6 +159,12 @@ check('รายการเคสสำหรับบอทส่ง opponent_
     pull.includes("api.post('/api/isurvey/rounds'") && pull.includes('roundsAsked'));
   check('เว็บ: โชว์ "ครั้งที่ N จาก M" ใต้เลขเซอร์เวย์ + เตือนครั้งก่อนหน้าที่ยังไม่ได้ดึง',
     pull.includes('ครั้งที่ {r.visit_no}') && pull.includes('ครั้งก่อนหน้ายังไม่ได้ดึง'));
+  // 22/09/69 user: หน้างานรอตรวจไม่กรองตามทีม (งานตกหล่น เคลม 2026013150636) — กรองด้วยจังหวัดแทน · หน้ารายการงานยังกรองตามทีม
+  check('backend: หน้างานรอตรวจไม่กรองตามทีมแล้ว (ยังกรองที่ getForReview เท่านั้น)',
+    !/rows = rows\.filter\(\(r\) => team\.match/.test(pullSvc) && pullSvc.includes('applied: false')
+    && read('src', 'services', 'case.service.ts').includes('staffGroupService.filterFor(user.id, user.role)'));
+  check('เว็บ: ตัวกรองจังหวัดติ๊กได้หลายค่า จากจังหวัดในรายการ · ตัวกรองสถานะยังอยู่',
+    pull.includes('provinceCounts') && pull.includes('toggleProvince') && pull.includes('ไม่ติ๊กเลย = ทุกจังหวัด') && pull.includes('toggleStatus'));
 }
 
 console.log(failed === 0 ? '\n✅ ผ่านทั้งหมด\n' : `\n❌ ไม่ผ่าน ${failed} ข้อ\n`);

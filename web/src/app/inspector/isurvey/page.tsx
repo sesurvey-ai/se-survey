@@ -49,8 +49,8 @@ const NO_STATUS = '(ไม่ระบุ)';
  * จำรายการที่โหลดล่าสุดไว้ในแท็บนี้ (sessionStorage) — เปลี่ยนเมนู/เด้งไปหน้าเคสแล้วกลับมาไม่ต้องโหลดใหม่
  * (โหลดครั้งหนึ่ง 10 กว่าวินาที) · ปิดแท็บ = หาย · กด "โหลดรายการ" = ดึงสดทับ
  */
-const CACHE_KEY = 'isurvey-pending-cache-v3';   // v3: ตัวกรองสถานะเป็นหลายค่า (statuses) — v2 เก็บค่าเดียว
-type Cache = { from: string; to: string; statuses: string[]; rows: Row[]; filter: Filter | null; loadedAt: string };
+const CACHE_KEY = 'isurvey-pending-cache-v4';   // v4: + ตัวกรองจังหวัด (provinces) 22/09/69 · v3 สถานะหลายค่า · v2 ค่าเดียว
+type Cache = { from: string; to: string; statuses: string[]; provinces?: string[]; rows: Row[]; filter: Filter | null; loadedAt: string };
 const readCache = (): Cache | null => {
   try { const raw = sessionStorage.getItem(CACHE_KEY); return raw ? (JSON.parse(raw) as Cache) : null; } catch { return null; }
 };
@@ -64,6 +64,8 @@ const STATUS_TH: Record<string, string> = {
   surveyed: 'รอตรวจ', reviewed: 'อนุมัติแล้ว', assigned: 'ตีกลับ/มอบหมาย', finished: 'เสร็จงาน', pending: 'รอมอบหมาย',
 };
 const statusOf = (r: Row) => r.status || NO_STATUS;
+const NO_PROVINCE = 'ไม่ระบุจังหวัด';
+const provinceOf = (r: Row) => String(r.acc_province ?? '').trim() || NO_PROVINCE;
 
 export default function IsurveyPendingPage() {
   const router = useRouter();
@@ -75,6 +77,10 @@ export default function IsurveyPendingPage() {
   /** สถานะ ISURVEY ที่เลือกดู — ว่าง = ทั้งหมด (เลือกได้หลายค่า 08/09/69) */
   const [statuses, setStatuses] = useState<string[]>([PENDING]);
   const [statusOpen, setStatusOpen] = useState(false);
+  /** ตัวกรองจังหวัด (user ขอ 22/09/69 แทนการกรองตามทีม) — ติ๊กได้หลายจังหวัด · ไม่ติ๊กเลย = ทุกจังหวัด */
+  const [provinces, setProvinces] = useState<string[]>([]);
+  const [provinceOpen, setProvinceOpen] = useState(false);
+  const provinceBoxRef = useRef<HTMLDivElement>(null);
   const statusBoxRef = useRef<HTMLDivElement | null>(null);
   /** งานที่อนุมัติแล้วในระบบเรา ซ่อนจากมุมมอง "รอตรวจข้อมูล" — กดโชว์ได้ */
   const [showApproved, setShowApproved] = useState(false);
@@ -97,22 +103,23 @@ export default function IsurveyPendingPage() {
     const c = readCache();
     if (c && Array.isArray(c.rows)) {
       setFrom(c.from); setTo(c.to); setRows(c.rows); setFilter(c.filter ?? null);
-      setStatuses(Array.isArray(c.statuses) ? c.statuses : [PENDING]); setLoadedAt(c.loadedAt);
+      setStatuses(Array.isArray(c.statuses) ? c.statuses : [PENDING]); setProvinces(Array.isArray(c.provinces) ? c.provinces : []); setLoadedAt(c.loadedAt);
     }
   }, []);
   useEffect(() => {
-    if (rows && loadedAt) writeCache({ from, to, statuses, rows, filter, loadedAt });
-  }, [rows, filter, statuses, from, to, loadedAt]);
+    if (rows && loadedAt) writeCache({ from, to, statuses, provinces, rows, filter, loadedAt });
+  }, [rows, filter, statuses, provinces, from, to, loadedAt]);
 
-  // ปิดกล่องเลือกสถานะเมื่อคลิกนอกกล่อง
+  // ปิดกล่องเลือกสถานะ/จังหวัดเมื่อคลิกนอกกล่อง
   useEffect(() => {
-    if (!statusOpen) return;
+    if (!statusOpen && !provinceOpen) return;
     const onDown = (e: MouseEvent) => {
       if (statusBoxRef.current && !statusBoxRef.current.contains(e.target as Node)) setStatusOpen(false);
+      if (provinceBoxRef.current && !provinceBoxRef.current.contains(e.target as Node)) setProvinceOpen(false);
     };
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
-  }, [statusOpen]);
+  }, [statusOpen, provinceOpen]);
 
   const load = async () => {
     setLoading(true); setError(''); setNeedAccount(false); setResults({});
@@ -125,6 +132,8 @@ export default function IsurveyPendingPage() {
       setSyncedAt(null); setShowApproved(false);
       // ค่าเริ่มต้นดู "รอตรวจข้อมูล" — ถ้าช่วงนี้ไม่มีเลยค่อยโชว์ทั้งหมด จะได้ไม่เจอตารางว่างทั้งที่มีงาน
       setStatuses(cases.some((c) => c.status === PENDING) ? [PENDING] : []);
+      // จังหวัดที่เคยติ๊กไว้แต่ไม่มีในรายการใหม่ = ปล่อยทิ้ง (ไม่งั้นตารางว่างทั้งที่มีงาน)
+      setProvinces((cur) => { const have = new Set(cases.map(provinceOf)); return cur.filter((p) => have.has(p)); });
     } catch (e) {
       const code = (e as { response?: { status?: number } })?.response?.status;
       if (code === 412) setNeedAccount(true);
@@ -177,14 +186,22 @@ export default function IsurveyPendingPage() {
   }, [rows]);
   const isAll = statuses.length === 0;
   const byStatus = useMemo(() => (rows ?? []).filter((r) => isAll || statuses.includes(statusOf(r))), [rows, statuses, isAll]);
+  // จังหวัดที่มีในมุมมองสถานะปัจจุบัน + จำนวน (เรียงจำนวนมากก่อน) — ตัวเลือกของตัวกรองจังหวัด
+  const provinceCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of byStatus) m.set(provinceOf(r), (m.get(provinceOf(r)) ?? 0) + 1);
+    return Array.from(m.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'th'));
+  }, [byStatus]);
+  const isAllProv = provinces.length === 0;
+  const byProvince = useMemo(() => byStatus.filter((r) => isAllProv || provinces.includes(provinceOf(r))), [byStatus, provinces, isAllProv]);
   /**
    * งานที่อนุมัติแล้วในระบบเรา ไม่ใช่ "รอตรวจ" อีกต่อไป (ระบบปิดงานบน ISURVEY ให้ตอนอนุมัติ) —
    * ซ่อนจากมุมมองที่มี "รอตรวจข้อมูล" จนกว่าจะกด "โหลดรายการ" ซึ่ง ISURVEY จะบอกสถานะใหม่เอง · ดูทั้งหมด/สถานะอื่น = ไม่ซ่อน
    */
   const hideApproved = !isAll && statuses.includes(PENDING) && !showApproved;
-  const afterHide = useMemo(() => byStatus.filter((r) => !(hideApproved && r.status === PENDING && r.imported_status === 'reviewed')),
-    [byStatus, hideApproved]);
-  const hiddenApproved = byStatus.length - afterHide.length;
+  const afterHide = useMemo(() => byProvince.filter((r) => !(hideApproved && r.status === PENDING && r.imported_status === 'reviewed')),
+    [byProvince, hideApproved]);
+  const hiddenApproved = byProvince.length - afterHide.length;
   /**
    * ค้นหา (user ขอ 15/09/69): พิมพ์อะไรก็ตาม = ค้นจากรายการที่โหลดมา**ทุกสถานะ** (ตัวกรองสถานะ/การซ่อนงานอนุมัติแล้วไม่มีผลชั่วคราว)
    * ตรงกับ เลขเคลม · เลขเซอร์เวย์ · ผู้สำรวจ (รหัส+ชื่อ) · จังหวัด แบบมีคำนั้นอยู่ ไม่สนตัวพิมพ์
@@ -223,6 +240,11 @@ export default function IsurveyPendingPage() {
   }, [visible]);
   const toggleStatus = (s: string) =>
     setStatuses((cur) => (cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]));
+  const toggleProvince = (p: string) =>
+    setProvinces((cur) => (cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p]));
+  const provinceLabel = isAllProv ? `ทุกจังหวัด (${byStatus.length})`
+    : provinces.length === 1 ? `${provinces[0]} (${provinceCounts.find(([p]) => p === provinces[0])?.[1] ?? 0})`
+    : `${provinces.length} จังหวัด (${byProvince.length})`;
   const statusLabel = isAll ? `ทั้งหมด (${rows?.length ?? 0})`
     : statuses.length === 1 ? `${statuses[0]} (${statusCounts.find(([s]) => s === statuses[0])?.[1] ?? 0})`
     : `${statuses.length} สถานะ (${byStatus.length})`;
@@ -266,7 +288,7 @@ export default function IsurveyPendingPage() {
   const pullAll = async () => {
     const todo = visible.filter((r) => !r.imported_case_id && r.claim_no && pullable(r));   // ไม่มีเลขเคลม/สถานะดึงไม่ได้ = ข้าม
     if (todo.length === 0) return;
-    const label = isAll ? 'ทุกสถานะ' : `สถานะ "${statuses.join('", "')}"`;
+    const label = (isAll ? 'ทุกสถานะ' : `สถานะ "${statuses.join('", "')}"`) + (isAllProv ? '' : ` · จังหวัด "${provinces.join('", "')}"`);
     if (!window.confirm(`ดึงงานที่ยังไม่มีในระบบ (${label}) ทั้งหมด ${todo.length} เรื่อง? (ทีละเรื่อง ใช้เวลาประมาณ ${todo.length * 15} วินาที)`)) return;
     setBulk(true);
     try {
@@ -334,6 +356,32 @@ export default function IsurveyPendingPage() {
             </div>
           )}
           {rows && (
+            /* ตัวกรองจังหวัด (user ขอ 22/09/69 แทนการกรองตามทีม) — จังหวัดที่เกิดเหตุตามที่ ISURVEY ส่งมา ติ๊กได้หลายจังหวัด */
+            <div ref={provinceBoxRef} className={`relative flex flex-col text-xs text-gray-600 ${searching ? 'opacity-50' : ''}`}>จังหวัด
+              <button type="button" onClick={() => setProvinceOpen((o) => !o)} disabled={searching}
+                title={searching ? 'กำลังค้นหาทุกจังหวัด — ล้างคำค้นก่อนถึงจะกรองจังหวัด' : ''}
+                className="border border-gray-300 bg-white px-2 py-1 text-sm text-gray-800 text-left min-w-[11rem] flex items-center justify-between gap-2 disabled:cursor-not-allowed">
+                <span className="truncate">{provinceLabel}</span><span className="text-gray-500">▾</span>
+              </button>
+              {provinceOpen && (
+                <div className="absolute z-20 top-full left-0 mt-1 w-64 max-h-80 overflow-y-auto bg-white border border-gray-300 shadow-lg p-2 text-sm text-gray-800">
+                  <label className="flex items-center gap-2 px-1 py-1 cursor-pointer hover:bg-gray-50">
+                    <input type="checkbox" checked={isAllProv} onChange={() => setProvinces([])} />
+                    <span className="font-semibold">ทุกจังหวัด</span><span className="text-gray-500">({byStatus.length})</span>
+                  </label>
+                  <div className="border-t border-gray-100 my-1" />
+                  {provinceCounts.map(([p, n]) => (
+                    <label key={p} className="flex items-center gap-2 px-1 py-1 cursor-pointer hover:bg-gray-50">
+                      <input type="checkbox" checked={!isAllProv && provinces.includes(p)} onChange={() => toggleProvince(p)} />
+                      <span className={p === NO_PROVINCE ? 'text-gray-500' : ''}>{p}</span><span className="text-gray-500">({n})</span>
+                    </label>
+                  ))}
+                  <div className="text-[0.6875rem] text-gray-500 px-1 pt-1">ติ๊กได้หลายจังหวัด · ไม่ติ๊กเลย = ทุกจังหวัด · จำนวนนับตามสถานะที่เลือกอยู่</div>
+                </div>
+              )}
+            </div>
+          )}
+          {rows && (
             <button type="button" onClick={pullAll} disabled={loading || bulk || notImported === 0}
               className="px-3 py-1.5 border border-[var(--md-blue)] text-[var(--md-blue)] bg-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed">
               {bulk ? 'กำลังดึง…' : `ดึงทั้งหมดที่ยังไม่มี (${notImported})`}
@@ -363,11 +411,11 @@ export default function IsurveyPendingPage() {
           {syncedAt && <> · สถานะในระบบเราอัปเดต {new Date(syncedAt).toLocaleTimeString('th-TH', { timeStyle: 'short' })}</>}
         </div>
       )}
-      {rows && filter && (
+      {rows && (
+        /* 22/09/69 user: เลิกกรองตามทีมบนหน้านี้ — ช่างนอกทีม/ทีมอื่นทำครั้งถัดไปของเคลมเดียวกันเคยทำให้งานตกหล่น · ใช้ตัวกรองจังหวัดแทน */
         <div className="mb-2 text-xs text-gray-600">
-          {filter.applied
-            ? <>แสดงเฉพาะงานของลูกทีม <span className="font-semibold">{filter.group_name}</span> ({filter.members} รายชื่อ) — ซ่อนงานของทีมอื่น {filter.hidden} เรื่อง · <Link href="/inspector/team" className="text-blue-700 hover:underline">ดูรายชื่อทีม</Link></>
-            : <>แสดงงานทั้งบริษัท (บัญชีนี้ยังไม่ได้ผูกทีม — แอดมินผูกได้ที่ &quot;จัดการทีมผู้ตรวจ&quot;)</>}
+          แสดงงานทั้งบริษัททุกทีม (ไม่กรองตามรายชื่อลูกทีมแล้ว จะได้ไม่มีงานตกหล่น) — กรองด้วยจังหวัด/สถานะ หรือค้นหาแทน
+          {filter?.applied && <> · รายการนี้โหลดไว้ก่อนเปลี่ยนกติกา กด &quot;โหลดรายการ&quot; ใหม่จะเห็นทุกทีม</>}
         </div>
       )}
       {rows && (hiddenApproved > 0 || showApproved) && !isAll && statuses.includes(PENDING) && (

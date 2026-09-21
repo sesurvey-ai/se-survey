@@ -11,7 +11,6 @@ import { db } from '../config/database';
 import { env } from '../config/env';
 import { AppError } from '../middleware/errorHandler';
 import { isurveyCredService } from './isurveyCred.service';
-import { staffGroupService } from './staffGroup.service';
 import { notifyCaseChanged } from './caseEvents';
 
 export interface PendingRow {
@@ -131,11 +130,12 @@ export const isurveyPullService = {
       await isurveyCredService.markResult(userId, false, e instanceof Error ? e.message : String(e));
       throw e;
     }
-    const team = await staffGroupService.filterFor(userId, role);
-    const before = rows.length;
-    if (team) rows = rows.filter((r) => team.match(String(r.surveyor_name ?? '')));
-    const filter = { applied: Boolean(team), group_name: team?.group.name ?? null,
-                     members: team?.group.members?.length ?? 0, hidden: before - rows.length };
+    // 22/09/69 user: **เลิกกรองตามทีม** บนหน้านี้ — ช่างที่ยังไม่ถูกใส่ชื่อในทีม หรือทีมอื่นทำงานครั้งถัดไปของเคลมเดียวกัน
+    // ทำให้งานตกหล่น (เคลม 2026013150636 มี 7 ครั้ง 2 ครั้งเป็นของช่างทีมอื่น หัวหน้ามองไม่เห็น) → เห็นทั้งบริษัท
+    // แล้วกรองเองด้วยจังหวัด/สถานะ/ค้นหาบนหน้าเว็บ · หน้า "รายการงาน" (getForReview) ยังกรองตามทีมเหมือนเดิม
+    // รูปทรง filter คงไว้ให้หน้าเว็บเก่า/cache อ่านได้ (applied=false ตลอด)
+    void role;
+    const filter = { applied: false, group_name: null as string | null, members: 0, hidden: 0 };
     if (rows.length === 0) return { cases: rows, filter };
     const hits = await this.importedStatus(rows);
     const cases = rows.map((r) => {
