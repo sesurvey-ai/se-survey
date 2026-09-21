@@ -4,7 +4,8 @@
  * ⛔ "ลูกค้าแจ้ง" (วันเวลารับแจ้ง) ต้องบังคับทั้งฟอร์มและเซิร์ฟเวอร์ — เคสที่กรอกเองไม่ผ่าน OCR เคยว่างได้
  *    → ไทม์ไลน์งานของช่าง (จุดแรก "ลูกค้าแจ้ง") ว่างเปล่า (เคลม 777 ที่ user เจอ) และ EMCS ไม่มีวันเวลารับแจ้ง
  * ⛔ รูปแบบต้องเป็น "dd/mm/พ.ศ.|HH:mm" ชุดเดียวกับ OCR — แอปแยกด้วย '|' (splitDT) ถ้าเก็บอีกแบบ ไทม์ไลน์อ่านไม่ออกเงียบ ๆ
- * + โลโก้ไอโออิแบบใหม่ (ป้าย "AIOI") ต้องมีครบทั้งการ์ดมือถือและตัวเลือกบริษัทบนเว็บ (เดิมเว็บอ้างไฟล์ที่ไม่มี)
+ * + โลโก้ไอโออิ (ตราตัวจริง aioilogo.png ของ user) ต้องมีทั้งการ์ดมือถือและตัวเลือกบริษัทบนเว็บ — เดิมเว็บอ้างไฟล์ที่ไม่มีเลยโชว์ตัวย่อ "AIOI"
+ *   ⛔ 22/09/69 เคยเข้าใจผิดว่า user ต้องการป้าย "AIOI" (ที่จริงคือภาพของอาการบั๊ก) → อย่าวาดป้ายแทนตรา
  */
 import * as fs from 'fs';
 import * as path from 'path';
@@ -39,13 +40,14 @@ check('ฟอร์ม: แยกช่องวัน/เวลา รวมก
       && page.includes("`${d.trim()}|${t.trim()}`"));
 check('ฟอร์ม: ป้ายมีดอกจันบังคับ', /ลูกค้าแจ้ง <span className="text-red-500">\*<\/span>/.test(page));
 
-console.log('\n── โลโก้ไอโออิแบบใหม่ ──');
+console.log('\n── โลโก้ไอโออิ (ตราตัวจริง) ──');
 const webLogo = root('..', 'web', 'public', 'insurance', 'aioi.png');
 const cardLogo = root('..', 'mobile', 'android', 'app', 'src', 'main', 'res', 'drawable-nodpi', 'logo_aioi.png');
 check('เว็บ: ไฟล์โลโก้ที่ตัวเลือกบริษัทอ้างถึงมีจริง (เดิมอ้าง /insurance/aioi.png แต่ไม่มีไฟล์)',
       page.includes("logo: '/insurance/aioi.png'") && fs.existsSync(webLogo));
-check('มือถือ: โลโก้บนการ์ดงานคมพอ (≥ 256 px) ไม่ใช่ภาพจับหน้าจอ 51 px',
-      fs.existsSync(cardLogo) && pngSize(cardLogo)[0] >= 256 && pngSize(webLogo)[0] >= 256);
+check('เว็บและการ์ดมือถือใช้ไฟล์เดียวกัน (ตราตัวจริง 144×137) — ไม่ใช่ป้าย "AIOI" ที่วาดเอง',
+      fs.existsSync(cardLogo) && pngSize(cardLogo)[0] === 144 && pngSize(cardLogo)[1] === 137
+      && fs.readFileSync(cardLogo).equals(fs.readFileSync(webLogo)));
 
 console.log(failed === 0 ? '\n✅ ผ่านทั้งหมด' : `\n❌ ไม่ผ่าน ${failed} ข้อ`);
 process.exit(failed === 0 ? 0 : 1);
