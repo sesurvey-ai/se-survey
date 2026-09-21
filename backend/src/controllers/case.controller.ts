@@ -52,6 +52,13 @@ export const caseController = {
     sendSuccess(res, result);
   }),
 
+  /** คอลเซ็นเตอร์ "ดึงงานกลับ" — งานกลับไปรอมอบหมาย + ถอนการ์ดบนเครื่องช่าง ดู caseService.recall */
+  recall: asyncHandler(async (req: Request, res: Response) => {
+    const caseId = parseInt(req.params.id as string);
+    const result = await caseService.recall(caseId, req.user!.id);
+    sendSuccess(res, result);
+  }),
+
   submitSurvey: asyncHandler(async (req: Request, res: Response) => {
     const caseId = parseInt(req.params.id as string);
     const result = await caseService.submitSurvey(caseId, req.user!.id, req.body);

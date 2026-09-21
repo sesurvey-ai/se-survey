@@ -37,6 +37,9 @@ const incomingAct = kt('IncomingCallActivity.kt');
 const incomingLayout = read('..', 'mobile', 'android', 'app', 'src', 'main', 'res', 'layout', 'activity_incoming_call.xml');
 const fcmDart = read('..', 'mobile', 'lib', 'services', 'fcm_service.dart');
 const authDart = read('..', 'mobile', 'lib', 'providers', 'auth_provider.dart');
+const recallBtn = read('..', 'web', 'src', 'components', 'cases', 'RecallJobButton.tsx');
+const ccDash = read('..', 'web', 'src', 'app', 'callcenter', 'page.tsx');
+const ccList = read('..', 'web', 'src', 'app', 'callcenter', 'cases', 'page.tsx');
 const manifest = read('..', 'mobile', 'android', 'app', 'src', 'main', 'AndroidManifest.xml');
 const notifDart = read('..', 'mobile', 'lib', 'services', 'notification_service.dart');
 const homeDart = read('..', 'mobile', 'lib', 'screens', 'home_screen.dart');
@@ -201,6 +204,17 @@ check('จอสรุปถอนงานเว้นแถบนำทาง 
       /withdrawn\.setPadding\(dp\(24\), bars\.top, dp\(24\), dp\(28\) \+ bars\.bottom\)/.test(incomingAct));
 check('ใบเดิมกลับมา (กู้/ย้ายกลับ) ลบแจ้งเตือน "งานถูกถอน" ที่ค้างของใบนั้น',
       /\.cancel\(WITHDRAWN_ID_BASE \+ caseId\)/.test(notifHelper.split('fun showIncomingNotification')[1] || ''));
+check('คอลเซ็นเตอร์มีเส้นทาง "ดึงงานกลับ" (POST /:id/recall)',
+      /router\.post\('\/:id\/recall', auth, requireRole\('callcenter', 'admin'\), caseController\.recall\)/.test(caseRoutes));
+check('ดึงกลับได้เฉพาะสถานะ assigned และ guard เจ้าของใน UPDATE',
+      /async recall\(caseId: number, byUserId: number\)/.test(caseSvc)
+      && /WHERE id = \$1 AND status = 'assigned' AND assigned_to = \$2 RETURNING \*/.test(caseSvc));
+check('ดึงกลับแล้วถอนการ์ดบนเครื่องช่างคนเดิม + คืนผลให้หน้าเว็บ',
+      /pushSurveyWithdrawn\(caseId, Number\(assigned_to\), 'unassigned'\)/.test(caseSvc)
+      && /return \{ \.\.\.upd\.rows\[0\], recalled_from: assigned_to, withdrawn \}/.test(caseSvc));
+check('ปุ่ม "ดึงงานกลับ" บนหน้าคอลเซ็นเตอร์ทั้ง 2 หน้า ยืนยันก่อนเสมอ และบอกผลการถอนการ์ด',
+      recallBtn.includes('window.confirm(') && recallBtn.includes('/recall`') && recallBtn.includes('โทรแจ้งช่างด้วย')
+      && ccDash.includes('<RecallJobButton') && ccList.includes('<RecallJobButton'));
 check('Flutter รีเฟรชรายการงานเมื่อถูกถอน',
       fcmDart.includes("data['type'] == 'cancel_survey'") && authDart.includes('_fcmService.onSurveyWithdrawn = '));
 

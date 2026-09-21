@@ -2,7 +2,7 @@ import { db } from '../config/database';
 import { normalizeDriverAddressFields, normalizeOpponentsAddress, normalizeCardAddresses } from './driverAddress';
 import { env } from '../config/env';
 import { AppError, NotFoundError, ForbiddenError } from '../middleware/errorHandler';
-import { pushNewSurvey } from './surveyPush.service';
+import { pushNewSurvey, pushSurveyWithdrawn } from './surveyPush.service';
 import { generateSurveyXml, emcsNameWarnings, sanitizeReportDates } from './xmlExport.service';
 import { invalidateCaseOwner } from '../middleware/uploadsAuth';
 import { storage, normalizeKey, contentTypeOf } from '../config/storage';
@@ -558,6 +558,38 @@ export const caseService = {
     // ปฏิเสธงาน = เลิกเป็นเจ้าของ → ล้าง cache สิทธิ์ดูรูป (ไม่งั้นยังเปิดรูปเคสนี้ได้อีกพักหนึ่ง)
     invalidateCaseOwner(caseId);
     return result.rows[0];
+  },
+
+  /**
+   * "ดึงงานกลับ" — คอลเซ็นเตอร์ถอนงานที่มอบหมายไปแล้วกลับมา "รอมอบหมาย" (user สั่ง 22/09/69)
+   *
+   * เดิมทำได้เฉพาะแอดมินที่หน้าแก้ไขเคส (adminService.updateCase) — คอลเซ็นเตอร์ต้องรอช่างกดปฏิเสธเองถึงจ่ายใหม่ได้
+   * ⛔ เฉพาะสถานะ 'assigned' — ช่างกดเสร็จงาน/ส่งงานแล้ว ดึงกลับ = ข้อมูลหน้างานหายไปกับเจ้าของงาน (เหมือน guard ของ declineCase)
+   *    กรณีนั้นให้แอดมินตัดสินเป็นราย ๆ ที่หน้าแก้ไขเคส
+   * ⛔ guard สถานะ + เจ้าของใน UPDATE — ช่างกดเสร็จงาน/ปฏิเสธคั่นกลาง → 0 แถว → ไม่ตอบว่าสำเร็จ
+   * หลังล้าง assigned_to ยิง push ถอนงาน (cancel_survey) ไปปิดการ์ด "รับงาน" บนเครื่องช่างคนเดิม — ผล (sent/skipped/failed)
+   * คืนให้หน้าเว็บบอกคนกด: ถอนไม่ได้ (เครื่องไม่ได้ลงทะเบียน) ต้องโทรตาม ไม่งั้นช่างยังเห็นการ์ดค้าง
+   */
+  async recall(caseId: number, byUserId: number) {
+    const cur = await db.query('SELECT id, status, assigned_to FROM cases WHERE id = $1', [caseId]);
+    if (cur.rows.length === 0) throw new NotFoundError('Case not found');
+    const { status, assigned_to } = cur.rows[0] as { status: string; assigned_to: number | null };
+    if (status !== 'assigned' || !assigned_to) {
+      throw new AppError(409, status === 'pending' || status === 'declined'
+        ? 'งานนี้ยังไม่ได้มอบหมาย ไม่มีอะไรให้ดึงกลับ'
+        : 'งานนี้ช่างเสร็จงาน/ส่งงานแล้ว ดึงกลับไม่ได้ — ถ้าจำเป็นให้แอดมินแก้ที่หน้าแก้ไขเคส');
+    }
+    const upd = await db.query(
+      `UPDATE cases SET status = 'pending', assigned_to = NULL
+        WHERE id = $1 AND status = 'assigned' AND assigned_to = $2 RETURNING *`,
+      [caseId, assigned_to]
+    );
+    if (upd.rowCount === 0) throw new AppError(409, 'สถานะงานเพิ่งเปลี่ยน — โหลดใหม่แล้วลองอีกครั้ง');
+    // เลิกเป็นเจ้าของ → ล้าง cache สิทธิ์ดูรูป (เหมือน declineCase)
+    invalidateCaseOwner(caseId);
+    const withdrawn = await pushSurveyWithdrawn(caseId, Number(assigned_to), 'unassigned');
+    notifyCaseChanged(caseId, 'recalled', byUserId);
+    return { ...upd.rows[0], recalled_from: assigned_to, withdrawn };
   },
 
   /**

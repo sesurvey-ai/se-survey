@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import api from '@/lib/api';
 import { downloadCaseXml } from '@/lib/downloadXml';
+import RecallJobButton, { recallNotice } from '@/components/cases/RecallJobButton';
 
 interface CaseRow {
   id: number;
@@ -42,6 +43,8 @@ export default function CallcenterCasesPage() {
   const [xmlBusyId, setXmlBusyId] = useState<number | null>(null);
   /** กำลังเปิดงานครั้งถัดไปของเคสไหน — กันกดรัวจนได้ 2 ใบ */
   const [followBusyId, setFollowBusyId] = useState<number | null>(null);
+  /** ข้อความหลัง "ดึงงานกลับ" — ต้องบอกว่าการ์ดบนเครื่องช่างถูกถอนหรือเปล่า */
+  const [notice, setNotice] = useState('');
   /** ดัน "ตอนนี้" ทุก 60 วิ — ป้ายอายุงานต้องเดินต่อแม้เปิดหน้าค้างไว้ทั้งวัน */
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -198,6 +201,12 @@ export default function CallcenterCasesPage() {
           <div className="text-center text-gray-400 py-12">ไม่พบเคส</div>
         ) : (
           <div className="overflow-x-auto">
+            {notice && (
+              <div className="flex items-start justify-between gap-3 px-5 py-3 bg-amber-50 border-b border-amber-200 text-sm text-amber-900">
+                <span>{notice}</span>
+                <button onClick={() => setNotice('')} className="text-amber-700 hover:text-amber-900 text-xs font-medium">ปิด</button>
+              </div>
+            )}
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-left">
@@ -283,6 +292,18 @@ export default function CallcenterCasesPage() {
                           >
                             มอบหมาย
                           </Link>
+                        ) : c.status === 'assigned' ? (
+                          /* ดึงงานกลับ (22/09/69) — งานกลับไปรอมอบหมาย + การ์ดบนเครื่องช่างถูกถอน แล้วจ่ายคนใหม่ได้ทันที */
+                          <RecallJobButton
+                            caseId={c.id}
+                            claimNo={c.claim_no}
+                            surveyorName={c.surveyor_first_name ? `${c.surveyor_first_name} ${c.surveyor_last_name || ''}`.trim() : undefined}
+                            onRecalled={(r) => {
+                              const who = c.surveyor_first_name ? `${c.surveyor_first_name} ${c.surveyor_last_name || ''}`.trim() : undefined;
+                              setNotice(recallNotice(r, c.claim_no, who));
+                              fetchCases();   // แถวนี้ต้องกลายเป็น "รอมอบหมาย" (คลิกแล้วไปจ่ายงานได้เลย)
+                            }}
+                          />
                         ) : (
                           <span className="text-gray-300 text-xs">-</span>
                         )}

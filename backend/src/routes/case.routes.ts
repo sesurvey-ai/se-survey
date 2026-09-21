@@ -264,6 +264,8 @@ router.get('/:id', auth, requireRole('callcenter', 'checker'), caseController.ge
 router.get('/:id/detail', auth, requireRole('checker', 'surveyor'), caseController.getDetail);
 router.get('/:id/export-xml', auth, requireRole('surveyor', 'checker', 'admin', 'callcenter'), caseController.exportXml);
 router.post('/:id/assign', auth, requireRole('callcenter'), validate(assignCaseSchema), caseController.assign);
+// "ดึงงานกลับ" (22/09/69) — ถอนงานที่มอบหมายแล้วกลับมารอจ่ายใหม่ + ยิง push ปิดการ์ดบนเครื่องช่าง (เฉพาะสถานะ assigned)
+router.post('/:id/recall', auth, requireRole('callcenter', 'admin'), caseController.recall);
 // เปิดงานครั้งถัดไปของเคลมเดิม (ติดตาม/นัดหมาย/เจรจา) — ก๊อปเฉพาะตัวตนของเคลม ไม่ก๊อปผลสำรวจ
 router.post('/:id/followup', auth, requireRole('callcenter', 'admin'), caseController.createFollowup);
 router.post('/:id/folder', auth, requireRole('surveyor'), caseController.createCaseFolder);

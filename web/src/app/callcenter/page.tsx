@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import api from '@/lib/api';
 import { downloadCaseXml } from '@/lib/downloadXml';
+import RecallJobButton, { recallNotice } from '@/components/cases/RecallJobButton';
 
 interface CaseRow {
   id: number;
@@ -42,6 +43,8 @@ export default function CallcenterDashboard() {
   const [recent, setRecent] = useState<CaseRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [xmlBusyId, setXmlBusyId] = useState<number | null>(null);
+  /** ข้อความหลัง "ดึงงานกลับ" — ต้องบอกว่าการ์ดบนเครื่องช่างถูกถอนหรือเปล่า */
+  const [notice, setNotice] = useState('');
 
   // ดาวน์โหลดไฟล์ XML สำหรับ import เข้า EMCS — โชว์เฉพาะเคสที่สำรวจแล้ว
   const handleXml = async (c: CaseRow) => {
@@ -123,6 +126,12 @@ export default function CallcenterDashboard() {
             <div className="px-5 py-4 border-b border-gray-100">
               <h2 className="text-lg font-semibold text-gray-800">เคสล่าสุด</h2>
             </div>
+            {notice && (
+              <div className="flex items-start justify-between gap-3 px-5 py-3 bg-amber-50 border-b border-amber-200 text-sm text-amber-900">
+                <span>{notice}</span>
+                <button onClick={() => setNotice('')} className="text-amber-700 hover:text-amber-900 text-xs font-medium">ปิด</button>
+              </div>
+            )}
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -188,6 +197,21 @@ export default function CallcenterDashboard() {
                             >
                               มอบหมาย
                             </Link>
+                          ) : c.status === 'assigned' ? (
+                            /* ดึงงานกลับ (22/09/69) — งานกลับไปรอมอบหมาย + การ์ดบนเครื่องช่างถูกถอน แล้วจ่ายคนใหม่ได้ทันที */
+                            <RecallJobButton
+                              caseId={c.id}
+                              claimNo={c.claim_no}
+                              surveyorName={c.surveyor_first_name ? `${c.surveyor_first_name} ${c.surveyor_last_name || ''}`.trim() : undefined}
+                              onRecalled={(r) => {
+                                const who = c.surveyor_first_name ? `${c.surveyor_first_name} ${c.surveyor_last_name || ''}`.trim() : undefined;
+                                setNotice(recallNotice(r, c.claim_no, who));
+                                setRecent((rows) => rows.map((x) => x.id === c.id
+                                  ? { ...x, status: 'pending', surveyor_first_name: undefined, surveyor_last_name: undefined }
+                                  : x));
+                                setCounts((k) => ({ ...k, pending: Number(k.pending || 0) + 1, assigned: Math.max(0, Number(k.assigned || 0) - 1) }));
+                              }}
+                            />
                           ) : (
                             <span className="text-gray-300 text-xs">-</span>
                           )}
