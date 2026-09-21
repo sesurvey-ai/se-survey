@@ -166,6 +166,7 @@ class IncomingCallActivity : Activity() {
         val accepted = findViewById<View>(R.id.accepted_screen)
         val declined = findViewById<View>(R.id.declined_screen)
         val declinedBody = findViewById<View>(R.id.declined_body)
+        val withdrawn = findViewById<View>(R.id.withdrawn_screen)
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val bars = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars())
             content.setPadding(0, bars.top, 0, bars.bottom)
@@ -174,6 +175,7 @@ class IncomingCallActivity : Activity() {
             // หน้าปฏิเสธเว้นด้านบนที่ตัวนอก เพื่อให้แถบแดงอยู่ "ใต้แถบสถานะ" ไม่ใช่ถูกมันทับ
             declined.setPadding(0, bars.top, 0, 0)
             declinedBody.setPadding(dp(24), 0, dp(24), dp(28) + bars.bottom)
+            withdrawn.setPadding(dp(24), bars.top, dp(24), dp(28) + bars.bottom)   // จอสรุปถอนงานก็ชิดล่าง — ไม่เว้น = บรรทัดเหตุผลมุดใต้แถบนำทาง (เจอตอนเทส 22/09/69)
             insets
         }
     }

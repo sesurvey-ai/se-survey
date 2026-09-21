@@ -197,6 +197,10 @@ check('ทิ้งแจ้งเตือนเงียบบอกเหต�
       && notifHelper.includes('enableVibration(false)'));
 check('ข้อความเหตุผลครบ 3 แบบ + ค่ากลาง',
       ['"reassigned" ->', '"unassigned" ->', '"deleted" ->', 'else -> "งานถูกถอนแล้ว"'].every((k) => notifHelper.includes(k)));
+check('จอสรุปถอนงานเว้นแถบนำทาง (ไม่งั้นบรรทัดเหตุผลมุดใต้แถบ — เจอตอนเทส 22/09/69)',
+      /withdrawn\.setPadding\(dp\(24\), bars\.top, dp\(24\), dp\(28\) \+ bars\.bottom\)/.test(incomingAct));
+check('ใบเดิมกลับมา (กู้/ย้ายกลับ) ลบแจ้งเตือน "งานถูกถอน" ที่ค้างของใบนั้น',
+      /\.cancel\(WITHDRAWN_ID_BASE \+ caseId\)/.test(notifHelper.split('fun showIncomingNotification')[1] || ''));
 check('Flutter รีเฟรชรายการงานเมื่อถูกถอน',
       fcmDart.includes("data['type'] == 'cancel_survey'") && authDart.includes('_fcmService.onSurveyWithdrawn = '));
 

@@ -100,6 +100,8 @@ object NotificationHelper {
         Log.d("NotifHelper", "Screen state: $state")
 
         ensureChannel(context)
+        // งานใบเดิมกลับมา (กู้จากถังขยะ/ย้ายกลับ) — แจ้งเตือน "งานถูกถอน" ของใบนี้ที่ค้างในแถบล้าสมัยแล้ว ลบทิ้งกันสับสน
+        (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(WITHDRAWN_ID_BASE + caseId)
 
         if (state == ScreenState.APP_FOREGROUND) {
             // แอป SE Survey เปิดอยู่ (พนักงานกำลังกรอก/ตรวจข้อมูล) → แจ้งเตือนแบบ notification bar อย่างเดียว
