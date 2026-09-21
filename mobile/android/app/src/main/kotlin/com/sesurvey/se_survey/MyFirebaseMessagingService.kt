@@ -16,6 +16,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
         when (data["type"]) {
             "new_survey" -> handleNewSurvey(data)
+            "cancel_survey" -> handleCancelSurvey(data)
             "request_location" -> handleRequestLocation(data)
         }
     }
@@ -50,6 +51,22 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             insuranceCompany = insuranceCompany,
         )
         Log.d("FCM-Native", "Incoming notification shown for caseId=$caseId")
+    }
+
+    /**
+     * ถอนงาน (22/09/69) — push วิ่งสวนทางกับ new_survey: งานที่ยังค้าง "รับงาน" บนเครื่องนี้ถูกย้ายให้คนอื่น /
+     * ถอนออก / ลบเคสบนเว็บ → ปิดการ์ดเต็มจอ + แถบ + เสียงของเคสนั้น แล้วทิ้งแจ้งเตือนเงียบ ๆ บอกเหตุผลไว้
+     * ⛔ ก่อนหน้านี้ไม่มีทางถอน — การ์ดค้างจนช่างกดรับ/ปฏิเสธเอง (เจอจากเทส 22/09/69: ลบเคสแล้วการ์ดยังขึ้น "รับงาน")
+     * ⛔ ไม่มี case_id = ไม่รู้จะปิดใบไหน → เมิน (ห้ามเดาไปปิดใบอื่น)
+     */
+    private fun handleCancelSurvey(data: Map<String, String>) {
+        val caseId = data["case_id"]?.toIntOrNull()
+        if (caseId == null) {
+            Log.w("FCM-Native", "cancel_survey without case_id — ignored")
+            return
+        }
+        NotificationHelper.withdrawIncoming(this, caseId, data["claim_no"] ?: "", data["reason"] ?: "")
+        Log.d("FCM-Native", "Incoming withdrawn: caseId=$caseId reason=${data["reason"]}")
     }
 
     private fun handleRequestLocation(data: Map<String, String>) {

@@ -96,6 +96,12 @@ class AuthProvider extends ChangeNotifier {
       _onCaseAssignedRefresh?.call();
       notifyListeners();
     };
+    // งานถูกถอน (ย้าย/ถอน/ลบจากเว็บ) — รีเฟรชรายการให้ใบนั้นหายไปทันทีถ้าช่างกำลังดูรายการอยู่
+    _fcmService.onSurveyWithdrawn = (data) async {
+      debugPrint('[Auth] FCM cancel_survey received: $data');
+      _onCaseAssignedRefresh?.call();
+      notifyListeners();
+    };
 
     await _fcmService.initialize();
   }

@@ -38,6 +38,22 @@ class IncomingCallActivity : Activity() {
         /** หน้าสรุปค้างไว้กี่มิลลิวินาที — user เคาะ 0.8 วิ (01/09/69): พอกันกดพลาดตอนงานเข้าติดกัน
          *  แต่ไม่ขวางช่างที่กำลังรีบออกหน้างาน */
         private const val SUMMARY_MS = 800L
+        /** จอสรุป "งานถูกถอนแล้ว" ค้างนานกว่าหน้ารับ/ปฏิเสธ — ช่างไม่ได้กดอะไรเอง ต้องมีเวลาอ่านว่าเกิดอะไรขึ้น */
+        private const val WITHDRAWN_MS = 1_800L
+
+        /** การ์ดที่กำลังโชว์อยู่ (ถ้ามี) — ให้ FCM service สั่งถอนงานถึงตัวได้ โดยไม่ต้องเปิด activity ใหม่ขึ้นมาแค่เพื่อปิด */
+        @Volatile private var current: java.lang.ref.WeakReference<IncomingCallActivity>? = null
+
+        /**
+         * ถอนงาน (22/09/69): ถ้าการ์ดที่เปิดอยู่คือเคสนี้และช่างยังไม่ได้กดอะไร → ขึ้นจอสรุปแล้วปิดเอง
+         * คืน true เมื่อจัดการแล้ว · การ์ดของเคสอื่น/ไม่มีการ์ด = ไม่แตะ (แถบของเคสที่ถูกถอนถูก cancel ไปแล้วที่ NotificationHelper)
+         */
+        fun withdraw(caseId: Int, claimNo: String, text: String): Boolean {
+            val a = current?.get() ?: return false
+            if (a.isFinishing || a.caseId != caseId || a.actionTaken) return false
+            a.runOnUiThread { a.showWithdrawn(claimNo, text) }
+            return true
+        }
     }
 
     private var caseId: Int = 0
@@ -52,6 +68,7 @@ class IncomingCallActivity : Activity() {
     private var secondsLeft = COUNTDOWN_SEC
     private val ticker = Handler(Looper.getMainLooper())
     private var tick: Runnable? = null
+    private var pendingFinish: Runnable? = null   // ปิดเองหลังจอสรุป "งานถูกถอน" — ยกเลิกได้ถ้ามีใบใหม่เข้ามาทัน
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -73,6 +90,7 @@ class IncomingCallActivity : Activity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         setContentView(R.layout.activity_incoming_call)
+        current = java.lang.ref.WeakReference(this)
         applySystemBarInsets()
 
         bindData(intent)
@@ -318,6 +336,13 @@ class IncomingCallActivity : Activity() {
         }
         setIntent(intent)
         bindData(intent)
+        // ใบใหม่เข้ามาระหว่างจอสรุป "งานถูกถอน" ของใบเก่ากำลังจะปิดตัว → ยกเลิกการปิด แล้วเริ่มใบใหม่ตามปกติ
+        pendingFinish?.let {
+            ticker.removeCallbacks(it)
+            pendingFinish = null
+            actionTaken = false
+        }
+        findViewById<View>(R.id.withdrawn_screen).visibility = View.GONE
         // งานใบใหม่ = เริ่มนับใหม่ และปิดแผ่นเหตุผลของใบเก่าทิ้ง (ไม่งั้นกดยืนยันไปโดนเคสผิด)
         showDeclineSheet(false)
         stopCountdown()
@@ -344,6 +369,22 @@ class IncomingCallActivity : Activity() {
     override fun onDestroy() {
         super.onDestroy()
         stopCountdown()
+        if (current?.get() === this) current = null
+    }
+
+    /** งานถูกถอนจากเว็บ (ย้าย/ถอน/ลบ) — จอสรุปสีเทาบอกเหตุผล แล้วปิดเอง ไม่เปิดแอป ไม่ยิง API (ไม่มีอะไรให้ตอบกลับ) */
+    private fun showWithdrawn(claimNo: String, text: String) {
+        actionTaken = true
+        stopCountdown()
+        showDeclineSheet(false)
+        val claim = if (claimNo.isNotBlank()) claimNo else this.claimNo
+        findViewById<TextView>(R.id.txt_withdrawn_claim).text =
+            if (claim.isNotBlank()) "เลขเคลม $claim" else "งานสำรวจ"
+        findViewById<TextView>(R.id.txt_withdrawn_reason).text = text
+        findViewById<View>(R.id.withdrawn_screen).visibility = View.VISIBLE
+        val r = Runnable { finish() }
+        pendingFinish = r
+        ticker.postDelayed(r, WITHDRAWN_MS)
     }
 
     private fun handleAction(action: String) {

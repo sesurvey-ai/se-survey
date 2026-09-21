@@ -48,6 +48,32 @@ export const fcmService = {
     }
   },
 
+  /**
+   * ถอนงาน (22/09/69) — data message วิ่งสวนทางกับ new_survey ไปเครื่องช่าง "คนเดิม":
+   * เครื่องปิดการ์ดเต็มจอ/แถบ/เสียงของเคสนั้นเอง แล้วทิ้งแจ้งเตือนเงียบ ๆ บอกเหตุผล (MyFirebaseMessagingService.handleCancelSurvey)
+   * reason: reassigned (ย้ายให้ช่างคนอื่น) · unassigned (ถอนออก/ดึงกลับไปรอจ่าย) · deleted (ลบเคสลงถังขยะ)
+   * ⛔ ไม่ตั้ง TTL สั้น — เครื่องออฟไลน์ต้องได้รับตอนกลับมา ไม่งั้นการ์ดค้างเหมือนก่อนมีฟีเจอร์นี้ · APK เก่าเมินชนิดนี้เฉย ๆ ไม่พัง
+   */
+  async sendSurveyWithdrawn(fcmToken: string, caseId: number, claimNo: string, reason: string) {
+    const result = await admin.messaging().send({
+      token: fcmToken,
+      data: {
+        type: 'cancel_survey',
+        case_id: String(caseId),
+        claim_no: claimNo || '',
+        reason,
+        created_at: new Date().toISOString(),
+      },
+      android: { priority: 'high' as const },
+      apns: {
+        payload: { aps: { 'content-available': 1 } },
+        headers: { 'apns-priority': '10' },
+      },
+    });
+    console.log(`[FCM] cancel_survey sent for case ${caseId} (${reason}), ID:`, result);
+    return result;
+  },
+
   async sendSilentPush(fcmToken: string, data: Record<string, string>) {
     try {
       await admin.messaging().send({

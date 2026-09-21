@@ -22,6 +22,9 @@ class FcmService {
   // Callback เมื่อได้รับงานสำรวจใหม่ (urgent notification)
   void Function(Map<String, dynamic> data)? onNewSurveyReceived;
 
+  // Callback เมื่องานถูกถอน (cancel_survey — ย้าย/ถอน/ลบจากเว็บ 22/09/69): native ปิดการ์ด/แถบ/เสียงให้แล้ว
+  void Function(Map<String, dynamic> data)? onSurveyWithdrawn;
+
   bool _listenersAttached = false; // subscribe stream ครั้งเดียว (initialize ถูกเรียกซ้ำทุก re-login)
 
   // generation ของ session — เพิ่มทุกครั้งที่ logout/re-init เพื่อยกเลิก retry ที่ค้างท่อ
@@ -83,6 +86,12 @@ class FcmService {
           if (data['type'] == 'new_survey') {
             debugPrint('FCM foreground new_survey received');
             onNewSurveyReceived?.call(data);
+            return;
+          }
+          // ถอนงาน → ฝั่งนี้แค่รีเฟรชรายการงานให้ใบนั้นหายไป (native จัดการจอ/เสียง/แจ้งเตือนเองแล้ว)
+          if (data['type'] == 'cancel_survey') {
+            debugPrint('FCM foreground cancel_survey received');
+            onSurveyWithdrawn?.call(data);
             return;
           }
 

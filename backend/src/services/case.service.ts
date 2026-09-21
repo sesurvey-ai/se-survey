@@ -2,13 +2,12 @@ import { db } from '../config/database';
 import { normalizeDriverAddressFields, normalizeOpponentsAddress, normalizeCardAddresses } from './driverAddress';
 import { env } from '../config/env';
 import { AppError, NotFoundError, ForbiddenError } from '../middleware/errorHandler';
-import { fcmService } from './fcm.service';
+import { pushNewSurvey } from './surveyPush.service';
 import { generateSurveyXml, emcsNameWarnings, sanitizeReportDates } from './xmlExport.service';
 import { invalidateCaseOwner } from '../middleware/uploadsAuth';
 import { storage, normalizeKey, contentTypeOf } from '../config/storage';
 import { normalizeVehicleFields, normalizeDamageLevels } from './vehicleBrand';
 import { effectiveReport, mainLockedFields, VISIT_OWN_FIELDS } from './visitInherit';
-import { isFirebaseReady } from '../config/firebase';
 import type { XmlImportResult } from './xmlImport.service';
 import { assertReportRev } from './reportRev';
 import { notifyCaseChanged } from './caseEvents';
@@ -17,7 +16,6 @@ import { standardPhotoFee } from './photoFee.service';
 import { tumbonOptions } from './billingRates.service';
 import { districtCentroid } from './geoDistrict';
 import { recordMoneyChanges, damageSnapshot } from './moneyAudit';
-import { getIO } from '../socket';
 import { staffGroupService } from './staffGroup.service';
 
 // คอลัมน์ JSONB บน survey_reports (ข้อมูล 1:N) — node-pg ไม่ serialize array ให้เอง
@@ -484,66 +482,14 @@ export const caseService = {
       console.error('[assign] เขียน acc_insurance_notify_date ไม่สำเร็จ (ไม่บล็อกการมอบหมาย):', err);
     }
 
-    // Send push notification via FCM
-    //
-    // ⚠️ ผลการส่งต้อง "ไหลกลับไปถึงคนกดมอบหมาย" — เดิมสำเร็จก็ log พังก็ log แล้วไปต่อ
-    // เงียบ ๆ หน้าเว็บขึ้นว่ามอบหมายสำเร็จเหมือนกันหมด ทั้งที่ช่างอาจไม่ได้รับอะไรเลย
-    // (ตรวจ prod 2026-08-11: ผู้สำรวจ active 144 คน มี fcm_token แค่ 84 — อีก 60 คน
-    //  จ่ายงานไปก็ไม่มีทางได้รับแจ้งเตือน และไม่มีสัญญาณอะไรบอกคนจ่ายเลย)
-    const surveyor = surveyorResult.rows[0];
-    let push: { status: 'sent' | 'no_token' | 'failed' | 'no_fcm'; reason?: string };
-    if (!isFirebaseReady()) {
-      push = { status: 'no_fcm', reason: 'ระบบแจ้งเตือนยังไม่ได้ตั้งค่าบนเซิร์ฟเวอร์' };
-      console.error('[FCM] Firebase not configured — assign without push');
-    } else if (!surveyor.fcm_token) {
-      push = { status: 'no_token', reason: 'เครื่องของผู้สำรวจยังไม่เคยลงทะเบียนรับแจ้งเตือน' };
-      console.warn(`[FCM] Surveyor ${surveyor.id} has no token — skip push`);
-    } else {
-      try {
-        const fcmResult = await fcmService.sendUrgentSurvey(
-          surveyor.fcm_token,
-          caseId,
-          caseData.incident_location || '',
-          caseData.sr_claim_no || '',
-          caseData.sr_insurance_company || ''
-        );
-        console.log('[FCM] Send success:', fcmResult);
-        push = { status: 'sent' };
-      } catch (err) {
-        const code = (err as { code?: string })?.code || '';
-        console.error('[FCM] Send failed:', err);
-        // token ตายแล้ว (ถอนแอป/ล้างข้อมูล) → ล้างทิ้ง ไม่งั้นค้างหลอกว่ามี token
-        if (code.includes('registration-token-not-registered') || code.includes('invalid-argument')) {
-          await db.query('UPDATE users SET fcm_token = NULL WHERE id = $1', [surveyor.id])
-            .catch(() => {});
-          push = { status: 'no_token', reason: 'เครื่องของผู้สำรวจถอนการลงทะเบียนแจ้งเตือนไปแล้ว' };
-        } else {
-          push = { status: 'failed', reason: 'ส่งแจ้งเตือนไม่สำเร็จ' };
-        }
-      }
-    }
-
-    // บันทึกผลการส่ง เพื่อให้ "แจ้งเตือนไม่ถึง" กลายเป็นเรื่องที่ระบบรู้ตัวเองได้
-    //
-    // ⚠️ push.status === 'sent' แปลว่า **FCM รับเรื่องไว้** เท่านั้น ไม่ได้แปลว่าเครื่องได้รับ
-    //    ตัวที่บอกว่าถึงจริงคือ push_delivered_at ซึ่งเครื่องช่างเป็นคนยิงกลับมาเอง (ackPush)
-    // ⛔ ต้องล้าง push_delivered_at ทุกครั้ง — reassign หลังช่างคนก่อนปฏิเสธ ถ้าไม่ล้าง
-    //    เวลาตอบรับของคนเก่าจะค้างมาหลอกว่างานรอบใหม่ถึงเครื่องคนใหม่แล้ว
-    await db.query(
-      'UPDATE cases SET push_sent_at = $1, push_delivered_at = NULL WHERE id = $2',
-      [push.status === 'sent' ? new Date() : null, caseId]
-    ).catch((err) => console.error('[assign] บันทึกสถานะ push ไม่สำเร็จ (ไม่บล็อกการมอบหมาย):', err));
-
-    // Send real-time notification via Socket.io
-    const io = getIO();
-    if (io) {
-      io.to(`user:${surveyorId}`).emit('case_assigned', {
-        case_id: caseId,
-        customer_name: caseData.customer_name,
-        incident_location: caseData.incident_location,
-        message: `คุณได้รับมอบหมายงานสำรวจ: ${caseData.customer_name}`,
-      });
-    }
+    // แจ้งงานใหม่ไปเครื่องช่าง (การ์ด + เสียง + socket) — ผลการส่งไหลกลับไปถึงคนกดมอบหมาย
+    // (ย้ายไป surveyPush.service 22/09/69 ให้ทางแอดมินย้ายงาน/กู้เคสใช้ชุดเดียวกัน)
+    const push = await pushNewSurvey(caseId, surveyorResult.rows[0], {
+      incident_location: caseData.incident_location,
+      customer_name: caseData.customer_name,
+      claim_no: caseData.sr_claim_no,
+      insurance_company: caseData.sr_insurance_company,
+    });
 
     // แนบผลการส่งแจ้งเตือนไปกับแถวเคส — หน้าเว็บใช้ตัดสินว่าจะเตือนคนจ่ายงานไหม
     // (เพิ่มฟิลด์ ไม่เปลี่ยนรูปทรงเดิม ที่อ่าน res.data.data อยู่แล้วจึงไม่พัง)

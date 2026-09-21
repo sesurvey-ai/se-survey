@@ -4,6 +4,8 @@ import { storage } from '../config/storage';
 import { staffGroupService } from './staffGroup.service';
 import { removeCapture, sendCapture } from './sebilling.service';
 import { notifyCaseChanged } from './caseEvents';
+import { pushNewSurveyById, pushSurveyWithdrawn } from './surveyPush.service';
+import { invalidateCaseOwner } from '../middleware/uploadsAuth';
 import { NotFoundError, AppError } from '../middleware/errorHandler';
 import { assertStrongPassword } from './password';
 
@@ -288,13 +290,38 @@ export const adminService = {
 
     if (fields.length === 0) throw new AppError(400, 'No fields to update');
 
+    // ค่าก่อนแก้ — ไว้ตัดสินว่างานเพิ่ง "หลุดจากมือช่างคนเดิม" หรือ "ไปถึงมือช่างคนใหม่" หรือเปล่า
+    const prev = await db.query('SELECT assigned_to, status FROM cases WHERE id = $1', [id]);
+    if (prev.rows.length === 0) throw new NotFoundError('Case not found');
+
     params.push(id);
     const result = await db.query(
       `UPDATE cases SET ${fields.join(', ')} WHERE id = $${idx} RETURNING *`,
       params
     );
     if (result.rows.length === 0) throw new NotFoundError('Case not found');
-    return result.rows[0];
+    const before = prev.rows[0];
+    const after = result.rows[0];
+    const prevSurveyor = before.assigned_to ? Number(before.assigned_to) : null;
+    const nextSurveyor = after.assigned_to ? Number(after.assigned_to) : null;
+    const surveyorChanged = nextSurveyor !== prevSurveyor;
+    // ย้ายเจ้าของเคส — ล้าง cache สิทธิ์ดูรูป (เหมือน caseService.assign) ไม่งั้นคนเดิมยังเปิดรูปได้อีกพัก
+    if (surveyorChanged) invalidateCaseOwner(id);
+
+    // ถอนงาน (22/09/69): ใบที่ยังค้าง "มอบหมาย" ถูกย้ายให้คนอื่น / ถอนออก / ดึงกลับไปรอจ่าย
+    // → เครื่องช่างคนเดิมปิดการ์ด "รับงาน" ที่อาจยังค้างอยู่ (ไม่งั้นค้างจนเขากดรับแล้ววิ่งไปหน้างานซ้ำคนใหม่)
+    // ⛔ เปลี่ยนสถานะเดินหน้า (assigned → finished/surveyed) โดยช่างคนเดิม = งานยังเป็นของเขา ไม่ถอน
+    let withdrawn: 'sent' | 'skipped' | 'failed' | undefined;
+    if (prevSurveyor && before.status === 'assigned'
+        && (surveyorChanged || ['pending', 'declined'].includes(String(after.status)))) {
+      withdrawn = await pushSurveyWithdrawn(id, prevSurveyor, nextSurveyor && surveyorChanged ? 'reassigned' : 'unassigned');
+    }
+    // ช่างคนใหม่ได้การ์ดงานเหมือนจ่ายจากคอลเซ็นเตอร์ — ย้ายงานแล้วคนใหม่ต้องรู้ ไม่ใช่นอนเงียบในรายการ
+    let push: Awaited<ReturnType<typeof pushNewSurveyById>> | undefined;
+    if (nextSurveyor && surveyorChanged && after.status === 'assigned') {
+      push = await pushNewSurveyById(id, nextSurveyor);
+    }
+    return { ...after, push, withdrawn };
   },
 
   /**
@@ -304,13 +331,18 @@ export const adminService = {
    */
   async deleteCase(id: number, deletedBy?: number | null) {
     const r = await db.query(
-      `UPDATE cases_all SET deleted_at = now(), deleted_by = $2 WHERE id = $1 AND deleted_at IS NULL RETURNING id`,
+      `UPDATE cases_all SET deleted_at = now(), deleted_by = $2 WHERE id = $1 AND deleted_at IS NULL RETURNING id, status, assigned_to`,
       [id, deletedBy ?? null]);
     if (r.rows.length === 0) throw new NotFoundError('Case not found');
     // แถวในบัญชี se-billing ของเคสนี้ (ถ้าเคยอนุมัติแล้วส่งไป) ถอนออกระหว่างพัก — กู้คืนแล้วส่งกลับให้ (restoreCase)
     await removeCapture(id);
+    // ถอนงาน (22/09/69): ลบเคสที่ยังค้าง "มอบหมาย" → เครื่องช่างปิดการ์ด "รับงาน" ที่อาจยังค้างอยู่
+    let withdrawn: 'sent' | 'skipped' | 'failed' | undefined;
+    if (r.rows[0].status === 'assigned' && r.rows[0].assigned_to) {
+      withdrawn = await pushSurveyWithdrawn(id, Number(r.rows[0].assigned_to), 'deleted');
+    }
     notifyCaseChanged(id, 'deleted', deletedBy ?? null);
-    return { id, trash_days: TRASH_DAYS };
+    return { id, trash_days: TRASH_DAYS, withdrawn };
   },
 
   /** รายการในถังขยะ — อ่านจากตารางจริง (VIEW cases มองไม่เห็นแถวที่ลบ) */
@@ -334,13 +366,18 @@ export const adminService = {
   /** กู้คืนจากถังขยะ — กลับสถานะเดิมทุกอย่าง · เคสที่อนุมัติแล้วส่งยอดกลับ se-billing ให้ด้วย (ตอนลบถอนไว้) */
   async restoreCase(id: number, by?: number | null) {
     const r = await db.query(
-      `UPDATE cases_all SET deleted_at = NULL, deleted_by = NULL WHERE id = $1 AND deleted_at IS NOT NULL RETURNING id, status`,
+      `UPDATE cases_all SET deleted_at = NULL, deleted_by = NULL WHERE id = $1 AND deleted_at IS NOT NULL RETURNING id, status, assigned_to`,
       [id]);
     if (r.rows.length === 0) throw new NotFoundError('ไม่พบเคสนี้ในถังขยะ');
     let billing: unknown = null;
     if (r.rows[0].status === 'reviewed') billing = await sendCapture(id);   // ไม่ throw
+    // กู้ใบที่ยังค้าง "มอบหมาย" — การ์ดถูกถอนไปตอนลบ ต้องส่งการ์ดงานกลับไปให้ช่างคนเดิมใหม่ (ไม่ throw)
+    let push: Awaited<ReturnType<typeof pushNewSurveyById>> | undefined;
+    if (r.rows[0].status === 'assigned' && r.rows[0].assigned_to) {
+      push = await pushNewSurveyById(id, Number(r.rows[0].assigned_to));
+    }
     notifyCaseChanged(id, 'restored', by ?? null);
-    return { id, status: r.rows[0].status, billing };
+    return { id, status: r.rows[0].status, billing, push };
   },
 
   /** ลบจริงทุกเคสที่พักในถังขยะเกิน TRASH_DAYS — เรียกจาก trashPurge (พังทีละเคส ไม่ล้มทั้งรอบ) */

@@ -19,6 +19,9 @@ const check = (label: string, ok: boolean, note = '') => {
 const read = (...p: string[]) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
 
 const caseSvc = read('src', 'services', 'case.service.ts');
+const pushSvc = read('src', 'services', 'surveyPush.service.ts');   // บล็อก push ย้ายมาที่นี่ 22/09/69 (ทางแอดมินใช้ร่วม)
+const adminSvc = read('src', 'services', 'admin.service.ts');
+const fcmApi = read('src', 'services', 'fcm.service.ts');
 const caseRoutes = read('src', 'routes', 'case.routes.ts');
 const userSvc = read('src', 'services', 'user.service.ts');
 const userRoutes = read('src', 'routes', 'user.routes.ts');
@@ -29,6 +32,11 @@ const kt = (f: string) => read('..', 'mobile', 'android', 'app', 'src', 'main', 
 const locHelper = kt('LocationHelper.kt');
 const fcmSvc = kt('MyFirebaseMessagingService.kt');
 const mainAct = kt('MainActivity.kt');
+const notifHelper = kt('NotificationHelper.kt');
+const incomingAct = kt('IncomingCallActivity.kt');
+const incomingLayout = read('..', 'mobile', 'android', 'app', 'src', 'main', 'res', 'layout', 'activity_incoming_call.xml');
+const fcmDart = read('..', 'mobile', 'lib', 'services', 'fcm_service.dart');
+const authDart = read('..', 'mobile', 'lib', 'providers', 'auth_provider.dart');
 const manifest = read('..', 'mobile', 'android', 'app', 'src', 'main', 'AndroidManifest.xml');
 const notifDart = read('..', 'mobile', 'lib', 'services', 'notification_service.dart');
 const homeDart = read('..', 'mobile', 'lib', 'screens', 'home_screen.dart');
@@ -44,16 +52,20 @@ check('push_sent_at / push_delivered_at เป็น TIMESTAMPTZ',
 
 console.log('\n── ฝั่งเซิร์ฟเวอร์: บันทึกผลตอนจ่ายงาน ──');
 check('จ่ายงานแล้วบันทึกสถานะ push ลงเคส',
-      /UPDATE cases SET push_sent_at = \$1, push_delivered_at = NULL/.test(caseSvc));
+      /UPDATE cases SET push_sent_at = \$1, push_delivered_at = NULL/.test(pushSvc));
+// บล็อก push ย้ายออกจาก assign ไป surveyPush.service (22/09/69) — assign ต้องยังเรียกผ่านชุดเดียวกัน ไม่ใช่ก๊อปกลับมา
+check('assign ส่งการ์ดผ่าน pushNewSurvey ชุดกลาง',
+      /const push = await pushNewSurvey\(caseId, surveyorResult\.rows\[0\]/.test(caseSvc)
+      && !caseSvc.includes('fcmService.sendUrgentSurvey('));
 /**
  * ⛔ ต้องล้าง push_delivered_at ทุกครั้งที่จ่ายงาน — reassign หลังช่างคนก่อนปฏิเสธ
  *    ถ้าไม่ล้าง เวลาตอบรับของคนเก่าจะค้างมาหลอกว่างานรอบใหม่ถึงเครื่องคนใหม่แล้ว
  */
 check('ล้าง push_delivered_at เสมอ (กัน reassign เห็นค่าค้างของคนก่อน)',
-      caseSvc.includes('push_delivered_at = NULL'));
+      pushSvc.includes('push_delivered_at = NULL'));
 /** ส่งไม่ออก (no_token/failed/no_fcm) ต้องไม่ตั้ง push_sent_at ไม่งั้นดูเหมือนส่งแล้ว */
 check('ตั้ง push_sent_at เฉพาะตอนส่งออกจริง',
-      /push\.status === 'sent' \? new Date\(\) : null/.test(caseSvc));
+      /push\.status === 'sent' \? new Date\(\) : null/.test(pushSvc));
 
 console.log('\n── ฝั่งเซิร์ฟเวอร์: รับคำตอบรับจากเครื่อง ──');
 check('มี ackPush ในเซอร์วิส', caseSvc.includes('async ackPush('));
@@ -139,6 +151,54 @@ check('ใช้ push_delivered_at เป็นสัญญาณ "ถึงเ�
 check('ไม่ดึงเวลาจาก surveyor_locations', !/FROM surveyor_locations/.test(userSvc));
 check('หน้าเว็บบอกว่าคนที่ไม่พร้อมคือ "จ่ายงานไปก็ไม่ขึ้นบนเครื่อง"',
       readyUi.includes('จ่ายงานไปก็ไม่มีอะไรขึ้นบนเครื่องเลย'));
+
+/**
+ * ── ถอนงาน (22/09/69) ──
+ * ⛔ ปัญหาที่แก้: การ์ด "รับงาน" เป็นจอฝั่งเครื่องล้วน ๆ ลบ/ย้าย/ถอนเคสบนเว็บไม่มีอะไรวิ่งไปปิด
+ *    → การ์ดค้างจนช่างกดรับแล้ววิ่งไปหน้างานซ้ำกับคนใหม่ (เจอจากเทส 22/09/69 หลังลบเคสทดสอบ)
+ * สายนี้ก็พาดข้ามหลายชั้นเหมือนสายตอบรับ: backend ยิง → native ปิดจอ/แถบ/เสียง → Flutter รีเฟรชรายการ
+ */
+console.log('\n── ถอนงาน: push วิ่งสวนทางกับงานใหม่ ──');
+check('มี push ชนิด cancel_survey พร้อมเลขเคสและเหตุผล',
+      fcmApi.includes("type: 'cancel_survey'") && /async sendSurveyWithdrawn\(/.test(fcmApi)
+      && fcmApi.includes('case_id: String(caseId)') && fcmApi.includes('reason,'));
+check('ยิงถอนงานเมื่อแอดมินย้าย/ถอนใบที่ยังค้าง "มอบหมาย" (เฉพาะสถานะ assigned)',
+      /before\.status === 'assigned'/.test(adminSvc) && /pushSurveyWithdrawn\(id, prevSurveyor/.test(adminSvc));
+check('เปลี่ยนสถานะเดินหน้าโดยช่างคนเดิมไม่ถอน (ตรวจเฉพาะ pending/declined)',
+      /\['pending', 'declined'\]\.includes\(String\(after\.status\)\)/.test(adminSvc));
+check('ย้ายงานแล้วช่างคนใหม่ได้การ์ดงานด้วย',
+      /push = await pushNewSurveyById\(id, nextSurveyor\)/.test(adminSvc));
+check('ลบเคสลงถังขยะที่ยังค้าง "มอบหมาย" ก็ถอน',
+      /RETURNING id, status, assigned_to`,\s*\[id, deletedBy/.test(adminSvc)
+      && /pushSurveyWithdrawn\(id, Number\(r\.rows\[0\]\.assigned_to\), 'deleted'\)/.test(adminSvc));
+check('กู้เคสจากถังขยะที่ยังค้าง "มอบหมาย" ส่งการ์ดกลับไปใหม่',
+      /pushNewSurveyById\(id, Number\(r\.rows\[0\]\.assigned_to\)\)/.test(adminSvc));
+check('ถอนงานไม่บล็อกการกระทำหลัก (จับ error คืนสถานะ ไม่ throw)',
+      /catch \(err\) \{\s*console\.error\(`\[FCM\] cancel_survey failed/.test(pushSvc) && pushSvc.includes("return 'failed';"));
+
+console.log('\n── ถอนงาน: เครื่องช่างปิดการ์ด/แถบ/เสียง ──');
+check('native รับชนิด cancel_survey', fcmSvc.includes('"cancel_survey" -> handleCancelSurvey(data)'));
+check('ไม่มี case_id = เมิน ไม่เดาไปปิดใบอื่น',
+      /val caseId = data\["case_id"\]\?\.toIntOrNull\(\)\s*if \(caseId == null\)/.test(fcmSvc));
+check('ปิดแถบเฉพาะเคสนั้น และหยุดเสียงเฉพาะเมื่อไม่มีใบอื่นรออยู่',
+      notifHelper.includes('fun withdrawIncoming(') && notifHelper.includes('nm.cancel(caseId)')
+      && notifHelper.includes('if (!othersWaiting) stopAlarm()'));
+check('การ์ดเต็มจอปิดเฉพาะเมื่อเป็นเคสเดียวกันและยังไม่ได้กดอะไร',
+      /if \(a\.isFinishing \|\| a\.caseId != caseId \|\| a\.actionTaken\) return false/.test(incomingAct));
+check('ขึ้นจอสรุป "งานถูกถอนแล้ว" ก่อนปิด ไม่หายเงียบ',
+      incomingLayout.includes('android:id="@+id/withdrawn_screen"') && incomingLayout.includes('งานถูกถอนแล้ว')
+      && incomingAct.includes('R.id.withdrawn_screen') && /ticker\.postDelayed\(r, WITHDRAWN_MS\)/.test(incomingAct));
+check('ถอนแล้วไม่โพสต์แถบสำรองคืน (actionTaken = true ก่อน finish)',
+      /private fun showWithdrawn\([^)]*\) \{\s*actionTaken = true/.test(incomingAct));
+check('ใบใหม่เข้ามาระหว่างจอสรุปถอน → ยกเลิกการปิดแล้วเริ่มใบใหม่',
+      /pendingFinish\?\.let \{\s*ticker\.removeCallbacks\(it\)/.test(incomingAct));
+check('ทิ้งแจ้งเตือนเงียบบอกเหตุผล (ไม่มีเสียง/ไม่สั่น) แตะแล้วเปิดแอป',
+      notifHelper.includes('WITHDRAWN_CHANNEL_ID') && notifHelper.includes('.setSilent(true)')
+      && notifHelper.includes('enableVibration(false)'));
+check('ข้อความเหตุผลครบ 3 แบบ + ค่ากลาง',
+      ['"reassigned" ->', '"unassigned" ->', '"deleted" ->', 'else -> "งานถูกถอนแล้ว"'].every((k) => notifHelper.includes(k)));
+check('Flutter รีเฟรชรายการงานเมื่อถูกถอน',
+      fcmDart.includes("data['type'] == 'cancel_survey'") && authDart.includes('_fcmService.onSurveyWithdrawn = '));
 
 console.log(failed === 0 ? '\n✅ ผ่านทั้งหมด' : `\n❌ ไม่ผ่าน ${failed} ข้อ`);
 process.exit(failed === 0 ? 0 : 1);

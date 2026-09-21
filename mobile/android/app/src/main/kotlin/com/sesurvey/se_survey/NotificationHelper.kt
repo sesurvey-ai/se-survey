@@ -18,6 +18,10 @@ import androidx.core.app.NotificationCompat
 object NotificationHelper {
 
     private const val CHANNEL_ID = "incoming_call_channel_v5"
+    /** ช่องแจ้งเตือน "งานถูกถอน/ย้าย" — เงียบ ไม่สั่น แค่ให้เห็นในแถบว่าการ์ดหายไปเพราะอะไร (22/09/69) */
+    private const val WITHDRAWN_CHANNEL_ID = "job_withdrawn_v1"
+    /** id แจ้งเตือน "งานถูกถอน" = ฐาน + caseId — คนละช่วงกับ id การ์ดงาน (= caseId) จะได้ไม่ทับกัน */
+    private const val WITHDRAWN_ID_BASE = 1_000_000_000
     private var mediaPlayer: MediaPlayer? = null
 
     /**
@@ -385,5 +389,63 @@ object NotificationHelper {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.cancel(id)
         stopAlarm()
+    }
+
+    // ── ถอนงาน (22/09/69) ────────────────────────────────────────
+    /** ข้อความบอกช่างว่าทำไมการ์ดหาย — reason มาจากเซิร์ฟเวอร์ (surveyPush.service) ไม่รู้จัก = ข้อความกลาง */
+    fun withdrawnText(reason: String): String = when (reason) {
+        "reassigned" -> "งานถูกย้ายให้ผู้สำรวจคนอื่นแล้ว"
+        "unassigned" -> "งานถูกถอนออกจากคุณแล้ว"
+        "deleted" -> "งานถูกยกเลิกแล้ว"
+        else -> "งานถูกถอนแล้ว"
+    }
+
+    /**
+     * ถอนงานออกจากเครื่อง: ปิดแถบ/heads-up ของเคสนั้น · หยุดเสียงเฉพาะเมื่อไม่มีงานใบอื่นรอรับอยู่ ·
+     * ปิดการ์ดเต็มจอถ้ากำลังโชว์เคสนี้ (ขึ้นจอสรุป "งานถูกถอนแล้ว" สั้น ๆ ก่อน ไม่หายเงียบ) · ทิ้งแจ้งเตือนเงียบบอกเหตุผล
+     * ⛔ ห้ามเรียก cancelNotification ตรง ๆ — มันหยุดเสียงทั้งเครื่อง งานใบอื่นที่ยังรอรับอยู่ต้องดังต่อ
+     */
+    fun withdrawIncoming(context: Context, caseId: Int, claimNo: String, reason: String) {
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        nm.cancel(caseId)
+        val othersWaiting = try {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                nm.activeNotifications.any { it.id != caseId && it.notification.channelId == CHANNEL_ID }
+        } catch (_: Exception) { false }
+        if (!othersWaiting) stopAlarm()
+        val text = withdrawnText(reason)
+        val closedCard = IncomingCallActivity.withdraw(caseId, claimNo, text)
+        Log.d("NotifHelper", "Withdrawn caseId=$caseId reason=$reason card=$closedCard othersWaiting=$othersWaiting")
+        postWithdrawnNotice(context, caseId, claimNo, text)
+    }
+
+    /** แจ้งเตือนธรรมดา (ไม่มีเสียง/ไม่สั่น/ไม่ heads-up) ให้ช่างเห็นย้อนหลังว่างานใบไหนถูกถอนเพราะอะไร · แตะ = เปิดแอป */
+    private fun postWithdrawnNotice(context: Context, caseId: Int, claimNo: String, text: String) {
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val ch = NotificationChannel(WITHDRAWN_CHANNEL_ID, "งานถูกถอน/ย้าย", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "แจ้งเมื่องานที่ส่งมาให้ถูกย้ายหรือยกเลิก"
+                setSound(null, null)
+                enableVibration(false)
+            }
+            nm.createNotificationChannel(ch)
+        }
+        val openIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        val pi = PendingIntent.getActivity(
+            context, WITHDRAWN_ID_BASE + caseId, openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = NotificationCompat.Builder(context, WITHDRAWN_CHANNEL_ID)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle(text)
+            .setContentText(if (claimNo.isNotBlank()) "เลขเคลม $claimNo" else "งานสำรวจ")
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setSilent(true)
+            .setAutoCancel(true)
+            .setContentIntent(pi)
+            .build()
+        nm.notify(WITHDRAWN_ID_BASE + caseId, notification)
     }
 }

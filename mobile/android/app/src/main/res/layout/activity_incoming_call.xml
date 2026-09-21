@@ -477,4 +477,48 @@
         </LinearLayout>
     </LinearLayout>
 
+    <!-- ── หน้าสรุปเมื่องานถูกถอน (ย้าย/ถอน/ลบจากเว็บ — 22/09/69) ───────── -->
+    <LinearLayout
+        android:id="@+id/withdrawn_screen"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="bottom"
+        android:background="#37474F"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:paddingBottom="28dp"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/txt_withdrawn_claim"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.1"
+            android:textColor="#FFFFFF" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="งานถูกถอนแล้ว"
+            android:textSize="40sp"
+            android:textStyle="bold"
+            android:lineSpacingMultiplier="1.1"
+            android:textColor="#FFFFFF" />
+
+        <TextView
+            android:id="@+id/txt_withdrawn_reason"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:textSize="16sp"
+            android:alpha="0.9"
+            android:textColor="#FFFFFF" />
+    </LinearLayout>
+
 </FrameLayout>
