@@ -17,7 +17,7 @@
  */
 import fs from 'fs';
 import path from 'path';
-import { driverAddressLine, opponentAddressLine, withTitle, splitMoo, normalizeDriverAddressFields, normalizeOpponentsAddress } from '../src/services/driverAddress';
+import { driverAddressLine, opponentAddressLine, withTitle, splitMoo, normalizeDriverAddressFields, normalizeOpponentsAddress, stripAdminParts, normalizeCardAddresses } from '../src/services/driverAddress';
 import { tumbonNames, amphurCode } from '../src/services/areaCode.service';
 
 let failed = 0;
@@ -73,10 +73,10 @@ const read = (p: string) => fs.readFileSync(path.join(ROOT, p), 'utf8');
   check('column lists อ่าน/เขียนรายงานมีทั้ง 2 ช่อง (2 จุด)', (svc.match(/'driver_address','driver_moo','driver_subdistrict','driver_province'/g) ?? []).length === 2);
   const xml = read('backend/src/services/xmlExport.service.ts');
   check('XML: DRI_ADDRESS ผู้ขับขี่รถประกันประกอบผ่าน driverAddressLine · คู่กรณีผ่าน opponentAddressLine',
-    xml.includes("el('DRI_ADDRESS', insured ? driverAddressLine(c.driver_address, c.driver_moo, c.driver_subdistrict) : opponentAddressLine(c.address, c.moo, c.subdistrict, c.district, c.home_province))")
+    xml.includes("el('DRI_ADDRESS', insured ? driverAddressLine(c.driver_address, c.driver_moo, c.driver_subdistrict, c.driver_district, c.driver_province) : opponentAddressLine(c.address, c.moo, c.subdistrict, c.district, c.home_province))")
     && xml.includes("import { driverAddressLine, opponentAddressLine, addressLineOrDash, withTitle, nameOrUnknown } from './driverAddress'"));   // 21/09/69 + addressLineOrDash/nameOrUnknown (ผู้บาดเจ็บ/ทรัพย์สิน)
   const integ = read('backend/src/routes/integration.routes.ts');
-  check('integration /report ส่ง driver_address_emcs', integ.includes('driver_address_emcs: driverAddressLine(r.driver_address, r.driver_moo, r.driver_subdistrict)'));
+  check('integration /report ส่ง driver_address_emcs', integ.includes('driver_address_emcs: driverAddressLine(r.driver_address, r.driver_moo, r.driver_subdistrict, r.driver_district, r.driver_province)'));
 }
 
 // ── 3) ตำบลตามอำเภอ ──
@@ -124,14 +124,49 @@ const read = (p: string) => fs.readFileSync(path.join(ROOT, p), 'utf8');
     ['46/23', '7', 'ท้ายบ้าน', 'อำเภอเมือง', 'สมุทรปราการ', '46/23 ม.7 ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ'],
     ['49/51 หมู่ที่ 3', '', '', 'อำเภอเมือง', 'ชลบุรี', '49/51 ม.3 อ.เมือง จ.ชลบุรี'],                       // ISURVEY: ไม่มีตำบล
     ['12 ซ.5 ถ.สุขุมวิท', '4', 'บางพลี', 'อ.บางพลี', 'จ.สมุทรปราการ', '12 ม.4 ซ.5 ถ.สุขุมวิท ต.บางพลี อ.บางพลี จ.สมุทรปราการ'],   // คำนำหน้าที่พิมพ์มาไม่ซ้ำ
-    ['60 ม.3 ต.สองพี่น้อง อ.ท่าใหม่ จันทบุรี', '', '', 'อำเภอท่าใหม่', 'จันทบุรี', '60 ม.3 ต.สองพี่น้อง อ.ท่าใหม่ จันทบุรี'],   // ที่อยู่เต็มแบบเก่า (ข้อมูลจริง) ไม่ต่อซ้ำ
+    ['60 ม.3 ต.สองพี่น้อง อ.ท่าใหม่ จันทบุรี', '', '', 'อำเภอท่าใหม่', 'จันทบุรี', '60 ม.3 ต.สองพี่น้อง อ.ท่าใหม่ จ.จันทบุรี'],   // 21/09/69: อ./จ. ที่พิมพ์ปนถูกตัดแล้วต่อจากช่องแยก · ต. ไม่มีช่องแยก คงที่พิมพ์
+    ['60 ม.3 ต.สองพี่น้อง อ.ท่าใหม่ จันทบุรี', '', '', '', '', '60 ม.3 ต.สองพี่น้อง อ.ท่าใหม่ จันทบุรี'],   // ไม่มีช่องแยกเลย = คงที่พิมพ์ (ที่อยู่เต็มแบบเก่าไม่เพี้ยน)
     ['28/1 หมู่ 12', '', 'บางด้วน', 'เขตภาษีเจริญ', 'กรุงเทพ ฯ', '28/1 ม.12 แขวงบางด้วน เขตภาษีเจริญ กรุงเทพฯ'],   // กรุงเทพ: แขวง/เขต ไม่มี จ.
-    ['28/1 หมู่ 12 บางด้วน เขตภาษีเจริญ กรุงเทพฯ', '', 'บางด้วน', 'เขตภาษีเจริญ', 'กรุงเทพมหานคร', '28/1 ม.12 บางด้วน เขตภาษีเจริญ กรุงเทพฯ'],
+    ['28/1 หมู่ 12 บางด้วน เขตภาษีเจริญ กรุงเทพฯ', '', 'บางด้วน', 'เขตภาษีเจริญ', 'กรุงเทพมหานคร', '28/1 ม.12 แขวงบางด้วน เขตภาษีเจริญ กรุงเทพฯ'],   // ชื่อเปล่า/เขต/กรุงเทพฯ ที่พิมพ์ปนถูกตัด → ประกอบใหม่ครบรูปแบบ
+    // เคลม 2026013173082 (21/09/69): ช่างพิมพ์ "ต.ท่าช้าง อ.เมือง จันทบุรี" ในบ้านเลขที่ + dropdown ท่าช้าง/เมืองจันทบุรี/จันทบุรี → เดิมได้ "…อ.เมือง จันทบุรี อ.เมืองจันทบุรี"
+    ['2/1609 ม.9 ต.ท่าช้าง อ.เมือง จันทบุรี', '', 'ท่าช้าง', 'เมืองจันทบุรี', 'จันทบุรี', '2/1609 ม.9 ต.ท่าช้าง อ.เมืองจันทบุรี จ.จันทบุรี'],
+    ['7/41 ม.1 ต.มะขาม อ.มะขาม จันทบุรี', '', 'มะขาม', 'มะขาม', 'จันทบุรี', '7/41 ม.1 ต.มะขาม อ.มะขาม จ.จันทบุรี'],
+    ['99 หมู่บ้านท้ายบ้านวิลล่า', '', 'ท้ายบ้าน', 'อำเภอเมือง', 'สมุทรปราการ', '99 หมู่บ้านท้ายบ้านวิลล่า ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ'],   // ชื่อตำบลเป็นส่วนของชื่อหมู่บ้าน ไม่ถูกตัด และยังต่อ ต. (เดิม "ชื่อมีอยู่แล้ว" ทำให้หาย)
+    ['2/1609 ต.ท่าช้าง ถ.สุขุมวิท อ.เมือง จันทบุรี', '9', 'ท่าช้าง', 'เมืองจันทบุรี', 'จันทบุรี', '2/1609 ม.9 ถ.สุขุมวิท ต.ท่าช้าง อ.เมืองจันทบุรี จ.จันทบุรี'],   // ก้อนอื่นที่แทรกในหาง (ถนน) คืนกลับหัว
+    ['2/1609 ต. ท่าช้าง อ. เมือง จันทบุรี', '', '', '', 'จันทบุรี', '2/1609 ต.ท่าช้าง อ.เมือง จ.จันทบุรี'],   // เว้นวรรคหลังคำนำหน้า · มีแต่ช่องจังหวัด: ต./อ. ที่พิมพ์คงเดิมในลำดับ
     ['99/1', '', '', '', 'ชลบุรี', '99/1 จ.ชลบุรี'],
     ['', '', '', '', '', ''],
   ];
   for (const [a, m, t, d, p, want] of cases) check(`คู่กรณี ${JSON.stringify([a, m, t, d, p])} → ${JSON.stringify(want)}`, opponentAddressLine(a, m, t, d, p) === want, JSON.stringify(opponentAddressLine(a, m, t, d, p)));
   check('คู่กรณี: รับ null/undefined ได้', opponentAddressLine(null, undefined, null, undefined, null) === '' && opponentAddressLine('1', null, null, null, 'ระยอง') === '1 จ.ระยอง');
+  // ── ตัด ต./อ./จ. ที่พิมพ์ปน (user เคาะ 21/09/69 เคลม 2026013173082 / 2026013077062) — สูตรเดียวกับบอท v1.1.28 claim_data.strip_admin_parts ──
+  check('stripAdminParts: ตัดเฉพาะระดับที่มีช่องแยก · ชื่อจังหวัดเปล่า ๆ ตัดด้วย · แขวง/เขต เฉพาะกรุงเทพ · ไม่มีช่องแยก = ไม่แตะ',
+    stripAdminParts('2/1609 ต.ท่าช้าง อ.เมือง จันทบุรี', 'ท่าช้าง', 'เมืองจันทบุรี', 'จันทบุรี') === '2/1609'
+    && stripAdminParts('2/1609 ต.ท่าช้าง อ.เมือง จันทบุรี', '', '', 'จันทบุรี') === '2/1609 ต.ท่าช้าง อ.เมือง'
+    && stripAdminParts('2/1609 ต.ท่าช้าง อ.เมือง จันทบุรี', '', '', '') === '2/1609 ต.ท่าช้าง อ.เมือง จันทบุรี'
+    && stripAdminParts('99 แขวงบางด้วน เขตภาษีเจริญ กทม.', 'บางด้วน', 'ภาษีเจริญ', 'กรุงเทพมหานคร') === '99'
+    && stripAdminParts('99 เขตอุตสาหกรรม 3', '', 'บ้านบึง', 'ชลบุรี') === '99 เขตอุตสาหกรรม 3'
+    && stripAdminParts('หมู่บ้านท้ายบ้านวิลล่า 5/1', 'ท้ายบ้าน', '', '') === 'หมู่บ้านท้ายบ้านวิลล่า 5/1',
+    JSON.stringify([stripAdminParts('2/1609 ต.ท่าช้าง อ.เมือง จันทบุรี', 'ท่าช้าง', 'เมืองจันทบุรี', 'จันทบุรี'), stripAdminParts('99 แขวงบางด้วน เขตภาษีเจริญ กทม.', 'บางด้วน', 'ภาษีเจริญ', 'กรุงเทพมหานคร')]));
+  check('driverAddressLine: อ./จ. ที่พิมพ์ปนถูกตัด (ส่งอำเภอ/จังหวัดมาด้วย) ไม่ต่อในข้อความ · กรุงเทพ → แขวง · ไม่ส่งมา = เหมือนเดิม',
+    driverAddressLine('46/23 ม.7 ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ', '', 'ท้ายบ้าน', 'อำเภอเมือง', 'สมุทรปราการ') === '46/23 ม.7 ต.ท้ายบ้าน'
+    && driverAddressLine('99 แขวงบางด้วน', '', 'บางด้วน', 'เขตภาษีเจริญ', 'กรุงเทพมหานคร') === '99 แขวงบางด้วน'
+    && driverAddressLine('46/23 ม.7 ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ', '', 'ท้ายบ้าน') === '46/23 ม.7 ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ',
+    JSON.stringify(driverAddressLine('46/23 ม.7 ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ', '', 'ท้ายบ้าน', 'อำเภอเมือง', 'สมุทรปราการ')));
+  check('normalizeCardAddresses/normalizeOpponentsAddress: ตัดที่พิมพ์ปนตอนบันทึก (ผู้บาดเจ็บ · เจ้าของทรัพย์สิน · คู่กรณี) เมื่อระเบียนมีช่องแยก · ไม่มีช่องแยก = ไม่แตะ', (() => {
+    const d: Record<string, unknown> = {
+      injured_persons: [{ address: '2/1609 ม.9 ต.ท่าช้าง อ.เมือง จันทบุรี', moo: '', subdistrict: 'ท่าช้าง', district: 'เมืองจันทบุรี', home_province: 'จันทบุรี' },
+                        { address: '60 ม.3 ต.สองพี่น้อง อ.ท่าใหม่ จันทบุรี', moo: '', subdistrict: '', district: '', home_province: '' }],
+      damaged_property: [{ owner_address: '789/134ม.6 ต.บางละมุง', owner_moo: '', owner_subdistrict: 'บางละมุง', owner_district: 'อำเภอบางละมุง', owner_province: 'ชลบุรี' }],
+      opposing_parties: [{ address: '46/23 หมู่ 7 ต.ท้ายบ้าน', moo: '', subdistrict: 'ท้ายบ้าน', district: 'อำเภอเมือง', home_province: 'สมุทรปราการ' }],
+    };
+    normalizeCardAddresses(d); normalizeOpponentsAddress(d);
+    const inj = d.injured_persons as Array<Record<string, unknown>>; const pr = d.damaged_property as Array<Record<string, unknown>>; const op = d.opposing_parties as Array<Record<string, unknown>>;
+    return inj[0].address === '2/1609' && inj[0].moo === '9' && inj[1].address === '60 ต.สองพี่น้อง อ.ท่าใหม่ จันทบุรี' && inj[1].moo === '3'
+      && pr[0].owner_address === '789/134' && pr[0].owner_moo === '6' && op[0].address === '46/23' && op[0].moo === '7';
+  })());
+  const cs2 = read('backend/src/services/case.service.ts');
+  check('case.service เรียก normalizeCardAddresses คู่กับ normalizeOpponentsAddress (2 จุด)', (cs2.match(/normalizeCardAddresses\(data\)/g) ?? []).length === 2);
 
   const titles: Array<[string, string, string]> = [
     ['นาย', 'บุญเลี้ยง ชงสุวรรณ', 'นาย บุญเลี้ยง ชงสุวรรณ'],
@@ -177,7 +212,7 @@ const read = (p: string) => fs.readFileSync(path.join(ROOT, p), 'utf8');
   check('เว็บ+มือถือ: จังหวัด/อำเภอ/ตำบล ของที่อยู่ผู้ขับขี่คู่กรณี บังคับเมื่อมีข้อมูลที่อยู่ (opponentHasAddress / addrHasData) · "รอตรวจสอบ"/ว่างทั้งหมด ยกเว้น (user เคาะ 16/09/69)',
     (web.match(/reqWhen: opponentHasAddress/g) ?? []).length === 3 && web.includes("a !== 'รอตรวจสอบ'") && web.includes('if (r.pending === true) return false')
     && opp.includes('static bool addrHasData(') && opp.includes("if (_hasAddr && _subdistrict.isEmpty) 'ตำบล/แขวง (ที่อยู่ผู้ขับขี่)'") && (opp.match(/req: _hasAddr/g) ?? []).length === 3
-    && form.includes("OpponentEditor.addrHasData(s('address'), s('moo'), s('home_province'), s('district'), s('subdistrict'))") && form.includes("if (it['pending'] == true) return const <String>[];"));
+    && form.includes("OpponentEditor.addrHasData(s('address'), s('moo'), s('home_province'), s('district'), s('subdistrict'))") && form.includes("if (it['pending'] == true) return [if (cidBad.isNotEmpty) 'เลขบัตรประชาชนไม่ถูกต้อง'];"));   // 21/09/69: คันที่รอตรวจสอบยังตรวจเลขบัตรตามชนิดบัตร
   check('เว็บ: ติ๊ก "รอตรวจสอบ" + ป้ายที่หัวการ์ดคู่กรณี (pending เดียวกับแอป) · เลขบัตร "รอตรวจสอบ" (ชุดเก่า) ไม่เตือน (user สั่ง 16/09/69)',
     web.includes('setPending(i, e.target.checked)') && web.includes('{it.pending === true && (') && web.includes("const badCid = def.k === 'cid' && cidBad(v, rec?.id_type, injuredRec);"));   // 21/09/69 cidBad (ต่างชาติไม่ตรวจ checksum · ยาวเกิน 13 · ผู้บาดเจ็บกติกา EMCS)
   // ชุดค่าที่เติมเมื่อติ๊ก — user เคาะ 17/09/69: เจ้าของ "-" · ทะเบียน "00" · รถอื่นๆ (ยี่ห้อว่าง) · จังหวัด อื่นๆ · ชาย + "ไม่ทราบชื่อ" (ไม่ใส่คำนำหน้า/นามสกุล)
@@ -222,7 +257,7 @@ const read = (p: string) => fs.readFileSync(path.join(ROOT, p), 'utf8');
     const api = fs.readFileSync(path.join(bot, 'autokey', 'isurvey_api.py'), 'utf8');
     const conv = fs.readFileSync(path.join(bot, 'autokey', 'isurvey_to_sesurvey.py'), 'utf8');
     check('บอท: driver_address_line (สูตรเดียวกัน) · เส้นเว็บใช้ driver_address_emcs ก่อน · เส้น ISURVEY ตรงต่อ ต.<ตำบล> จาก drv_tumbonID',
-      cd.includes('def driver_address_line(') && cd.includes('def _insert_moo(') && cd.includes('parts.append(f"ต.{t}")')
+      cd.includes('def driver_address_line(') && cd.includes('def _insert_moo(') && cd.includes('def split_admin_tail(') && cd.includes('else f"ต.{t}")')
       && main.includes("gv('driver_address_emcs') or driver_address_line(") && api.includes('self._tumbon(drv.get("drv_tumbonID"))'));
     check('บอท: คู่กรณี opponent_address_line + with_title · เส้นเว็บใช้ owner_name_emcs/address_emcs ก่อน · เส้น ISURVEY ตรง @address_opp · ตัวดึงงานแยก owner_title/moo/subdistrict',
       cd.includes('def opponent_address_line(') && cd.includes('def with_title(')

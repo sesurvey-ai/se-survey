@@ -422,7 +422,7 @@ router.get('/cases/:id/report', integrationAuth, asyncHandler(async (req: Reques
   const r = eff.report as Record<string, unknown>;
   const v = emcsRecordViews(r);
   res.json({ success: true, data: { ...eff.report, main_from: eff.main_from, opposing_parties: v.opposing, injured_persons: v.injured, damaged_property: v.property,
-    driver_address_emcs: driverAddressLine(r.driver_address, r.driver_moo, r.driver_subdistrict) } });
+    driver_address_emcs: driverAddressLine(r.driver_address, r.driver_moo, r.driver_subdistrict, r.driver_district, r.driver_province) } });
 }));
 
 // รายการรูปของเคส (survey_photos ที่ผูกกับ report) — SE-AutoKey ใช้โหลดไปอัปเข้า EMCS

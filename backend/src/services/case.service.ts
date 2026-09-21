@@ -1,5 +1,5 @@
 import { db } from '../config/database';
-import { normalizeDriverAddressFields, normalizeOpponentsAddress } from './driverAddress';
+import { normalizeDriverAddressFields, normalizeOpponentsAddress, normalizeCardAddresses } from './driverAddress';
 import { env } from '../config/env';
 import { AppError, NotFoundError, ForbiddenError } from '../middleware/errorHandler';
 import { fcmService } from './fcm.service';
@@ -710,8 +710,9 @@ export const caseService = {
 
     const reportResult = await db.query('SELECT id FROM survey_reports WHERE case_id = $1', [caseId]);
     if (reportResult.rows.length === 0) throw new NotFoundError('Survey report not found');
-    normalizeDriverAddressFields(data);   // "46/23 หมู่ที่ 7" → บ้านเลขที่ 46/23 + หมู่ 7 (16/09/69)
+    normalizeDriverAddressFields(data);   // "46/23 หมู่ที่ 7" → บ้านเลขที่ 46/23 + หมู่ 7 (16/09/69) · ต./อ./จ. ที่พิมพ์ปนตัดเมื่อมีช่องแยก (21/09/69)
     normalizeOpponentsAddress(data);      // คู่กรณีทุกคันเช่นกัน (opposing_parties[].address → moo)
+    normalizeCardAddresses(data);         // ผู้บาดเจ็บ + เจ้าของทรัพย์สิน (21/09/69)
 
     const fields = [
       'car_model','car_color','license_plate','notes',
@@ -955,8 +956,9 @@ export const caseService = {
     const client = await db.getClient();
     try {
       await client.query('BEGIN');
-      normalizeDriverAddressFields(data);   // แอปเก่า/ช่างพิมพ์หมู่ปนในบ้านเลขที่ → แยกไปช่องหมู่ (16/09/69)
+      normalizeDriverAddressFields(data);   // แอปเก่า/ช่างพิมพ์หมู่ปนในบ้านเลขที่ → แยกไปช่องหมู่ (16/09/69) · ต./อ./จ. ที่พิมพ์ปนตัดเมื่อมีช่องแยก (21/09/69)
       normalizeOpponentsAddress(data);      // คู่กรณีทุกคันเช่นกัน
+      normalizeCardAddresses(data);         // ผู้บาดเจ็บ + เจ้าของทรัพย์สิน (21/09/69)
 
       const fields = [
         'car_model','car_color','license_plate','notes',
