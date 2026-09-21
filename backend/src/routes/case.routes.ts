@@ -61,7 +61,12 @@ const createCaseSchema = z.object({
   acc_fault: z.string().optional(),
   acc_reporter: z.string().optional(),
   reporter_phone: z.string().optional(),
-  acc_customer_report_date: z.string().optional(),   // "ลูกค้าแจ้ง" — วันที่รับแจ้งจาก OCR หน้าการ์ด (dd/mm/พ.ศ.|HH:mm)
+  /**
+   * "ลูกค้าแจ้ง" — วันเวลารับแจ้ง **บังคับ** (user สั่ง 22/09/69): ไทม์ไลน์งานบนแอป/EMCS เริ่มจากจุดนี้
+   * กรอกเองไม่ผ่าน OCR ก็ต้องมี (เดิม optional → เคสกรอกเองไทม์ไลน์ "ลูกค้าแจ้ง" ว่าง)
+   * รูปแบบเดียวกับ OCR หน้าการ์ด "dd/mm/พ.ศ.|HH:mm" — ตัวอ่านบนแอป (splitDT) และ XML/EMCS ใช้ค่านี้ตรง ๆ · ปี ค.ศ. = ปัดตก
+   */
+  acc_customer_report_date: z.string().regex(/^\d{2}\/\d{2}\/2[5-7]\d{2}\|\d{2}:\d{2}$/, 'ต้องกรอกวันเวลาที่ลูกค้าแจ้ง เป็น วว/ดด/พพพพ|ชช:นน (ปี พ.ศ.)'),
   acc_insurance_notify_date: z.string().optional(),
   acc_insurance_notify_time: z.string().optional(),
   receiver_name: z.string().optional(),

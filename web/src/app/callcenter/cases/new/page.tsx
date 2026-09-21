@@ -11,6 +11,36 @@ const OCR_FIELD_LABELS: Record<string, string> = {
   claim_ref_no: 'เลขรับแจ้ง', claim_no: 'เลขเคลม', prb_number: 'เลขพรบ', survey_job_no: 'เลขเซอร์เวย์', survey_job_no_2: 'เลขเซอร์เวย์ งาน 2', policy_no: 'เลขกรมธรรม์', chassis_no: 'เลขตัวถัง', incident_location: 'สถานที่เกิดเหตุ', acc_customer_report_date: 'ลูกค้าแจ้ง (วันที่รับแจ้ง)', reporter_phone: 'เบอร์โทรผู้แจ้งเหตุ', driver_phone: 'เบอร์โทรผู้ขับขี่',
 };
 
+/**
+ * "ลูกค้าแจ้ง" (วันเวลารับแจ้ง) — **บังคับกรอก** (user สั่ง 22/09/69): ไทม์ไลน์งานบนแอป/EMCS เริ่มจากจุดนี้
+ * เคสที่กรอกเองโดยไม่ OCR หน้าการ์ด เดิมช่องนี้ว่างได้ → ไทม์ไลน์ "ลูกค้าแจ้ง" ของช่างว่าง (เคลม 777 ที่ user เจอ)
+ * เก็บรูปแบบเดียวกับ OCR = "วว/ดด/พพพพ|ชช:นน" (พ.ศ.) — ตัวอ่านบนแอป (splitDT) และ XML/EMCS ใช้ค่านี้ตรง ๆ
+ * ฟอร์มแยกเป็น 2 ช่อง (วัน · เวลา) แล้วรวมกลับตอนเก็บ · OCR เติมค่ารวมมาให้ก็แยกโชว์ได้
+ */
+const splitReportDT = (v: string): [string, string] => {
+  const [d = '', t = ''] = (v || '').split('|');
+  return [d, t];
+};
+const joinReportDT = (d: string, t: string) => (d.trim() || t.trim()) ? `${d.trim()}|${t.trim()}` : '';
+/** ตรวจ + จัดรูป (เติม 0 ให้ครบ) — คืน null ถ้าไม่ครบ/ไม่ใช่ พ.ศ./เวลาเกินช่วง */
+const normalizeReportDT = (v: string): string | null => {
+  const [d, t] = splitReportDT(v);
+  const md = d.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  const mt = t.trim().match(/^(\d{1,2})[:.](\d{2})$/);
+  if (!md || !mt) return null;
+  const [dd, mm, yyyy] = [Number(md[1]), Number(md[2]), Number(md[3])];
+  const [hh, mi] = [Number(mt[1]), Number(mt[2])];
+  if (dd < 1 || dd > 31 || mm < 1 || mm > 12 || yyyy < 2500 || yyyy > 2700 || hh > 23 || mi > 59) return null;
+  const p2 = (n: number) => String(n).padStart(2, '0');
+  return `${p2(dd)}/${p2(mm)}/${yyyy}|${p2(hh)}:${p2(mi)}`;
+};
+/** เวลาปัจจุบันของเครื่องคนกรอก (คอลเซ็นเตอร์อยู่ไทย) — ปุ่ม "ตอนนี้" สำหรับลูกค้าที่เพิ่งโทรแจ้ง */
+const nowReportDT = () => {
+  const n = new Date();
+  const p2 = (x: number) => String(x).padStart(2, '0');
+  return `${p2(n.getDate())}/${p2(n.getMonth() + 1)}/${n.getFullYear() + 543}|${p2(n.getHours())}:${p2(n.getMinutes())}`;
+};
+
 // บริษัทประกันที่รองรับ (เพิ่มบริษัทใหม่ = เพิ่ม entry) — value ต้องตรงกับที่ใช้เช็คเงื่อนไขฟอร์มด้านล่าง
 // logo = path ใน public (วางไฟล์ที่ web/public/insurance/*.png); ถ้าไฟล์ไม่มีจะ fallback เป็นตัวย่อ (code)
 const INSURANCE_COMPANIES: { value: string; name: string; sub?: string; logo: string; code: string; disabled?: boolean }[] = [
@@ -44,6 +74,10 @@ export default function NewCasePage() {
   const [form, setForm] = useState<Record<string, string>>({});
   const f = (key: string) => form[key] || '';
   const s = (key: string, v: string) => setForm(prev => ({ ...prev, [key]: v }));
+  /** ข้อความเตือนใต้ช่อง "ลูกค้าแจ้ง" — ล้างทันทีที่แก้ */
+  const [reportDTError, setReportDTError] = useState('');
+  const [reportDate, reportTime] = splitReportDT(f('acc_customer_report_date'));
+  const setReportDT = (d: string, t: string) => { setReportDTError(''); s('acc_customer_report_date', joinReportDT(d, t)); };
 
   // OCR state
   // ไทยไพบูลย์เท่านั้นที่มีเลขเรื่องเซอร์เวย์บนใบรับแจ้ง — ไอโออิไม่มี
@@ -278,6 +312,14 @@ export default function NewCasePage() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
+    // "ลูกค้าแจ้ง" บังคับ (22/09/69) — ไม่ครบ/ไม่ใช่ พ.ศ. ไม่ให้ส่ง (เซิร์ฟเวอร์ก็กันซ้ำอีกชั้นใน createCaseSchema)
+    const reportDT = normalizeReportDT(f('acc_customer_report_date'));
+    if (!reportDT) {
+      setReportDTError('กรอกวันที่ (วว/ดด/พพพพ เป็น พ.ศ.) และเวลา (ชช:นน) ที่ลูกค้าแจ้งให้ครบ หรือกด "ตอนนี้"');
+      setError('ยังไม่ได้กรอก "ลูกค้าแจ้ง" (วันเวลารับแจ้ง) — ใช้เป็นจุดเริ่มไทม์ไลน์งานของช่าง');
+      document.getElementById('acc_customer_report_date')?.focus();
+      return;
+    }
     setSubmitting(true);
     try {
       const payload: Record<string, unknown> = {
@@ -295,6 +337,7 @@ export default function NewCasePage() {
             : val.trim();
         }
       }
+      payload.acc_customer_report_date = reportDT;   // ค่าที่จัดรูปแล้ว (เติม 0) ทับของดิบจากฟอร์ม
       const res = await api.post('/api/cases', payload);
       if (res.data.success && res.data.data) {
         const newCaseId = res.data.data.id;
@@ -434,8 +477,37 @@ export default function NewCasePage() {
                 </div>
               )}
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">ลูกค้าแจ้ง <span className="text-gray-400 font-normal">(วันที่รับแจ้ง · ไทม์ไลน์งาน)</span></label>
-                <input value={f('acc_customer_report_date').replace('|', ' ')} onChange={e => s('acc_customer_report_date', e.target.value.trim().replace(/\s+/, '|'))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" placeholder="วว/ดด/พพพพ ชช:นน" />
+                <label className="block text-xs font-medium text-gray-500 mb-1">
+                  ลูกค้าแจ้ง <span className="text-red-500">*</span>{' '}
+                  <span className="text-gray-400 font-normal">(วันเวลารับแจ้ง · จุดเริ่มไทม์ไลน์งาน)</span>
+                </label>
+                {/* บังคับกรอก (22/09/69) — OCR หน้าการ์ดเติมให้ · กรอกเองต้องใส่ทั้งวันและเวลา หรือกด "ตอนนี้" */}
+                <div className="flex gap-2">
+                  <input
+                    id="acc_customer_report_date"
+                    value={reportDate}
+                    onChange={e => setReportDT(e.target.value, reportTime)}
+                    inputMode="numeric"
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm ${reportDTError ? 'border-red-400' : 'border-gray-300'}`}
+                    placeholder="วว/ดด/พพพพ (พ.ศ.)"
+                  />
+                  <input
+                    value={reportTime}
+                    onChange={e => setReportDT(reportDate, e.target.value)}
+                    inputMode="numeric"
+                    className={`w-24 shrink-0 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm ${reportDTError ? 'border-red-400' : 'border-gray-300'}`}
+                    placeholder="ชช:นน"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => { const [d, t] = splitReportDT(nowReportDT()); setReportDT(d, t); }}
+                    title="ใช้วันเวลาปัจจุบัน — ลูกค้าเพิ่งโทรแจ้งตอนนี้"
+                    className="shrink-0 px-2.5 py-2 text-xs font-medium border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors whitespace-nowrap"
+                  >
+                    ตอนนี้
+                  </button>
+                </div>
+                {reportDTError && <p className="text-xs text-red-600 mt-1">{reportDTError}</p>}
               </div>
               <div className="col-span-3">
                 <label className="block text-xs font-medium text-gray-500 mb-1">สถานที่เกิดเหตุ <span className="text-gray-400 font-normal">(อ่านจากรูป · แสดงบนการ์ดงานของช่างสำรวจ)</span></label>
