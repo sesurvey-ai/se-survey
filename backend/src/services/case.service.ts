@@ -4,6 +4,7 @@ import { env } from '../config/env';
 import { AppError, NotFoundError, ForbiddenError } from '../middleware/errorHandler';
 import { pushNewSurvey, pushSurveyWithdrawn } from './surveyPush.service';
 import { logDispatch, LAST_RECALL_SELECT, LAST_RECALL_JOIN } from './dispatchLog.service';
+import { omitHeavy } from './listRows';
 import { generateSurveyXml, emcsNameWarnings, sanitizeReportDates } from './xmlExport.service';
 import { invalidateCaseOwner } from '../middleware/uploadsAuth';
 import { storage, normalizeKey, contentTypeOf } from '../config/storage';
@@ -344,7 +345,7 @@ export const caseService = {
        ORDER BY c.created_at DESC`,
       [surveyorId]
     );
-    return result.rows;
+    return omitHeavy(result.rows);   // รายการงานบนแอป — ไม่ส่ง payload ISURVEY ติดไปทุกแถว
   },
 
   /**
@@ -1213,6 +1214,7 @@ export const caseService = {
     );
     // กรองตามทีมของหัวหน้า (staff_groups) ให้เห็นชุดเดียวกับหน้า "งานรอตรวจ (ISURVEY)" — user 07/09/69
     // admin / หัวหน้าที่ยังไม่ผูกทีม = เห็นทั้งหมด · งานที่ตัวเองดึง/สร้าง เห็นเสมอ (แม้ช่างอยู่นอกทีม)
+    omitHeavy(result.rows);   // ตัดคอลัมน์หนักก่อนทุกทางออก (ดู listRows.ts)
     if (!user) return result.rows;
     const team = await staffGroupService.filterFor(user.id, user.role);
     if (!team) return result.rows;
@@ -2122,7 +2124,7 @@ export const caseService = {
        LEFT JOIN survey_reports sr ON sr.case_id = c.id${LAST_RECALL_JOIN}
        ORDER BY c.created_at DESC LIMIT 10`
     );
-    return { counts: result.rows[0], recent: recentResult.rows };
+    return { counts: result.rows[0], recent: omitHeavy(recentResult.rows) };
   },
 
   // รายการเคสทั้งหมด (callcenter) — มี filter สถานะ + ค้นหา + แบ่งหน้า
@@ -2169,7 +2171,7 @@ export const caseService = {
     ]);
 
     return {
-      cases: dataResult.rows,
+      cases: omitHeavy(dataResult.rows),
       total: countResult.rows[0].total,
       page,
       limit,

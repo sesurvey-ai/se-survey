@@ -62,5 +62,23 @@ const read = (p: string) => fs.readFileSync(path.join(__dirname, '..', p), 'utf8
   }
 }
 
+/**
+ * ── payload ที่เขียนกลับ ISURVEY ต้องไม่ติดไปกับหน้ารายการ (22/09/69) ──
+ * ⛔ SELECT c.* ลาก isurvey_close_payload (~2.7 KB/เคส) ไปทุกแถว — รายการงาน 309 เคส = 1.4 MB
+ *    หน้าไหนก็ไม่อ่านคอลัมน์นี้ และมันโตทุกครั้งที่อนุมัติงาน ISURVEY (user เจอหน้าค้าง "กำลังโหลด")
+ */
+{
+  const listRows = read('src/services/listRows.ts');
+  const caseSvc = read('src/services/case.service.ts');
+  const adminSvc = read('src/services/admin.service.ts');
+  check('มีตัวตัดคอลัมน์หนัก และรู้จัก isurvey_close_payload', /export function omitHeavy/.test(listRows) && listRows.includes("'isurvey_close_payload'"));
+  const fn = (src: string, name: string) => { const i = src.indexOf(`  async ${name}(`); return i < 0 ? '' : src.slice(i, i + 4000); };
+  check('รายการงานหัวหน้า (getForReview) ตัดก่อนทุกทางออก', /omitHeavy\(result\.rows\);[\s\S]{0,160}if \(!user\) return result\.rows;/.test(fn(caseSvc, 'getForReview')));
+  check('รายการงานบนแอป (getMyCases) ตัด', fn(caseSvc, 'getMyCases').includes('return omitHeavy(result.rows)'));
+  check('แดชบอร์ด + รายการเคสคอลเซ็นเตอร์ ตัด', fn(caseSvc, 'getStats').includes('recent: omitHeavy(recentResult.rows)') && /cases: omitHeavy\(\w+\.rows\)/.test(fn(caseSvc, 'list')));
+  check('รายการเคสแอดมิน ตัด', fn(adminSvc, 'getCases').includes('cases: omitHeavy(dataResult.rows)'));
+  check('หน้าเคสเดี่ยวยังได้ครบ (ไม่ตัดใน getById/getDetail)', !fn(caseSvc, 'getById').includes('omitHeavy(') && !fn(caseSvc, 'getDetail').includes('omitHeavy('));
+}
+
 console.log(failed ? `\n${failed} FAILED ❌` : '\nALL PASS ✅');
 process.exit(failed ? 1 : 0);

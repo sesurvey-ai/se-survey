@@ -6,6 +6,7 @@ import { removeCapture, sendCapture } from './sebilling.service';
 import { notifyCaseChanged } from './caseEvents';
 import { pushNewSurveyById, pushSurveyWithdrawn } from './surveyPush.service';
 import { logDispatch } from './dispatchLog.service';
+import { omitHeavy } from './listRows';
 import { invalidateCaseOwner } from '../middleware/uploadsAuth';
 import { NotFoundError, AppError } from '../middleware/errorHandler';
 import { assertStrongPassword } from './password';
@@ -245,7 +246,7 @@ export const adminService = {
     ]);
 
     return {
-      cases: dataResult.rows,
+      cases: omitHeavy(dataResult.rows),   // รายการแอดมิน — ไม่ส่ง payload ISURVEY ติดไปทุกแถว
       total: countResult.rows[0].total,
       page,
       limit,
