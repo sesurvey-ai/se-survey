@@ -43,8 +43,9 @@ const nowReportDT = () => {
 
 // บริษัทประกันที่รองรับ (เพิ่มบริษัทใหม่ = เพิ่ม entry) — value ต้องตรงกับที่ใช้เช็คเงื่อนไขฟอร์มด้านล่าง
 // logo = path ใน public (วางไฟล์ที่ web/public/insurance/*.png); ถ้าไฟล์ไม่มีจะ fallback เป็นตัวย่อ (code)
-const INSURANCE_COMPANIES: { value: string; name: string; sub?: string; logo: string; code: string; disabled?: boolean }[] = [
-  { value: 'บริษัท ไทยไพบูลย์ประกันภัย จำกัด (มหาชน)', name: 'ไทยไพบูลย์ประกันภัย', sub: 'จำกัด (มหาชน)', logo: '/insurance/tpb.png', code: 'TPB' },
+const INSURANCE_COMPANIES: { value: string; name: string; logo: string; code: string; disabled?: boolean }[] = [
+  // ชื่อบนการ์ดเลือกบริษัทเป็นชื่อสั้น (ไม่มี "จำกัด (มหาชน)" — user ตัดออก 22/09/69) · value ยังเป็นชื่อเต็มที่บันทึกลงเคส
+  { value: 'บริษัท ไทยไพบูลย์ประกันภัย จำกัด (มหาชน)', name: 'ไทยไพบูลย์ประกันภัย', logo: '/insurance/tpb.png', code: 'TPB' },
   { value: 'ไอโออิกรุงเทพประกันภัย', name: 'ไอโออิ กรุงเทพประกันภัย', logo: '/insurance/aioi.png', code: 'AIOI' },
 ];
 
@@ -386,9 +387,8 @@ export default function NewCasePage() {
         <fieldset disabled={createdCaseId !== null} className="min-w-0 border-0 p-0 m-0">
         {error && <div className="text-red-600 text-xs mb-3 bg-red-50 px-3 py-2 rounded">{error}</div>}
 
-        {/* บริษัทประกัน — ด้านบนตาราง */}
+        {/* การ์ดเลือกบริษัทประกัน — ด้านบนตาราง (ไม่มีป้ายหัวข้อ user ตัดออก 22/09/69) */}
         <div className="mb-3">
-          <label className="block text-xs font-medium text-gray-500 mb-1">บริษัทประกัน</label>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             {INSURANCE_COMPANIES.map(co => {
               const selected = insuranceCompany === co.value;
@@ -406,7 +406,6 @@ export default function NewCasePage() {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-medium text-gray-900 truncate">{co.name}</span>
-                    {co.sub && <span className="block text-xs text-gray-400 truncate">{co.sub}</span>}
                     {co.disabled && <span className="block text-[11px] text-amber-600">เร็วๆ นี้</span>}
                   </span>
                   {selected && (
