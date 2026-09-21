@@ -26,6 +26,8 @@ type Row = {
   plate_no: string; finish_dt: string; status: string; emcs_sent: boolean;
   dispatch_dt?: string; send_report_dt?: string;   // จ่ายงานเวลา / ส่งรายงานเวลา (user ขอ 07/09/69)
   imported_case_id?: number | null; imported_status?: string | null;
+  /** "ครั้งที่" ของใบนี้ในเคลม + ครั้งก่อนหน้าที่ยังไม่มีในระบบเรา (ถามทีหลังจากโหลด — 22/09/69) · undefined = ยังไม่ได้ถาม */
+  visit_no?: number | null; visit_total?: number; earlier_missing?: string[]; rounds_error?: string;
 };
 type Filter = { applied: boolean; group_name: string | null; members: number; hidden: number };
 type PullResult = {
@@ -194,6 +196,31 @@ export default function IsurveyPendingPage() {
     return (rows ?? []).filter((r) =>
       [r.claim_no, r.survey_no, r.surveyor_name, r.acc_province].some((v) => String(v ?? '').toLowerCase().includes(needle)));
   }, [afterHide, rows, searching, needle]);
+  /**
+   * "ครั้งที่ N จาก M" ของแถวที่มองเห็น (user ขอ 22/09/69) — ถามทีหลังจากโหลดรายการ ทีละชุด เฉพาะแถวที่ยังไม่รู้
+   * (service ต้องถาม ISURVEY 1 ครั้งต่อเคลม ถ้าทำตอนโหลดรายการทั้ง 14 วันจะช้าไปหลายสิบวินาที)
+   * ⛔ ไม่ยกเลิกคำขอที่ค้างตอนแถวเปลี่ยน — รายการถูกอัปเดตบ่อย (ซิงก์สถานะ) ยกเลิกแล้วผลจะหายและไม่ถูกถามซ้ำ
+   */
+  const roundsAsked = useRef(new Set<string>());
+  useEffect(() => { roundsAsked.current.clear(); }, [loadedAt]);   // โหลดรายการใหม่ = ถามใหม่ทั้งหมด
+  useEffect(() => {
+    const todo = visible.filter((r) => r.claim_no && r.visit_no === undefined && !roundsAsked.current.has(key(r))).slice(0, 40);
+    if (todo.length === 0) return;
+    for (const r of todo) roundsAsked.current.add(key(r));
+    (async () => {
+      try {
+        const res = await api.post('/api/isurvey/rounds',
+          { rows: todo.map((x) => ({ claim_no: x.claim_no, survey_no: x.survey_no })) }, { timeout: 150000 });
+        const info = (res.data?.data?.rounds ?? {}) as Record<string, { visit_no: number | null; visit_total: number; earlier_missing: string[]; error?: string }>;
+        setRows((rs) => (rs ?? []).map((x) => {
+          const h = info[key(x)];
+          return h ? { ...x, visit_no: h.visit_no, visit_total: h.visit_total, earlier_missing: h.earlier_missing, rounds_error: h.error } : x;
+        }));
+      } catch {
+        for (const r of todo) roundsAsked.current.delete(key(r));   // ถามไม่ได้ = ให้ลองใหม่รอบหน้า
+      }
+    })();
+  }, [visible]);
   const toggleStatus = (s: string) =>
     setStatuses((cur) => (cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]));
   const statusLabel = isAll ? `ทั้งหมด (${rows?.length ?? 0})`
@@ -394,7 +421,21 @@ export default function IsurveyPendingPage() {
                     {/* เดิมโชว์ finish_dt (สำรวจเสร็จ) ในชื่อ "ส่งงานเมื่อ" — user 07/09/69 ให้ใช้เวลาส่งรายงาน (sendReport_dt) แทน */}
                     <td className="px-2 py-2 whitespace-nowrap text-gray-600" title={r.finish_dt ? `สำรวจเสร็จ ${r.finish_dt}` : undefined}>{r.send_report_dt || '-'}</td>
                     <td className="px-2 py-2 whitespace-nowrap font-mono">{r.claim_no}</td>
-                    <td className="px-2 py-2 whitespace-nowrap font-mono">{r.survey_no}</td>
+                    <td className="px-2 py-2 whitespace-nowrap font-mono">
+                      {r.survey_no}
+                      {/* ครั้งที่ของใบนี้ในเคลม (22/09/69) — ครั้งเดียวก็บอก "ครั้งที่ 1" ให้รู้ว่าเป็นงานแรก */}
+                      {r.visit_no ? (
+                        <span className="block font-sans text-[11px] text-gray-500">ครั้งที่ {r.visit_no}{(r.visit_total ?? 0) > 1 ? ` จาก ${r.visit_total}` : ''}</span>
+                      ) : r.rounds_error ? (
+                        <span className="block font-sans text-[11px] text-gray-400" title={r.rounds_error}>ครั้งที่ ?</span>
+                      ) : null}
+                      {(r.earlier_missing?.length ?? 0) > 0 && (
+                        <span className="block font-sans text-[11px] text-amber-700"
+                          title={`ครั้งก่อนหน้าที่ยังไม่มีในระบบเรา: ${(r.earlier_missing ?? []).join(', ')} — ถ้าจะตรวจ/อนุมัติใบพวกนั้นบน SE ให้ดึงใบนั้นก่อน ไม่งั้นตอนดึงใบนี้ระบบจะดึงมาเป็นเคสอ้างอิง (อ่านอย่างเดียว)`}>
+                          ⚠ ครั้งก่อนหน้ายังไม่ได้ดึง {(r.earlier_missing ?? []).length} ใบ
+                        </span>
+                      )}
+                    </td>
                     <td className="px-2 py-2 min-w-[9rem]">{r.surveyor_name}</td>
                     <td className="px-2 py-2 whitespace-nowrap">{r.acc_province}</td>
                     <td className="px-2 py-2 whitespace-nowrap">{r.plate_no}</td>

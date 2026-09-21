@@ -173,6 +173,41 @@ export const isurveyPullService = {
   },
 
   /**
+   * "ครั้งที่" ของงานในรายการ (user ขอ 22/09/69): ให้ service เรียงทุกใบของแต่ละเคลมจาก ISURVEY (survey_order — กติกาเดียวกับตอนดึง)
+   * แล้วเทียบกับ DB เราว่าครั้งก่อนหน้าใบไหนยังไม่มี → หน้าเว็บโชว์ "ครั้งที่ 2 จาก 3" + เตือนให้ดึงตามลำดับ
+   * (ดึงใบหลังก่อน ครั้งก่อนหน้าจะกลายเป็นเคสอ้างอิงอ่านอย่างเดียว ตรวจ/อนุมัติไม่ได้อีก)
+   * ⛔ เรียกแยกจาก listPending ทีละชุดของแถวที่มองเห็น — service ถาม ISURVEY 1 ครั้งต่อเคลม ทำตอนโหลดรายการทั้ง 14 วันจะช้าไปหลายสิบวินาที
+   */
+  async rounds(userId: number, rows: { claim_no: string; survey_no: string }[]):
+    Promise<Record<string, { visit_no: number | null; visit_total: number; earlier_missing: string[]; error?: string }>> {
+    const claims = [...new Set(rows.map((r) => String(r.claim_no ?? '').trim()).filter(Boolean))].slice(0, 200);
+    if (claims.length === 0) return {};
+    const creds = await isurveyCredService.getPlain(userId);
+    type RoundRow = { survey_no: string; round: number; status_name?: string };
+    const r = await callService<{ rounds: Record<string, RoundRow[] | { error: string }> }>('/rounds', { ...creds, claims }, 150000);
+    const ex = await db.query(
+      `SELECT sr.claim_no, sr.survey_job_no FROM survey_reports sr JOIN cases c ON c.id = sr.case_id WHERE sr.claim_no = ANY($1)`,
+      [claims]);
+    const norm = (v: unknown) => String(v ?? '').trim().toUpperCase();
+    const have = new Set((ex.rows as { claim_no: string; survey_job_no: string | null }[]).map((x) => `${x.claim_no}|${norm(x.survey_job_no)}`));
+    const out: Record<string, { visit_no: number | null; visit_total: number; earlier_missing: string[]; error?: string }> = {};
+    for (const row of rows) {
+      const claim = String(row.claim_no ?? '').trim();
+      const info = r.rounds?.[claim];
+      if (!info) continue;
+      const key = `${claim}|${row.survey_no}`;
+      if (!Array.isArray(info)) { out[key] = { visit_no: null, visit_total: 0, earlier_missing: [], error: info.error }; continue; }
+      const mine = info.find((x) => norm(x.survey_no) === norm(row.survey_no));
+      const visitNo = mine ? Number(mine.round) : null;
+      const earlierMissing = visitNo
+        ? info.filter((x) => Number(x.round) < visitNo && !have.has(`${claim}|${norm(x.survey_no)}`)).map((x) => String(x.survey_no))
+        : [];
+      out[key] = { visit_no: visitNo, visit_total: info.length, earlier_missing: earlierMissing };
+    }
+    return out;
+  },
+
+  /**
    * ปิดงานบน ISURVEY แทนหัวหน้า — "ยืนยันการตรวจสอบ" (รอตรวจข้อมูล → จบงาน) หลังอนุมัติบนเว็บ (user เคาะ 08/09/69)
    *
    * ส่งไปกับคำสั่ง: "ผลการดำเนินงาน" (survey_result) → ช่องความเห็นหัวหน้าแท็บ 1 · ตารางค่าสำรวจ 2 ฝั่ง

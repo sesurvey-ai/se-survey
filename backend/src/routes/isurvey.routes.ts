@@ -62,6 +62,13 @@ router.post('/imported-status', ...guard, asyncHandler(async (req: Request, res:
   sendSuccess(res, { statuses: await isurveyPullService.importedStatus(clean) });
 }));
 
+// "ครั้งที่" ของงานที่มองเห็นในหน้า (22/09/69) — ถาม ISURVEY ผ่าน service 1 ครั้ง/เคลม + เทียบ DB เราว่าครั้งก่อนหน้ายังไม่มีใบไหน
+router.post('/rounds', ...guard, asyncHandler(async (req: Request, res: Response) => {
+  const rows = Array.isArray(req.body?.rows) ? (req.body.rows as { claim_no?: string; survey_no?: string }[]) : [];
+  const clean = rows.slice(0, 200).map((x) => ({ claim_no: String(x.claim_no ?? ''), survey_no: String(x.survey_no ?? '') }));
+  sendSuccess(res, { rounds: await isurveyPullService.rounds(req.user!.id, clean) });
+}));
+
 router.post('/pull', ...guard, asyncHandler(async (req: Request, res: Response) => {
   const { claim_no, survey_no } = (req.body ?? {}) as { claim_no?: string; survey_no?: string };
   const result = await isurveyPullService.pull(req.user!.id, String(claim_no ?? ''), String(survey_no ?? ''));

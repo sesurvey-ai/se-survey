@@ -145,5 +145,21 @@ check('รายการเคสสำหรับบอทส่ง opponent_
   && routes.includes("`(CASE WHEN jsonb_typeof(COALESCE(fv.${col}, sr.${col})) = 'array' THEN jsonb_array_length(COALESCE(fv.${col}, sr.${col})) ELSE 0 END)::int`")
   && /LEFT JOIN LATERAL \(\s*SELECT t\.opposing_parties, t\.injured_persons, t\.damaged_property[\s\S]{0,700}?COALESCE\(c1\.visit_no, ROW_NUMBER\(\) OVER \(PARTITION BY s1\.claim_no ORDER BY c1\.created_at\)\)::int AS fv_visit_no[\s\S]{0,300}?WHERE s1\.claim_no = sr\.claim_no AND sr\.claim_no <> ''\) t\s*ORDER BY t\.fv_visit_no, t\.fv_created LIMIT 1\s*\) fv ON TRUE/.test(routes));
 
+/**
+ * ── "ครั้งที่" บนหน้างานรอตรวจ (22/09/69) ──
+ * ⛔ ดึงใบหลังก่อนใบก่อน = ครั้งก่อนหน้ากลายเป็นเคสอ้างอิง (อนุมัติไม่ได้อีก) — หน้ารายการต้องบอกครั้งที่และเตือนก่อนกด
+ */
+{
+  const pullSvc = read('src', 'services', 'isurveyPull.service.ts');
+  const pullRoutes = read('src', 'routes', 'isurvey.routes.ts');
+  check('backend: มีเส้นทาง /rounds ที่ถาม service แล้วเทียบ DB ว่าครั้งก่อนหน้ายังไม่มีใบไหน',
+    /router\.post\('\/rounds', \.\.\.guard/.test(pullRoutes) && /async rounds\(userId: number/.test(pullSvc)
+    && pullSvc.includes("callService<{ rounds:") && pullSvc.includes('earlier_missing: earlierMissing'));
+  check('เว็บ: ถามครั้งที่ทีหลังเฉพาะแถวที่มองเห็น ไม่ถ่วงตอนโหลดรายการ',
+    pull.includes("api.post('/api/isurvey/rounds'") && pull.includes('roundsAsked'));
+  check('เว็บ: โชว์ "ครั้งที่ N จาก M" ใต้เลขเซอร์เวย์ + เตือนครั้งก่อนหน้าที่ยังไม่ได้ดึง',
+    pull.includes('ครั้งที่ {r.visit_no}') && pull.includes('ครั้งก่อนหน้ายังไม่ได้ดึง'));
+}
+
 console.log(failed === 0 ? '\n✅ ผ่านทั้งหมด\n' : `\n❌ ไม่ผ่าน ${failed} ข้อ\n`);
 process.exit(failed === 0 ? 0 : 1);
