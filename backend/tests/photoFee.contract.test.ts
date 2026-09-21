@@ -73,5 +73,18 @@ check('มีเลขเซอร์เวย์แล้ว ใช้เลข
         && ui.includes('photoFee.count > 0'));
 }
 
+// ── ครั้งที่ 2 ขึ้นไป ไม่มีค่ารูป (user เคาะ 22/09/69 หลังตรวจเคลม 2026013136010 4 ครั้ง: รูป 50 เฉพาะครั้งที่ 1) ──
+check('SEABI ต่างจังหวัด ครั้งที่ 2 → 0', total({ survey_job_no: 'SEABI-321260500066', visit_no: 2 }) === 0);
+check('ครั้งที่ 4 (ส่งเป็นข้อความ "4") → 0 พร้อมเหตุผลบอกครั้งที่', (() => {
+  const f = fee({ survey_job_no: 'SEABI-320260900417', visit_no: '4' });
+  return !!f && f.count === 0 && f.price === 0 && f.reason.includes('ครั้งที่ 4');
+})());
+check('ครั้งที่ 1 / ไม่ส่งครั้งที่มา → กติกาเดิม (ต่างจังหวัด 50)',
+      total({ survey_job_no: 'SEABI-120260500221', visit_no: 1 }) === 50 && total({ survey_job_no: 'SEABI-120260500221' }) === 50);
+check('ครั้งที่ 2 กรุงเทพ/ไทยไพบูลย์ ก็ 0 (ไม่ขัดกัน)', total({ survey_job_no: 'SEABI-110260900001', visit_no: 2 }) === 0 && total({ survey_job_no: 'SETP-69090001', visit_no: 3 }) === 0);
+check('case.service ส่ง visit_no ของใบนี้ให้ standardPhotoFee',
+      (require('fs') as typeof import('fs')).readFileSync((require('path') as typeof import('path')).join(__dirname, '..', 'src', 'services', 'case.service.ts'), 'utf8')
+        .includes("standardPhotoFee({ ...report, visit_no: Number(caseResult.rows[0]?.visit_no) || visitCount })"));
+
 console.log(`\n${failed === 0 ? '✅ ผ่านทั้งหมด' : `❌ ล้มเหลว ${failed} รายการ`}`);
 process.exit(failed === 0 ? 0 : 1);
