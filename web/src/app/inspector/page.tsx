@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import api from '@/lib/api';
 import { useSocket } from '@/hooks/useSocket';
-import CaseList, { type Case } from '@/components/cases/CaseList';
+import CaseList, { type Case, surveyorLabel } from '@/components/cases/CaseList';
 import { queueStats } from '@/components/cases/reviewQueue';
 
 type Tab = 'pending' | 'finished' | 'sentBack' | 'approved' | 'sent';
@@ -132,9 +132,8 @@ export default function InspectorDashboard() {
   const surveyors = useMemo(() => {
     const s = new Set<string>();
     for (const c of cases) {
-      if (c.surveyor_first_name) {
-        s.add(`${c.surveyor_code ? c.surveyor_code + ' ' : ''}${c.surveyor_first_name}`);
-      }
+      const label = surveyorLabel(c);   // ชื่อ+นามสกุล · งาน OSS = ชื่อ/บริษัทตามรายงาน (กรองได้เหมือนช่างในระบบ)
+      if (label) s.add(label);
     }
     return Array.from(s).sort((a, b) => a.localeCompare(b, 'th'));
   }, [cases]);
@@ -149,10 +148,7 @@ export default function InspectorDashboard() {
   const { shown, hits } = useMemo(() => {
     const ok = (c: Case) => {
       if (src && String(c.source ?? 'mobile') !== src) return false;
-      if (who) {
-        const name = `${c.surveyor_code ? c.surveyor_code + ' ' : ''}${c.surveyor_first_name ?? ''}`;
-        if (name !== who) return false;
-      }
+      if (who && surveyorLabel(c) !== who) return false;
       if (!needle) return true;
       return [c.claim_no, c.survey_job_no, c.claim_ref_no, c.license_plate, c.customer_name]
         .some((v) => String(v ?? '').toLowerCase().includes(needle));

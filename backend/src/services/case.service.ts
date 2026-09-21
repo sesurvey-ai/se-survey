@@ -1172,6 +1172,9 @@ export const caseService = {
     const result = await db.query(
       `SELECT c.*, u.first_name AS surveyor_first_name, u.last_name AS surveyor_last_name,
               u.code AS surveyor_code,
+              -- ชื่อช่าง/บริษัทตามรายงาน — งาน OSS (บริษัทนอก) จาก ISURVEY ไม่มีบัญชีในระบบเรา (assigned_to ว่าง)
+              -- เดิมหน้ารายการโชว์ "ยังไม่ได้มอบหมาย" ทั้งที่รู้ว่าใคร/บริษัทไหนออกสำรวจ (user แจ้ง 22/09/69)
+              sr.surveyor_name AS report_surveyor_name,
               sr.claim_no, sr.survey_job_no, sr.claim_ref_no, sr.license_plate,
               rv.status AS review_status, rv.unlocked_count,
               to_char(rv.reviewed_at, 'YYYY-MM-DD HH24:MI') AS approved_at,

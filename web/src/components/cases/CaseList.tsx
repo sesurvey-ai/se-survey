@@ -16,6 +16,8 @@ export interface Case {
   surveyor_first_name?: string;
   surveyor_last_name?: string;
   surveyor_code?: string | null;
+  /** ชื่อช่าง/บริษัทตามรายงาน — ใช้เมื่อไม่มีบัญชีในระบบ (งาน OSS จาก ISURVEY: "ชื่อคน - บริษัท" หรือชื่อบริษัท) */
+  report_surveyor_name?: string | null;
   /** Postgres คืน ROW_NUMBER/COUNT เป็นสตริง — ประกาศให้ตรงความจริง กัน `"2" > 1` แบบเผลอ */
   visit_count?: number | string;
   created_at: string;
@@ -50,6 +52,17 @@ export interface Case {
   emcs_job_screenshot?: string | null;
   emcs_job_position?: number | string | null;
   emcs_job_requested_at?: string | null;
+}
+
+/**
+ * ป้ายช่างสำรวจในรายการ — ชื่อ + นามสกุล (user แจ้ง 22/09/69 ว่าเดิมโชว์แต่ชื่อ) นำหน้าด้วยรหัส SE ถ้ามี
+ * ไม่มีบัญชีในระบบ (งาน OSS จาก ISURVEY) → ใช้ชื่อ/บริษัทตามรายงานแทน · ตัวกรอง "ช่าง" บนหน้ารายการต้องใช้ป้ายเดียวกันนี้ถึงจะจับคู่ได้
+ */
+export function surveyorLabel(c: Pick<Case, 'surveyor_first_name' | 'surveyor_last_name' | 'surveyor_code' | 'report_surveyor_name'>): string {
+  if (c.surveyor_first_name) {
+    return `${c.surveyor_code ? c.surveyor_code + ' ' : ''}${c.surveyor_first_name} ${c.surveyor_last_name || ''}`.trim();
+  }
+  return (c.report_surveyor_name || '').trim();
 }
 interface CaseListProps { cases: Case[]; basePath?: string; }
 
@@ -285,8 +298,14 @@ export default function CaseList({ cases, basePath = '/inspector' }: CaseListPro
               </td>
               <td className="px-5 py-4 text-sm text-gray-600">
                 {c.surveyor_first_name
-                  ? `${c.surveyor_code ? c.surveyor_code + ' ' : ''}${c.surveyor_first_name}`
-                  : <span className="text-amber-600 text-xs">ยังไม่ได้มอบหมาย</span>}
+                  ? surveyorLabel(c)
+                  : c.report_surveyor_name
+                    ? /* งาน OSS (บริษัทนอก) จากระบบเก่า — ไม่มีบัญชีในระบบเรา แต่รู้ว่าใคร/บริษัทไหนออกสำรวจ (22/09/69) */
+                      <span title="ช่าง/บริษัทนอกตามรายงานจากระบบเก่า ไม่ได้ผูกบัญชีในระบบเรา">
+                        {surveyorLabel(c)}
+                        <span className="ml-1 px-1.5 py-0.5 rounded text-[11px] bg-gray-100 text-gray-500 align-middle">OSS</span>
+                      </span>
+                    : <span className="text-amber-600 text-xs">ยังไม่ได้มอบหมาย</span>}
               </td>
               <td className="px-5 py-4 text-xs whitespace-nowrap">
                 {approved ? (
