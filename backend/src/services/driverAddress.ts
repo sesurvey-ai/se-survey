@@ -74,7 +74,8 @@ const adminNames = (subdistrict: unknown, district: unknown, province: unknown):
 /**
  * แยกบ้านเลขที่/ถนน ออกจาก "หาง" ตำบล/อำเภอ/จังหวัด ที่พิมพ์ปน → { head, typed: ข้อความที่พิมพ์ไว้ตามเดิมของแต่ละระดับ }
  * รู้จักหางจาก: ก้อนที่ขึ้นต้นด้วยคำนำหน้า (ต./ตำบล · อ./อำเภอ · จ./จังหวัด · แขวง/เขต เฉพาะกรุงเทพ — นอกกรุงเทพ "เขต…" เป็นชื่อสถานที่ได้)
- * และก้อนเปล่าที่เท่ากับช่องแยก (พิมพ์ "จันทบุรี" ไม่มี จ.) หรือชื่อกรุงเทพทุกแบบ · ก้อนอื่นที่แทรกอยู่ในหาง (ถ.สุขุมวิท) คืนกลับ head
+ * และก้อนเปล่าที่เท่ากับช่องแยก (พิมพ์ "จันทบุรี" ไม่มี จ.) หรือชื่อกรุงเทพทุกแบบ · ก้อนอื่นที่แทรกอยู่ "กลาง" หาง (ถ.สุขุมวิท) คืนกลับ head
+ * · ก้อนที่ไม่รู้จัก "ท้าย" หาง (หลังก้อนที่รู้จักตัวสุดท้าย เช่น "ศรีสะเกษ" ตอนไม่มีช่องจังหวัด) ติดไปกับระดับสุดท้ายที่พบ ("อ.อุทุมพรพิสัย ศรีสะเกษ")
  * "ต. ท่าช้าง" (เว้นวรรคหลังคำนำหน้า) = ก้อนถัดไปคือชื่อ · ไม่มีช่องแยกเลย = ไม่แยก (คืนข้อความเดิม) ที่อยู่เต็มแบบเก่าจึงไม่เพี้ยน
  * ⚠️ สูตรเดียวกับบอท claim_data.split_admin_tail — แก้ที่หนึ่งต้องแก้อีกที่
  */
@@ -95,19 +96,23 @@ export function splitAdminTail(address: unknown, subdistrict: unknown, district:
     return null;
   };
   const typed: Partial<Record<Level, string>> = {};
-  const extra: string[] = [];
+  const mid: string[] = [];
+  let pending: string[] = [];
   let start: number | null = null;
+  let lastLv: Level | null = null;
   for (let i = 0; i < toks.length; i++) {
     const { start: s0, tok } = toks[i];
     const lv = levelOf(tok);
-    if (!lv) { if (start !== null) extra.push(tok); continue; }
+    if (!lv) { if (start !== null) pending.push(tok); continue; }   // ยังไม่รู้ว่าอยู่กลางหางหรือท้ายหาง
     if (start === null) start = s0;
+    mid.push(...pending); pending = [];                               // มีก้อนที่รู้จักตามมา = ก้อนพวกนี้อยู่กลางหาง → คืน head
     let text = tok;
     if (lv[1] === '' && i + 1 < toks.length && !levelOf(toks[i + 1].tok)) { text = tok + toks[i + 1].tok; i++; }
-    if (typed[lv[0]] === undefined) typed[lv[0]] = text;
+    if (typed[lv[0]] === undefined) { typed[lv[0]] = text; lastLv = lv[0]; }
   }
   if (start === null) return { head: addr, typed: {} };
-  return { head: tidy(addr.slice(0, start) + ' ' + extra.join(' ')), typed };
+  if (pending.length && lastLv) { typed[lastLv] = `${typed[lastLv]} ${pending.join(' ')}`; pending = []; }   // ก้อนท้ายหาง → ติดกับระดับสุดท้ายที่พบ
+  return { head: tidy(addr.slice(0, start) + ' ' + [...mid, ...pending].join(' ')), typed };
 }
 
 /** บ้านเลขที่ที่ไม่มี ต./อ./จ. ของระดับที่มีช่องแยกแล้ว — ระดับที่ไม่มีช่องแยกคงข้อความที่พิมพ์ไว้ (ตามลำดับ ต. อ. จ.) · ใช้ตอนบันทึก (normalize) ให้ข้อมูลในระบบสะอาด */
