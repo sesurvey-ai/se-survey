@@ -3476,7 +3476,9 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
                   ⤢ ขยาย
                 </button>
               </div>
-              <textarea name="review_comment" disabled={previewing} defaultValue={repV?.review_comment || (previewing ? '' : review?.comment) || ''}
+              {/* เคสอ้างอิง (22/09/69): ความเห็นในใบอนุมัติเป็นข้อความที่ระบบเขียนเอง ("เคสอ้างอิงจาก ISURVEY … ไม่ส่งเข้า EMCS") ไม่เอามาโชว์แทนในช่องนี้
+                  — เดิมโชว์แล้วลบไม่ออก (บันทึกช่องว่างแล้วก็กลับมาโชว์อีก) และถ้ากดบันทึกทั้งฟอร์มจะถูกก๊อปลงช่องความเห็นของรายงาน (เจอ 3 ใบ) · ข้อมูลอยู่ที่แถบสีเทาด้านบนแล้ว */}
+              <textarea name="review_comment" disabled={previewing} defaultValue={repV?.review_comment || (previewing || isReference ? '' : review?.comment) || ''}
                 className="w-full border border-gray-300 rounded-none px-2 py-1 text-gray-800 bg-white text-sm min-h-[6.875rem]" rows={4} />
             </div>
             <div>
