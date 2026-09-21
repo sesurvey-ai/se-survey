@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { getDispatchLog } from '../services/dispatchLog.service';
 import { provinceOf } from '../services/geoProvince';
 import { nearestDistrict } from '../services/geoDistrict';
 import { caseService } from '../services/case.service';
@@ -48,8 +49,13 @@ export const caseController = {
   assign: asyncHandler(async (req: Request, res: Response) => {
     const caseId = parseInt(req.params.id as string);
     const { surveyor_id, claim_type } = req.body;
-    const result = await caseService.assign(caseId, surveyor_id, claim_type);
+    const result = await caseService.assign(caseId, surveyor_id, claim_type, req.user!.id);
     sendSuccess(res, result);
+  }),
+
+  /** ประวัติการจ่ายงาน (มอบหมาย/ดึงกลับ/ปฏิเสธ) ใหม่ → เก่า — หน้าจ่ายงานคอลเซ็นเตอร์ (migration 065) */
+  dispatchLog: asyncHandler(async (req: Request, res: Response) => {
+    sendSuccess(res, await getDispatchLog(parseInt(req.params.id as string)));
   }),
 
   /** คอลเซ็นเตอร์ "ดึงงานกลับ" — งานกลับไปรอมอบหมาย + ถอนการ์ดบนเครื่องช่าง ดู caseService.recall */

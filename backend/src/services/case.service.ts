@@ -3,6 +3,7 @@ import { normalizeDriverAddressFields, normalizeOpponentsAddress, normalizeCardA
 import { env } from '../config/env';
 import { AppError, NotFoundError, ForbiddenError } from '../middleware/errorHandler';
 import { pushNewSurvey, pushSurveyWithdrawn } from './surveyPush.service';
+import { logDispatch, LAST_RECALL_SELECT, LAST_RECALL_JOIN } from './dispatchLog.service';
 import { generateSurveyXml, emcsNameWarnings, sanitizeReportDates } from './xmlExport.service';
 import { invalidateCaseOwner } from '../middleware/uploadsAuth';
 import { storage, normalizeKey, contentTypeOf } from '../config/storage';
@@ -423,7 +424,8 @@ export const caseService = {
     return { ...created, from_case_id: caseId, claim_no: claimNo };
   },
 
-  async assign(caseId: number, surveyorId: number, claimType?: string) {
+  /** @param byUserId คนกดมอบหมาย (คอลเซ็นเตอร์) — ลงประวัติการจ่ายงาน (migration 065) */
+  async assign(caseId: number, surveyorId: number, claimType?: string, byUserId?: number) {
     // ดึง claim_no + insurance_company จาก survey_reports มาด้วย (โชว์บนการ์ดงานมือถือ)
     const caseResult = await db.query(
       `SELECT c.*, sr.claim_no AS sr_claim_no, sr.insurance_company AS sr_insurance_company
@@ -452,6 +454,8 @@ export const caseService = {
     }
     // ย้ายเจ้าของเคสแล้ว — ล้าง cache สิทธิ์ดูรูป ไม่งั้นคนเดิมยังเปิดรูปเคสนี้ได้อีกพักหนึ่ง
     invalidateCaseOwner(caseId);
+    // ประวัติการจ่ายงาน (22/09/69) — ไม่ throw ถ้าเขียนไม่ได้
+    await logDispatch(caseId, 'assigned', { surveyorId, byUserId: byUserId ?? null });
 
     // "แจ้งเซอร์เวย์" (ไทม์ไลน์งานบนมือถือ) = เวลาที่ callcenter กดมอบหมายงาน → บันทึกลง acc_insurance_notify_date
     // ต้องเป็นเวลาไทย (Asia/Bangkok) ไม่ใช่เวลา server (prod = UTC); รูปแบบ D/M/พ.ศ.|HH:MM ตรงกับที่มือถืออ่าน (splitDT)
@@ -557,6 +561,8 @@ export const caseService = {
     );
     // ปฏิเสธงาน = เลิกเป็นเจ้าของ → ล้าง cache สิทธิ์ดูรูป (ไม่งั้นยังเปิดรูปเคสนี้ได้อีกพักหนึ่ง)
     invalidateCaseOwner(caseId);
+    // ประวัติการจ่ายงาน (22/09/69) — declined_* บน cases เก็บได้แค่ครั้งล่าสุด ตารางนี้เก็บทุกครั้ง
+    await logDispatch(caseId, 'declined', { surveyorId, byUserId: surveyorId, reason: cleanReason });
     return result.rows[0];
   },
 
@@ -587,6 +593,8 @@ export const caseService = {
     if (upd.rowCount === 0) throw new AppError(409, 'สถานะงานเพิ่งเปลี่ยน — โหลดใหม่แล้วลองอีกครั้ง');
     // เลิกเป็นเจ้าของ → ล้าง cache สิทธิ์ดูรูป (เหมือน declineCase)
     invalidateCaseOwner(caseId);
+    // ประวัติ: ใครดึงงานกลับ จากใคร เมื่อไร (user สั่ง 22/09/69)
+    await logDispatch(caseId, 'recalled', { surveyorId: Number(assigned_to), byUserId });
     const withdrawn = await pushSurveyWithdrawn(caseId, Number(assigned_to), 'unassigned');
     notifyCaseChanged(caseId, 'recalled', byUserId);
     return { ...upd.rows[0], recalled_from: assigned_to, withdrawn };
@@ -2105,10 +2113,10 @@ export const caseService = {
       `SELECT c.*, u.first_name AS surveyor_first_name, u.last_name AS surveyor_last_name,
               d.first_name AS declined_first_name, d.last_name AS declined_last_name, d.code AS declined_code,
               sr.claim_no, sr.survey_job_no, sr.claim_ref_no,
-              COALESCE(c.visit_no, ROW_NUMBER() OVER (PARTITION BY sr.claim_no ORDER BY c.created_at))::int AS visit_count
+              COALESCE(c.visit_no, ROW_NUMBER() OVER (PARTITION BY sr.claim_no ORDER BY c.created_at))::int AS visit_count,${LAST_RECALL_SELECT}
        FROM cases c LEFT JOIN users u ON c.assigned_to = u.id
        LEFT JOIN users d ON c.declined_by = d.id
-       LEFT JOIN survey_reports sr ON sr.case_id = c.id
+       LEFT JOIN survey_reports sr ON sr.case_id = c.id${LAST_RECALL_JOIN}
        ORDER BY c.created_at DESC LIMIT 10`
     );
     return { counts: result.rows[0], recent: recentResult.rows };
@@ -2141,11 +2149,11 @@ export const caseService = {
         `SELECT c.*, u.first_name AS surveyor_first_name, u.last_name AS surveyor_last_name,
                 d.first_name AS declined_first_name, d.last_name AS declined_last_name, d.code AS declined_code,
                 sr.claim_no, sr.survey_job_no, sr.claim_ref_no,
-                COALESCE(c.visit_no, ROW_NUMBER() OVER (PARTITION BY sr.claim_no ORDER BY c.created_at))::int AS visit_count
+                COALESCE(c.visit_no, ROW_NUMBER() OVER (PARTITION BY sr.claim_no ORDER BY c.created_at))::int AS visit_count,${LAST_RECALL_SELECT}
          FROM cases c
          LEFT JOIN users u ON c.assigned_to = u.id
          LEFT JOIN users d ON c.declined_by = d.id
-         LEFT JOIN survey_reports sr ON sr.case_id = c.id
+         LEFT JOIN survey_reports sr ON sr.case_id = c.id${LAST_RECALL_JOIN}
          ${where}
          ORDER BY c.created_at DESC
          LIMIT $${idx} OFFSET $${idx + 1}`,

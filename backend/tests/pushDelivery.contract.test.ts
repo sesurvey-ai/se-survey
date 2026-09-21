@@ -40,6 +40,9 @@ const authDart = read('..', 'mobile', 'lib', 'providers', 'auth_provider.dart');
 const recallBtn = read('..', 'web', 'src', 'components', 'cases', 'RecallJobButton.tsx');
 const ccDash = read('..', 'web', 'src', 'app', 'callcenter', 'page.tsx');
 const ccList = read('..', 'web', 'src', 'app', 'callcenter', 'cases', 'page.tsx');
+const ccAssign = read('..', 'web', 'src', 'app', 'callcenter', 'cases', '[id]', 'assign', 'page.tsx');
+const dispatchSvc = read('src', 'services', 'dispatchLog.service.ts');
+const migration065 = read('src', 'db', 'migrations', '065_case_dispatch_log.sql');
 const manifest = read('..', 'mobile', 'android', 'app', 'src', 'main', 'AndroidManifest.xml');
 const notifDart = read('..', 'mobile', 'lib', 'services', 'notification_service.dart');
 const homeDart = read('..', 'mobile', 'lib', 'screens', 'home_screen.dart');
@@ -215,6 +218,36 @@ check('ดึงกลับแล้วถอนการ์ดบนเคร�
 check('ปุ่ม "ดึงงานกลับ" บนหน้าคอลเซ็นเตอร์ทั้ง 2 หน้า ยืนยันก่อนเสมอ และบอกผลการถอนการ์ด',
       recallBtn.includes('window.confirm(') && recallBtn.includes('/recall`') && recallBtn.includes('โทรแจ้งช่างด้วย')
       && ccDash.includes('<RecallJobButton') && ccList.includes('<RecallJobButton'));
+/**
+ * ── ประวัติการจ่ายงาน (22/09/69) ──
+ * ⛔ cases เก็บได้แค่การปฏิเสธครั้งล่าสุด ส่วน "ดึงงานกลับ" ไม่มีที่เก็บเลย → ตาราง case_dispatch_log 1 แถว/เหตุการณ์
+ */
+console.log('\n── ประวัติการจ่ายงาน: ใครมอบหมาย/ดึงกลับ/ปฏิเสธ เมื่อไร ──');
+check('migration 065 สร้างตารางผูกกับ cases_all (VIEW ผูก FK ไม่ได้) ลบถาวรแล้วหายตาม',
+      migration065.includes('CREATE TABLE IF NOT EXISTS case_dispatch_log')
+      && migration065.includes('REFERENCES cases_all(id) ON DELETE CASCADE')
+      && /CHECK \(action IN \('assigned', 'recalled', 'declined'\)\)/.test(migration065));
+check('บันทึกประวัติไม่ทำให้งานหลักล้ม (จับ error ใน logDispatch)',
+      /export async function logDispatch\(/.test(dispatchSvc) && /catch \(err\) \{\s*console\.error\(`\[dispatch-log\]/.test(dispatchSvc));
+check('ลงประวัติครบ 3 ทางของคอลเซ็นเตอร์/ช่าง: มอบหมาย · ดึงกลับ · ปฏิเสธ',
+      /logDispatch\(caseId, 'assigned', \{ surveyorId, byUserId/.test(caseSvc)
+      && /logDispatch\(caseId, 'recalled', \{ surveyorId: Number\(assigned_to\), byUserId \}\)/.test(caseSvc)
+      && /logDispatch\(caseId, 'declined', \{ surveyorId, byUserId: surveyorId, reason: cleanReason \}\)/.test(caseSvc));
+check('แอดมินย้าย/ถอนผู้สำรวจก็ลงประวัติ (ดึงกลับจากคนเดิม + มอบหมายคนใหม่)',
+      /logDispatch\(id, 'recalled', \{ surveyorId: prevSurveyor, byUserId: by \?\? null \}\)/.test(adminSvc)
+      && /logDispatch\(id, 'assigned', \{ surveyorId: nextSurveyor, byUserId: by \?\? null \}\)/.test(adminSvc));
+check('คนกดมอบหมาย/แก้เคส ถูกส่งจาก controller ลงประวัติ',
+      read('src', 'controllers', 'case.controller.ts').includes('caseService.assign(caseId, surveyor_id, claim_type, req.user!.id)')
+      && read('src', 'controllers', 'admin.controller.ts').includes('adminService.updateCase(Number(req.params.id), req.body, req.user?.id ?? null)'));
+check('มีเส้นทางอ่านประวัติ (GET /:id/dispatch-log)',
+      /router\.get\('\/:id\/dispatch-log', auth, requireRole\('callcenter', 'admin', 'checker'\), caseController\.dispatchLog\)/.test(caseRoutes));
+check('หน้ารายการคอลเซ็นเตอร์ทั้ง 2 หน้าเห็น "ดึงกลับจากใคร โดยใคร" (คิวรี recent + list ใช้ชิ้น SQL เดียวกัน)',
+      (caseSvc.match(/\$\{LAST_RECALL_SELECT\}/g) || []).length === 2 && (caseSvc.match(/\$\{LAST_RECALL_JOIN\}/g) || []).length === 2
+      && ccDash.includes('c.recalled_first_name ?') && ccList.includes('c.recalled_first_name ?'));
+check('หน้าจ่ายงานโชว์ประวัติทั้งสาย และบอกว่าเคสก่อน 22/09/69 ไม่มีย้อนหลัง',
+      ccAssign.includes('<DispatchHistory caseId={caseId}')
+      && read('..', 'web', 'src', 'components', 'cases', 'DispatchHistory.tsx').includes('เริ่มเก็บ 22/09/69'));
+
 check('Flutter รีเฟรชรายการงานเมื่อถูกถอน',
       fcmDart.includes("data['type'] == 'cancel_survey'") && authDart.includes('_fcmService.onSurveyWithdrawn = '));
 

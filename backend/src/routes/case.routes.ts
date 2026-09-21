@@ -285,6 +285,8 @@ router.post('/:id/finish', auth, requireRole('surveyor'), caseController.finishC
 router.post('/:id/push-ack', auth, requireRole('surveyor'), caseController.ackPush);
 // หน้าจ่ายงาน poll ถามว่าถึงเครื่องหรือยัง — callcenter/admin เท่านั้น
 router.get('/:id/push-status', auth, requireRole('callcenter', 'admin'), caseController.getPushStatus);
+// ประวัติการจ่ายงาน (22/09/69): มอบหมาย/ดึงกลับ/ปฏิเสธ ใครทำ เมื่อไร — หน้าจ่ายงานคอลเซ็นเตอร์
+router.get('/:id/dispatch-log', auth, requireRole('callcenter', 'admin', 'checker'), caseController.dispatchLog);
 router.get('/:id/arrival', auth, requireRole('surveyor', 'checker'), caseController.getArrivalPhotos);
 router.post('/:id/survey', auth, requireRole('surveyor'), validate(submitSurveySchema), caseController.submitSurvey);
 router.put('/:id/survey', auth, requireRole('surveyor'), caseController.updateSurvey);

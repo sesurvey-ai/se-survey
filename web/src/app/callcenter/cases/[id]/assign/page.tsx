@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import AssignSurveyor from '@/components/cases/AssignSurveyor';
+import DispatchHistory from '@/components/cases/DispatchHistory';
 
 export default function AssignPage() {
   const params = useParams();
@@ -27,6 +28,8 @@ export default function AssignPage() {
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,32rem)_minmax(0,1fr)] gap-8 items-start">
         <div className="min-w-0">
           <AssignSurveyor caseId={caseId} listContainer={listEl} />
+          {/* ประวัติการจ่ายงาน (22/09/69) — จ่ายให้ใคร/ดึงกลับจากใคร/ใครปฏิเสธ ทั้งสาย ก่อนจ่ายซ้ำ */}
+          <DispatchHistory caseId={caseId} className="mt-6" />
         </div>
         <div ref={setListEl} className="min-w-0 xl:sticky xl:top-4" />
       </div>

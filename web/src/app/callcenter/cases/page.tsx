@@ -19,6 +19,13 @@ interface CaseRow {
   claim_ref_no?: string;
   visit_count?: number;
   assigned_at?: string | null;
+  /** ดึงงานกลับล่าสุด (ยังไม่จ่ายใหม่) — ดึงจากใคร โดยใคร เมื่อไร (case_dispatch_log migration 065) */
+  recalled_first_name?: string | null;
+  recalled_last_name?: string | null;
+  recalled_code?: string | null;
+  recalled_by_first_name?: string | null;
+  recalled_by_last_name?: string | null;
+  recalled_at?: string | null;
 }
 
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
@@ -241,7 +248,17 @@ export default function CallcenterCasesPage() {
                       <td className="px-5 py-3 text-gray-600">{c.claim_ref_no || '-'}</td>
                       <td className="px-5 py-3 text-gray-600 max-w-[180px] truncate">{c.customer_name || '-'}</td>
                       <td className="px-5 py-3 text-gray-600">
-                        {c.surveyor_first_name ? `${c.surveyor_first_name} ${c.surveyor_last_name || ''}` : '-'}
+                        {c.surveyor_first_name ? `${c.surveyor_first_name} ${c.surveyor_last_name || ''}` : c.recalled_first_name ? (
+                          /* ดึงงานกลับแล้ว (22/09/69) — ต้องเห็นว่าดึงจากใคร โดยใคร เมื่อไร ก่อนจ่ายซ้ำ */
+                          <span className="text-amber-700">
+                            {c.recalled_code ? `${c.recalled_code} ` : ''}
+                            {c.recalled_first_name} {c.recalled_last_name || ''}
+                            <span className="block text-xs text-gray-500">
+                              ดึงงานกลับโดย {`${c.recalled_by_first_name || ''} ${c.recalled_by_last_name || ''}`.trim() || '-'}
+                              {c.recalled_at ? ` · ${formatDate(c.recalled_at)}` : ''}
+                            </span>
+                          </span>
+                        ) : '-'}
                       </td>
                       <td className="px-5 py-3 text-gray-500">{c.visit_count || 1}</td>
                       <td className="px-5 py-3 text-gray-500 whitespace-nowrap">

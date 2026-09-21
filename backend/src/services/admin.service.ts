@@ -5,6 +5,7 @@ import { staffGroupService } from './staffGroup.service';
 import { removeCapture, sendCapture } from './sebilling.service';
 import { notifyCaseChanged } from './caseEvents';
 import { pushNewSurveyById, pushSurveyWithdrawn } from './surveyPush.service';
+import { logDispatch } from './dispatchLog.service';
 import { invalidateCaseOwner } from '../middleware/uploadsAuth';
 import { NotFoundError, AppError } from '../middleware/errorHandler';
 import { assertStrongPassword } from './password';
@@ -278,7 +279,8 @@ export const adminService = {
     };
   },
 
-  async updateCase(id: number, data: { customer_name?: string; incident_location?: string; status?: string; assigned_to?: number | null }) {
+  /** @param by แอดมินที่แก้ — ลงประวัติการจ่ายงานเมื่อย้าย/ถอนผู้สำรวจ (migration 065) */
+  async updateCase(id: number, data: { customer_name?: string; incident_location?: string; status?: string; assigned_to?: number | null }, by?: number | null) {
     const fields: string[] = [];
     const params: unknown[] = [];
     let idx = 1;
@@ -315,11 +317,13 @@ export const adminService = {
     if (prevSurveyor && before.status === 'assigned'
         && (surveyorChanged || ['pending', 'declined'].includes(String(after.status)))) {
       withdrawn = await pushSurveyWithdrawn(id, prevSurveyor, nextSurveyor && surveyorChanged ? 'reassigned' : 'unassigned');
+      await logDispatch(id, 'recalled', { surveyorId: prevSurveyor, byUserId: by ?? null });
     }
     // ช่างคนใหม่ได้การ์ดงานเหมือนจ่ายจากคอลเซ็นเตอร์ — ย้ายงานแล้วคนใหม่ต้องรู้ ไม่ใช่นอนเงียบในรายการ
     let push: Awaited<ReturnType<typeof pushNewSurveyById>> | undefined;
     if (nextSurveyor && surveyorChanged && after.status === 'assigned') {
       push = await pushNewSurveyById(id, nextSurveyor);
+      await logDispatch(id, 'assigned', { surveyorId: nextSurveyor, byUserId: by ?? null });
     }
     return { ...after, push, withdrawn };
   },

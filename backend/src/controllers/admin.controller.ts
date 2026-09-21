@@ -62,7 +62,7 @@ export const adminController = {
   }),
 
   updateCase: asyncHandler(async (req: Request, res: Response) => {
-    const caseData = await adminService.updateCase(Number(req.params.id), req.body);
+    const caseData = await adminService.updateCase(Number(req.params.id), req.body, req.user?.id ?? null);
     sendSuccess(res, caseData);
   }),
 

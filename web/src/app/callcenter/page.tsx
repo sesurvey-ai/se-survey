@@ -21,6 +21,13 @@ interface CaseRow {
   declined_last_name?: string;
   declined_code?: string;
   declined_reason?: string;
+  /** ดึงงานกลับล่าสุด (ยังไม่จ่ายใหม่) — ดึงจากใคร โดยใคร เมื่อไร (case_dispatch_log migration 065) */
+  recalled_first_name?: string | null;
+  recalled_last_name?: string | null;
+  recalled_code?: string | null;
+  recalled_by_first_name?: string | null;
+  recalled_by_last_name?: string | null;
+  recalled_at?: string | null;
   claim_no?: string;
   survey_job_no?: string;
   claim_ref_no?: string;
@@ -173,6 +180,16 @@ export default function CallcenterDashboard() {
                               {c.declined_first_name} {c.declined_last_name || ''}
                               <span className="block text-xs text-gray-500">
                                 ไม่รับงาน{c.declined_reason ? ` — ${c.declined_reason}` : ''}
+                              </span>
+                            </span>
+                          ) : c.recalled_first_name ? (
+                            /* ดึงงานกลับแล้ว (22/09/69) — ต้องเห็นว่าดึงจากใคร โดยใคร เมื่อไร ก่อนจ่ายซ้ำ (ประวัติทั้งสายอยู่หน้าจ่ายงาน) */
+                            <span className="text-amber-700">
+                              {c.recalled_code ? `${c.recalled_code} ` : ''}
+                              {c.recalled_first_name} {c.recalled_last_name || ''}
+                              <span className="block text-xs text-gray-500">
+                                ดึงงานกลับโดย {`${c.recalled_by_first_name || ''} ${c.recalled_by_last_name || ''}`.trim() || '-'}
+                                {c.recalled_at ? ` · ${formatDate(c.recalled_at)}` : ''}
                               </span>
                             </span>
                           ) : '-'}
