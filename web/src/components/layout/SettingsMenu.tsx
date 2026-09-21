@@ -3,12 +3,13 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { FontScaleRow } from './AppearanceControls';
+import ChangePasswordDialog from './ChangePasswordDialog';
 
 /**
  * ── เมนู "ตั้งค่า" ท้ายแถบข้าง ── (user สั่ง 22/09/69)
  *
  * ปุ่มรูปเฟืองแทนแถบ "ขนาดตัวอักษร ก− 100% ก+" เดิม — กดแล้วเปิดแผงรวมของที่ไม่ใช่งานประจำวัน:
- *   ขนาดตัวอักษร (ทุกบทบาท) · บัญชี ISURVEY · ลูกทีมของฉัน (เฉพาะหัวหน้าผู้ตรวจ — เดิมเป็น 2 รายการในเมนูหลัก)
+ *   ขนาดตัวอักษร · เปลี่ยนรหัสผ่าน (ทุกบทบาท — เดิมเป็นปุ่มบนแถบหัว ย้ายมา 22/09/69) · บัญชี ISURVEY · ลูกทีมของฉัน (เฉพาะหัวหน้าผู้ตรวจ — เดิมเป็น 2 รายการในเมนูหลัก)
  * เมนูหลักเหลือแต่หน้างาน ของตั้งค่ามารวมที่เดียว
  *
  * ⛔ แถบข้างเป็น overflow-hidden (กันเมนูล้นตอนยุบ) — แผงตอนแถบ "ยุบ" (กว้าง 3.5rem) จึงต้องเป็น fixed
@@ -30,6 +31,8 @@ interface Props {
 
 export default function SettingsMenu({ collapsed, role, pathname }: Props) {
   const [open, setOpen] = useState(false);
+  /** กล่องเปลี่ยนรหัสผ่าน — เปิดจากรายการในแผง (ปิดแผงก่อน ไม่งั้นซ้อนกัน) */
+  const [pwOpen, setPwOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const links = SETTINGS_LINKS[role] || [];
   /** อยู่ในหน้าที่มาจากเมนูตั้งค่า → ไฮไลต์ปุ่มเฟืองแทนรายการเมนูหลัก (ที่ไม่มีรายการนี้แล้ว) */
@@ -73,6 +76,14 @@ export default function SettingsMenu({ collapsed, role, pathname }: Props) {
         >
           <div className="text-[0.6875rem] uppercase tracking-wide text-gray-400 mb-2">ตั้งค่า</div>
           <FontScaleRow />
+          <button
+            type="button"
+            onClick={() => { setOpen(false); setPwOpen(true); }}
+            className="w-full text-left px-3 py-2 rounded-lg text-gray-200 hover:bg-gray-700 transition-colors"
+          >
+            เปลี่ยนรหัสผ่าน
+            <span className="block text-[0.6875rem] text-gray-400 font-normal">รหัสผ่านเข้าเว็บของคุณ</span>
+          </button>
           {links.length > 0 && (
             <div className="mt-2 pt-2 border-t border-white/10 space-y-0.5">
               {links.map((l) => (
@@ -105,6 +116,7 @@ export default function SettingsMenu({ collapsed, role, pathname }: Props) {
         {gear}
         {!collapsed && <span>ตั้งค่า</span>}
       </button>
+      {pwOpen && <ChangePasswordDialog onClose={() => setPwOpen(false)} />}
     </div>
   );
 }

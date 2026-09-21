@@ -1,9 +1,7 @@
 'use client';
 
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
-import ChangePasswordDialog from './ChangePasswordDialog';
 
 const ROLE_LABELS: Record<string, string> = {
   admin: 'ผู้ดูแลระบบ',
@@ -14,7 +12,6 @@ const ROLE_LABELS: Record<string, string> = {
 export default function Header() {
   const { user, logout } = useAuth();
   const router = useRouter();
-  const [pwOpen, setPwOpen] = useState(false);
 
   const handleLogout = () => {
     logout();
@@ -23,6 +20,7 @@ export default function Header() {
 
   // ไม่มีหัวข้อฝั่งซ้ายแล้ว (user เคาะ 18/08/69) — "แผงควบคุม" ไม่ได้บอกอะไร
   // ทุกหน้ามีหัวข้อของตัวเองอยู่แล้ว · เหลือแค่ชื่อผู้ใช้กับปุ่มออกจากระบบชิดขวา
+  // "เปลี่ยนรหัสผ่าน" ย้ายไปเมนูตั้งค่า (เฟืองท้ายแถบข้าง) แล้ว — user สั่ง 22/09/69 ดู SettingsMenu.tsx
   return (
     <header className="bg-white border-b-2 border-[var(--md-ink)] px-6 py-2.5 flex items-center justify-end">
       <div className="flex items-center gap-4">
@@ -35,19 +33,12 @@ export default function Header() {
           </span>
         </div>
         <button
-          onClick={() => setPwOpen(true)}
-          className="px-3 py-1.5 text-sm font-bold border border-[var(--md-ink)] text-[var(--md-ink)] hover:bg-[var(--md-tint)] transition-colors"
-        >
-          เปลี่ยนรหัสผ่าน
-        </button>
-        <button
           onClick={handleLogout}
           className="px-3 py-1.5 text-sm font-bold border border-[var(--md-accent)] bg-[var(--md-accent)] text-white hover:brightness-110 transition-colors"
         >
           ออกจากระบบ
         </button>
       </div>
-      {pwOpen && <ChangePasswordDialog onClose={() => setPwOpen(false)} />}
     </header>
   );
 }
