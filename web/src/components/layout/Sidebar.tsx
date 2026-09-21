@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
-import AppearanceControls from './AppearanceControls';
+import SettingsMenu from './SettingsMenu';
 
 const NAV_ITEMS: Record<string, { label: string; href: string }[]> = {
   admin: [
@@ -37,8 +37,7 @@ const NAV_ITEMS: Record<string, { label: string; href: string }[]> = {
     // ⛔ ซ่อนเมนูไว้ก่อน (user สั่ง 15/09/69) — หน้า /inspector/cases/import-xml ยังเปิดตรง ๆ ได้ ทางดึงสดจาก ISURVEY ใช้แทน
     // { label: 'นำเข้าจากไฟล์ XML', href: '/inspector/cases/import-xml' },
     { label: 'งานรอตรวจ (ISURVEY)', href: '/inspector/isurvey' },
-    { label: 'บัญชี ISURVEY', href: '/inspector/isurvey/account' },
-    { label: 'ลูกทีมของฉัน', href: '/inspector/team' },
+    // "บัญชี ISURVEY" + "ลูกทีมของฉัน" ย้ายไปเมนู "ตั้งค่า" (รูปเฟืองท้ายแถบ) — user สั่ง 22/09/69 ดู SettingsMenu.tsx
   ],
 };
 
@@ -98,9 +97,9 @@ export default function Sidebar() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          {/* ตัวคั่นยืดหยุ่น = ดันปุ่มขนาดตัวอักษรลงล่างสุดของแถบ */}
+          {/* ตัวคั่นยืดหยุ่น = ดันปุ่มตั้งค่า (เฟือง) ลงล่างสุดของแถบ */}
           <div className="flex-1" />
-          <AppearanceControls compact />
+          <SettingsMenu collapsed role={role} pathname={pathname ?? ''} />
           </>
         ) : (
           <>
@@ -140,7 +139,8 @@ export default function Sidebar() {
             </Link>
           ))}
         </nav>
-        <AppearanceControls />
+        {/* ตั้งค่า (เฟือง): ขนาดตัวอักษร + บัญชี ISURVEY + ลูกทีมของฉัน — แทนแถบขนาดตัวอักษรเดิม (22/09/69) */}
+        <SettingsMenu collapsed={false} role={role} pathname={pathname ?? ''} />
           </>
         )}
       </aside>

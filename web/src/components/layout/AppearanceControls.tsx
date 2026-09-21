@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 
 /**
- * ── ตั้งค่าการแสดงผล: ขนาดตัวอักษร ── (user ขอ 02/09/69)
+ * ── ตั้งค่าการแสดงผล: ขนาดตัวอักษร ── (user ขอ 02/09/69 · ย้ายเข้าเมนู "ตั้งค่า" รูปเฟือง 22/09/69 ดู SettingsMenu.tsx)
  *
  * ฟอนต์: user ตัดสินใจใช้ **Sarabun ตัวเดียว** (15/09/69) — ถอดตัวเลือกฟอนต์ออกแล้ว
  * (เดิมสลับได้ 3 แบบ เก็บใน localStorage 'ui_font') ทั้งเว็บอ่าน --font-thai = Sarabun จาก globals.css
@@ -24,7 +24,8 @@ export const applyScale = (pct: number) => {
   document.documentElement.style.fontSize = pct === 100 ? '' : `${(16 * pct) / 100}px`;
 };
 
-export default function AppearanceControls({ compact = false }: { compact?: boolean }) {
+/** แถว "ขนาดตัวอักษร ก− 100% ก+" — วางในแผงตั้งค่า (พื้นเข้ม) */
+export function FontScaleRow() {
   const [scale, setScale] = useState(100);
 
   useEffect(() => {
@@ -44,32 +45,18 @@ export default function AppearanceControls({ compact = false }: { compact?: bool
     try { localStorage.setItem('ui_scale', String(next)); } catch { /* เหมือนข้างบน */ }
   };
 
-  const BTN = 'w-7 h-7 flex items-center justify-center border border-white/25 text-gray-200'
+  const BTN = 'w-7 h-7 flex items-center justify-center border border-white/25 text-gray-200 rounded'
     + ' hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed';
 
-  // แถบยุบแล้วกว้าง 3.5rem — ใส่ได้แค่ปุ่มย่อ/ขยาย
-  if (compact) {
-    return (
-      <div className="flex flex-col items-center gap-1 pb-3" title={`ขนาดตัวอักษร ${scale}%`}>
-        <button type="button" onClick={() => step(1)} disabled={scale === SCALES[SCALES.length - 1]}
-          className={BTN} aria-label="ตัวอักษรใหญ่ขึ้น">ก+</button>
-        <button type="button" onClick={() => step(-1)} disabled={scale === SCALES[0]}
-          className={BTN} aria-label="ตัวอักษรเล็กลง">ก−</button>
-      </div>
-    );
-  }
-
   return (
-    <div className="border-t border-white/15 p-4">
-      <div className="flex items-center gap-2">
-        <span className="text-[0.6875rem] text-gray-400">ขนาดตัวอักษร</span>
-        <div className="ml-auto flex items-center gap-1">
-          <button type="button" onClick={() => step(-1)} disabled={scale === SCALES[0]}
-            className={BTN} aria-label="เล็กลง">ก−</button>
-          <span className="w-10 text-center text-xs text-gray-200 tabular-nums">{scale}%</span>
-          <button type="button" onClick={() => step(1)} disabled={scale === SCALES[SCALES.length - 1]}
-            className={BTN} aria-label="ใหญ่ขึ้น">ก+</button>
-        </div>
+    <div className="flex items-center gap-2 px-3 py-2">
+      <span className="text-gray-200">ขนาดตัวอักษร</span>
+      <div className="ml-auto flex items-center gap-1">
+        <button type="button" onClick={() => step(-1)} disabled={scale === SCALES[0]}
+          className={BTN} aria-label="เล็กลง">ก−</button>
+        <span className="w-10 text-center text-xs text-gray-200 tabular-nums">{scale}%</span>
+        <button type="button" onClick={() => step(1)} disabled={scale === SCALES[SCALES.length - 1]}
+          className={BTN} aria-label="ใหญ่ขึ้น">ก+</button>
       </div>
     </div>
   );
