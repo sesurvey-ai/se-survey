@@ -825,7 +825,9 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
    * `approved` ยังใช้ซ่อนปุ่มอนุมัติ/ตีกลับและป้ายสถานะ · `locked` ใช้กับช่องกรอก/รูป/รายการความเสียหาย
    */
   const isReference = String(caseData?.source ?? '') === 'isurvey_reference';
-  const locked = approved && !isReference;
+  /** ยกเลิกงาน (user สั่ง 22/09/69): อ่านอย่างเดียวเหมือนอนุมัติแล้ว จนกว่าแอดมินจะ "เลิกยกเลิก" */
+  const cancelled = caseData?.status === 'cancelled';
+  const locked = (approved && !isReference) || cancelled;
   /**
    * ครั้งที่ 2+ (user เคาะ 15/09/69 แบบ EMCS): ข้อมูลหลักของเคลม (รถ กรมธรรม์ ผู้ขับขี่ เหตุ ตำรวจ ความเสียหาย คู่กรณี
    * ผู้บาดเจ็บ ทรัพย์สิน) แสดงของครั้งที่ 1 สด **อ่านอย่างเดียว** ที่นี่ — แก้ที่ครั้งที่ 1 (ปุ่มในแถบด้านบน)
@@ -1137,6 +1139,40 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
   })();
   const [sbOpen, setSbOpen] = useState(false);
   const [sbReason, setSbReason] = useState('');
+  /**
+   * ── ยกเลิกงาน ── (user สั่ง 22/09/69) เช่น ลูกค้าไม่ติดใจ เลยไม่เคลม · ISURVEY ยกเลิกเคลม · แจ้งซ้ำ
+   * ยกเลิกได้ทุกสถานะที่ยังไม่อนุมัติ (รวมงานที่อยู่กับช่าง — การ์ดบนเครื่องช่างถูกถอนให้) · ต้องมีเหตุผล + ยืนยัน
+   * ยกเลิกแล้วอ่านอย่างเดียว ไม่เข้าคิวตรวจ/EMCS/se-billing · แอดมิน "เลิกยกเลิก" คืนสถานะเดิมได้
+   */
+  const [ccOpen, setCcOpen] = useState(false);
+  const [ccReason, setCcReason] = useState('');
+  const doCancel = async () => {
+    const reason = ccReason.trim();
+    if (!reason) { setSaveMsg('ยกเลิกไม่สำเร็จ: ต้องบอกเหตุผล เช่น ลูกค้าไม่ติดใจ ไม่เคลม'); return; }
+    if (!window.confirm(`ยกเลิกงานนี้?\nเหตุผล: ${reason}\n\nยกเลิกแล้วเคสจะอ่านอย่างเดียว ไม่เข้าคิวตรวจ/EMCS/se-billing (แอดมินเลิกยกเลิกคืนได้)`)) return;
+    setSaving(true);
+    try {
+      await api.post(`/api/cases/${caseData.id}/cancel`, { reason });
+      setSaveMsg('ยกเลิกงานสำเร็จ');
+      setCcOpen(false); setCcReason('');
+      onReviewSubmitted();
+    } catch (e) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setSaveMsg('ยกเลิกไม่สำเร็จ: ' + (msg || 'เกิดข้อผิดพลาด'));
+    } finally { setSaving(false); }
+  };
+  const doUncancel = async () => {
+    if (!window.confirm('เลิกยกเลิกเคสนี้ คืนสถานะเดิม?')) return;
+    setSaving(true);
+    try {
+      await api.post(`/api/cases/${caseData.id}/uncancel`, {});
+      setSaveMsg('เลิกยกเลิกสำเร็จ');
+      onReviewSubmitted();
+    } catch (e) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setSaveMsg('เลิกยกเลิกไม่สำเร็จ: ' + (msg || 'เกิดข้อผิดพลาด'));
+    } finally { setSaving(false); }
+  };
   const doSendBack = async () => {
     const reason = sbReason.trim();
     if (!reason) { setSaveMsg('ตีกลับไม่สำเร็จ: ต้องบอกเหตุผลว่าให้แก้อะไร'); return; }
@@ -2054,6 +2090,20 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
   };
   const bkk16 = (v: unknown) => (v ? new Date(String(v)).toLocaleString('th-TH', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' }) : '');
 
+  /** แถบปุ่มตอนยกเลิกแล้ว — ป้าย + แอดมินเลิกยกเลิก (ใช้แทน actionBar เมื่อ cancelled) */
+  const cancelBar = (
+    <div className="flex items-center gap-2">
+      <span className="text-xs font-bold text-red-700 bg-red-50 border border-red-200 px-2 py-1 whitespace-nowrap">ยกเลิกแล้ว</span>
+      {isAdmin ? (
+        <button type="button" disabled={saving} onClick={doUncancel}
+          className="px-4 py-1.5 bg-amber-600 text-white rounded-none text-sm font-medium hover:bg-amber-700 disabled:bg-amber-300 disabled:cursor-not-allowed transition">
+          เลิกยกเลิก
+        </button>
+      ) : (
+        <span className="text-xs text-gray-500">แอดมินเลิกยกเลิกได้</span>
+      )}
+    </div>
+  );
   const actionBar = approved && isReference ? (
     // เคสอ้างอิง (15/09/69): แก้ข้อมูลตั้งต้นได้โดยไม่ต้องปลดล็อก — ไม่มีอนุมัติ/ตีกลับ/se-billing/ปิด ISURVEY
     // เพราะครั้งนี้ปิดจบบนระบบเก่าไปแล้ว บันทึกที่นี่มีผลกับเว็บเราและครั้งถัดไปที่ดึงใหม่เท่านั้น
@@ -2155,6 +2205,11 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
           ตีกลับผู้สำรวจ
         </button>
       )}
+      {/* ยกเลิกงาน (22/09/69) — ทุกสถานะที่ยังไม่อนุมัติ รวมงานที่อยู่กับช่าง · กดแล้วช่องเหตุผลกางใต้แถบ ยืนยันอีกครั้งก่อนยกเลิกจริง */}
+      <button type="button" onClick={() => { setCcOpen(true); setSbOpen(false); }} disabled={saving || previewing}
+        className="h-9 px-4 border border-red-600 text-red-700 bg-white text-sm font-bold hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition">
+        ยกเลิกงาน
+      </button>
       {/* "บันทึกร่าง" ตามดีไซน์ — ตรงความจริงด้วย: บันทึกแล้วเคสยังไม่ถูกส่งไปไหน */}
       <button type="button" onClick={handleSave} disabled={saving || previewing}
         title={previewing ? 'กำลังดูครั้งอื่น — กลับไปครั้งของเคสนี้ก่อน' : ''} className="h-9 px-4 border border-[#2eb593] bg-[var(--md-green)] text-white text-sm font-bold hover:brightness-105 disabled:opacity-40 disabled:cursor-not-allowed transition">
@@ -2231,7 +2286,7 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
             {saveMsg && (
               <span className={`px-3 py-1 rounded-none text-xs ${saveMsg.includes('สำเร็จ') ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>{saveMsg}</span>
             )}
-            {actionBar}
+            {cancelled ? cancelBar : actionBar}
           </div>
 
           {/**
@@ -2260,6 +2315,22 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
 
           {/* ⛔ ช่องเหตุผล **ไม่มี name** — อยู่ใน <form> เดียวกับฟอร์มหลัก มี name เมื่อไหร่
               จะโดน FormData เก็บไปเป็นค่าของรายงานตอนกดบันทึก */}
+          {ccOpen && !approved && !cancelled && (
+            <div className="w-full border-t border-[var(--md-line)] pt-2 flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium text-red-900 shrink-0">ยกเลิกงาน — เหตุผล</span>
+              <input type="text" value={ccReason} onChange={(e) => setCcReason(e.target.value)}
+                placeholder="เช่น ลูกค้าไม่ติดใจ ไม่เคลม / แจ้งซ้ำ / บริษัทประกันยกเลิกงาน"
+                className="flex-1 min-w-[15rem] border border-red-300 rounded-none px-2 py-1 text-sm bg-white text-gray-800" />
+              <button type="button" onClick={() => { setCcOpen(false); setCcReason(''); }}
+                className="px-3 py-1.5 text-sm border border-gray-300 rounded-none hover:bg-[var(--md-tint)]">
+                ปิด
+              </button>
+              <button type="button" onClick={doCancel} disabled={saving}
+                className="px-4 py-1.5 text-sm bg-red-600 text-white rounded-none hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                ยืนยันยกเลิกงาน
+              </button>
+            </div>
+          )}
           {sbOpen && !approved && (
             <div className="w-full border-t border-[var(--md-line)] pt-2 flex flex-wrap items-center gap-2">
               <span className="text-sm font-medium text-orange-900 shrink-0">ตีกลับ — ให้ช่างแก้อะไร</span>
@@ -2282,6 +2353,15 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
         </div>
       </div>
 
+      {cancelled && (
+        <div className="border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">
+          <span className="font-bold">ยกเลิกงานแล้ว</span>
+          {caseData?.cancelled_at ? ` เมื่อ ${bkk16(caseData.cancelled_at)}` : ''}
+          {caseData?.cancelled_by_name ? ` โดย ${caseData.cancelled_by_name}` : ''}
+          {caseData?.cancel_reason ? ` · เหตุผล: ${caseData.cancel_reason}` : ''}
+          {' — อ่านอย่างเดียว ไม่เข้าคิวตรวจ/EMCS/se-billing · แอดมินกด "เลิกยกเลิก" ที่แถบบนเพื่อคืนสถานะเดิม'}
+        </div>
+      )}
       {/* อนุมัติแล้ว = ปิดทั้งชุดด้วย <fieldset disabled> — ครอบทุกช่องในหน้าทีเดียว
           ไม่ต้องไล่ใส่ disabled ทีละช่อง (มี ~200 ช่อง พลาดช่องเดียวก็รั่ว)
           แถบปุ่มอยู่ *นอก* fieldset เพื่อให้แอดมินยังกด "ปลดล็อก" ได้ตอนถูกล็อก */}

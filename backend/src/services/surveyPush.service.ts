@@ -7,7 +7,7 @@ import { getIO } from '../socket';
 export type AssignPush = { status: 'sent' | 'no_token' | 'failed' | 'no_fcm'; reason?: string };
 
 /** เหตุผลถอนงาน — มือถือแปลเป็นข้อความบนจอ (NotificationHelper.withdrawnText) */
-export type WithdrawReason = 'reassigned' | 'unassigned' | 'deleted';
+export type WithdrawReason = 'reassigned' | 'unassigned' | 'deleted' | 'cancelled';
 
 type SurveyorRow = { id: number; fcm_token: string | null };
 type CaseCard = {

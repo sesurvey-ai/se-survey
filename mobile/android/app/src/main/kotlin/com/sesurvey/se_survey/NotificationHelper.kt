@@ -398,6 +398,7 @@ object NotificationHelper {
     fun withdrawnText(reason: String): String = when (reason) {
         "reassigned" -> "งานถูกย้ายให้ผู้สำรวจคนอื่นแล้ว"
         "unassigned" -> "งานถูกถอนออกจากคุณแล้ว"
+        "cancelled" -> "งานถูกยกเลิกแล้ว (ไม่เคลม)"   // ยกเลิกงานบนเว็บ 22/09/69
         "deleted" -> "งานถูกยกเลิกแล้ว"
         else -> "งานถูกถอนแล้ว"
     }

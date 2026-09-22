@@ -2,7 +2,7 @@ import { db } from '../config/database';
 import { normalizeDriverAddressFields, normalizeOpponentsAddress, normalizeCardAddresses } from './driverAddress';
 import { env } from '../config/env';
 import { AppError, NotFoundError, ForbiddenError } from '../middleware/errorHandler';
-import { pushNewSurvey, pushSurveyWithdrawn } from './surveyPush.service';
+import { pushNewSurvey, pushNewSurveyById, pushSurveyWithdrawn } from './surveyPush.service';
 import { logDispatch, LAST_RECALL_SELECT, LAST_RECALL_JOIN } from './dispatchLog.service';
 import { omitHeavy } from './listRows';
 import { generateSurveyXml, emcsNameWarnings, sanitizeReportDates } from './xmlExport.service';
@@ -135,6 +135,8 @@ const assertSurveyJobNoUnique = async (jobNos: unknown[], excludeCaseId?: number
 const assertNotApproved = async (caseId: number, opts: { allowReference?: boolean } = {}): Promise<void> => {
   const r = await db.query('SELECT status, source FROM cases WHERE id = $1', [caseId]);
   if (r.rows.length === 0) throw new NotFoundError('Case not found');
+  // ยกเลิกแล้ว (22/09/69) = อ่านอย่างเดียวเหมือนอนุมัติแล้ว — แอดมิน "เลิกยกเลิก" ก่อนจึงแก้ได้
+  if (r.rows[0].status === 'cancelled') throw new AppError(423, 'เคสนี้ยกเลิกแล้ว — แก้ไม่ได้จนกว่าแอดมินจะเลิกยกเลิก');
   if (r.rows[0].status === 'reviewed') {
     if (opts.allowReference && r.rows[0].source === 'isurvey_reference') return;
     throw new AppError(423, 'เคสนี้อนุมัติแล้ว — แก้ไม่ได้จนกว่าแอดมินจะปลดล็อก');
@@ -345,11 +347,12 @@ export const caseService = {
       `SELECT c.*, sr.claim_no, sr.survey_job_no, sr.claim_ref_no
        FROM cases c
        LEFT JOIN survey_reports sr ON sr.case_id = c.id
-       WHERE c.assigned_to = $1
+       WHERE c.assigned_to = $1 AND c.status <> 'cancelled'
        ORDER BY c.created_at DESC`,
       [surveyorId]
     );
-    return omitHeavy(result.rows);   // รายการงานบนแอป — ไม่ส่ง payload ISURVEY ติดไปทุกแถว
+    // รายการงานบนแอป — ไม่ส่ง payload ISURVEY ติดไปทุกแถว · งานที่ยกเลิก (22/09/69) ไม่ส่งให้แอป (แอปรุ่นเก่าไม่รู้จักสถานะนี้)
+    return omitHeavy(result.rows);
   },
 
   /**
@@ -1248,7 +1251,9 @@ export const caseService = {
 
   async getDetail(caseId: number, user?: CaseUser) {
     const caseResult = await db.query(
-      `SELECT c.*, u.first_name AS surveyor_first_name, u.last_name AS surveyor_last_name,
+      `SELECT c.*,
+              (SELECT TRIM(COALESCE(cu.first_name, '') || ' ' || COALESCE(cu.last_name, '')) FROM users cu WHERE cu.id = c.cancelled_by) AS cancelled_by_name,
+              u.first_name AS surveyor_first_name, u.last_name AS surveyor_last_name,
               ${thStamp('c.submitted_at')} AS submitted_at_th
        FROM cases c
        LEFT JOIN users u ON c.assigned_to = u.id
@@ -1881,6 +1886,52 @@ export const caseService = {
   },
 
   /**
+   * ── ยกเลิกงาน (user สั่ง 22/09/69) ── เช่น ลูกค้าไม่ติดใจ เลยไม่เคลม / ISURVEY ยกเลิกเคลม / แจ้งซ้ำ
+   * ยกเลิกได้ทุกสถานะที่ยังไม่อนุมัติ (อนุมัติแล้วส่ง se-billing/ปิด ISURVEY ไปแล้ว — ให้แอดมินปลดล็อกก่อน)
+   * จำสถานะเดิมไว้ให้แอดมิน "เลิกยกเลิก" คืนได้ · งานที่อยู่กับช่าง (assigned/finished) → ถอนการ์ดบนเครื่องช่าง (push cancel_survey)
+   * ยกเลิกแล้ว = อ่านอย่างเดียว (assertNotApproved 423) · ไม่โผล่ในรายการงานบนแอป (getMyCases) · ไม่เข้าคิว EMCS/se-billing (ต้อง reviewed)
+   */
+  async cancelCase(caseId: number, byUserId: number, reason: string) {
+    const text = String(reason ?? '').trim();
+    if (!text) throw new AppError(400, 'ต้องบอกเหตุผลที่ยกเลิก (เช่น ลูกค้าไม่ติดใจ ไม่เคลม)');
+    const c = await db.query('SELECT status, assigned_to FROM cases WHERE id = $1', [caseId]);
+    if (c.rows.length === 0) throw new NotFoundError('Case not found');
+    const { status, assigned_to } = c.rows[0] as { status: string; assigned_to: number | null };
+    if (status === 'cancelled') throw new ForbiddenError('เคสนี้ยกเลิกไปแล้ว');
+    if (status === 'reviewed') throw new ForbiddenError('เคสนี้อนุมัติแล้ว — ให้แอดมินปลดล็อกก่อนจึงจะยกเลิกได้');
+    const out = await db.query(
+      `UPDATE cases
+          SET status = 'cancelled', status_before_cancel = status, cancelled_at = NOW(), cancelled_by = $2, cancel_reason = $3
+        WHERE id = $1 AND status = $4
+        RETURNING id, status, status_before_cancel, cancelled_at, cancel_reason`,
+      [caseId, byUserId, text, status]);
+    // 0 แถว = สถานะเปลี่ยนไประหว่างทาง (ช่างเพิ่งส่ง/หัวหน้าเพิ่งอนุมัติ) — ห้ามตอบว่าสำเร็จ
+    if (out.rowCount === 0) throw new ForbiddenError('สถานะเคสเพิ่งเปลี่ยนไป — โหลดหน้าใหม่แล้วลองอีกครั้ง');
+    // งานยังอยู่กับช่าง → ปิดการ์ด "รับงาน"/แจ้งเงียบบนเครื่อง (ไม่ throw · เครื่องรุ่นเก่าเห็นข้อความกลาง "งานถูกถอนแล้ว")
+    const withdrawn = (status === 'assigned' || status === 'finished') && assigned_to
+      ? await pushSurveyWithdrawn(caseId, Number(assigned_to), 'cancelled') : undefined;
+    notifyCaseChanged(caseId, 'cancelled', byUserId);
+    return { ...out.rows[0], withdrawn };
+  },
+
+  /** แอดมิน "เลิกยกเลิก" — คืนสถานะเดิมที่จำไว้ (ไม่รู้ = รอมอบหมาย) · ถ้ากลับไปอยู่กับช่าง ส่งการ์ดงานให้อีกครั้ง */
+  async uncancelCase(caseId: number, byUserId: number) {
+    const c = await db.query('SELECT status, status_before_cancel, assigned_to FROM cases WHERE id = $1', [caseId]);
+    if (c.rows.length === 0) throw new NotFoundError('Case not found');
+    if (c.rows[0].status !== 'cancelled') throw new ForbiddenError('เคสนี้ไม่ได้ถูกยกเลิก');
+    const back = String(c.rows[0].status_before_cancel || 'pending');
+    const out = await db.query(
+      `UPDATE cases
+          SET status = $2, status_before_cancel = NULL, cancelled_at = NULL, cancelled_by = NULL, cancel_reason = NULL
+        WHERE id = $1 AND status = 'cancelled'
+        RETURNING id, status`, [caseId, back]);
+    if (out.rowCount === 0) throw new ForbiddenError('สถานะเคสเพิ่งเปลี่ยนไป — โหลดหน้าใหม่แล้วลองอีกครั้ง');
+    const push = back === 'assigned' && c.rows[0].assigned_to ? await pushNewSurveyById(caseId, Number(c.rows[0].assigned_to)) : undefined;
+    notifyCaseChanged(caseId, 'cancelled', byUserId);
+    return { ...out.rows[0], push };
+  },
+
+  /**
    * ผู้ตรวจบันทึกเคสจากหน้าเว็บ
    *
    * `baseRev` = เลขรุ่นที่หน้าเว็บจำไว้ตอนเปิดเคส — ไม่ตรงกับของจริง = มีคนบันทึกคั่น
@@ -2143,6 +2194,7 @@ export const caseService = {
         COUNT(*) FILTER (WHERE status = 'finished') AS finished,
         COUNT(*) FILTER (WHERE status = 'surveyed') AS surveyed,
         COUNT(*) FILTER (WHERE status = 'reviewed') AS reviewed,
+        COUNT(*) FILTER (WHERE status = 'cancelled') AS cancelled,
         COUNT(*) AS total
       FROM cases
     `);

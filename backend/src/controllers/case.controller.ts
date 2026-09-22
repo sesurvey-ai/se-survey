@@ -190,6 +190,16 @@ export const caseController = {
     sendSuccess(res, result);
   }),
 
+  /** ยกเลิกงาน / เลิกยกเลิก (22/09/69) */
+  cancelCase: asyncHandler(async (req: Request, res: Response) => {
+    const caseId = parseInt(req.params.id as string);
+    sendSuccess(res, await caseService.cancelCase(caseId, req.user!.id, String(req.body?.reason ?? '')));
+  }),
+  uncancelCase: asyncHandler(async (req: Request, res: Response) => {
+    const caseId = parseInt(req.params.id as string);
+    sendSuccess(res, await caseService.uncancelCase(caseId, req.user!.id));
+  }),
+
   /** ค่าตอบแทนผู้สำรวจของเคสนี้ — ยอดที่บันทึกไว้ + ยอดที่ระบบแนะนำจากตารางเรท */
   getPay: asyncHandler(async (req: Request, res: Response) => {
     // ?province=&district=&subdistrict=&claim_type= = พื้นที่ที่กำลังเลือกบนหน้า (ยังไม่บันทึก) — เรทแนะนำต้องตามทัน

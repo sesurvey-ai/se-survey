@@ -66,7 +66,7 @@ const todayISO = () => new Date(Date.now() + 7 * 3600000).toISOString().slice(0,
 const errMsg = (e: unknown) =>
   (e as { response?: { data?: { message?: string } } })?.response?.data?.message || (e as Error)?.message || 'เกิดข้อผิดพลาด';
 const STATUS_TH: Record<string, string> = {
-  surveyed: 'รอตรวจ', reviewed: 'อนุมัติแล้ว', assigned: 'ตีกลับ/มอบหมาย', finished: 'เสร็จงาน', pending: 'รอมอบหมาย',
+  surveyed: 'รอตรวจ', reviewed: 'อนุมัติแล้ว', assigned: 'ตีกลับ/มอบหมาย', finished: 'เสร็จงาน', pending: 'รอมอบหมาย', cancelled: 'ยกเลิก',
 };
 const statusOf = (r: Row) => r.status || NO_STATUS;
 const NO_PROVINCE = 'ไม่ระบุจังหวัด';

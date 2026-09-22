@@ -164,8 +164,9 @@ function getStatusBadge(status: string) {
     surveyed: 'bg-blue-100 text-blue-700',
     reviewed: 'bg-green-100 text-green-700',
     declined: 'bg-red-100 text-red-700',
+    cancelled: 'bg-red-50 text-red-800 border border-red-300',   // ยกเลิกงาน (22/09/69)
   };
-  const labels: Record<string, string> = { pending: 'รอมอบหมาย', assigned: 'มอบหมายแล้ว', finished: 'เสร็จงานแล้ว', surveyed: 'สำรวจแล้ว', reviewed: 'ตรวจสอบแล้ว', declined: 'ปฏิเสธแล้ว' };
+  const labels: Record<string, string> = { pending: 'รอมอบหมาย', assigned: 'มอบหมายแล้ว', finished: 'เสร็จงานแล้ว', surveyed: 'สำรวจแล้ว', reviewed: 'ตรวจสอบแล้ว', declined: 'ปฏิเสธแล้ว', cancelled: 'ยกเลิก' };
   return <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${styles[status] || styles.pending}`}>{labels[status] || status}</span>;
 }
 

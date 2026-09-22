@@ -35,6 +35,7 @@ const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> =
   surveyed: { label: 'สำรวจแล้ว',   color: 'text-blue-700',   bg: 'bg-blue-100' },
   reviewed: { label: 'ตรวจสอบแล้ว', color: 'text-green-700',  bg: 'bg-green-100' },
   declined: { label: 'ปฏิเสธแล้ว',  color: 'text-red-700',    bg: 'bg-red-100' },
+  cancelled: { label: 'ยกเลิก',       color: 'text-red-800',    bg: 'bg-red-50' },   // ยกเลิกงาน (22/09/69)
 };
 
 export default function CallcenterCasesPage() {
@@ -195,6 +196,7 @@ export default function CallcenterCasesPage() {
           <option value="assigned">มอบหมายแล้ว</option>
           <option value="finished">เสร็จงานแล้ว (รอส่งรายงาน)</option>
           <option value="surveyed">สำรวจแล้ว</option>
+          <option value="cancelled">ยกเลิก</option>
           <option value="reviewed">ตรวจสอบแล้ว</option>
           <option value="declined">ปฏิเสธแล้ว</option>
         </select>

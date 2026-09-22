@@ -309,6 +309,9 @@ router.patch('/:id/identity', auth, requireRole('admin'), caseController.updateI
 
 // ตีกลับให้ผู้สำรวจไปแก้เอง — หัวหน้า (และแอดมิน) เท่านั้น · เหตุผลบังคับ (เช็คในเซอร์วิส)
 router.post('/:id/send-back', auth, requireRole('checker', 'admin'), caseController.sendBack);
+/** ยกเลิกงาน (22/09/69) — ลูกค้าไม่ติดใจ/ไม่เคลม ฯลฯ: หัวหน้า/แอดมิน/คอลเซ็นเตอร์ · เลิกยกเลิก (คืนสถานะเดิม) = แอดมิน */
+router.post('/:id/cancel', auth, requireRole('checker', 'admin', 'callcenter'), caseController.cancelCase);
+router.post('/:id/uncancel', auth, requireRole('admin'), caseController.uncancelCase);
 // ผู้ตรวจสอบเพิ่มรูปเองจากหน้าเคส — **เพิ่มอย่างเดียว** (คนละ endpoint กับ upload-folder
 // ของแอปมือถือที่เป็น "ล้างแล้วเขียนใหม่" ตามโมเดล sync — ใช้ผิดตัวคือรูปทั้งเคสหาย)
 router.post('/:id/photos', auth, requireRole('checker', 'admin'),

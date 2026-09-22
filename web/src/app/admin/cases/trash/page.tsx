@@ -15,7 +15,7 @@ type TrashRow = {
 };
 
 const STATUS_TH: Record<string, string> = {
-  pending: 'รอจ่ายงาน', assigned: 'มอบหมายแล้ว', finished: 'เสร็จงาน', surveyed: 'รอตรวจ', reviewed: 'อนุมัติแล้ว', declined: 'ปฏิเสธ',
+  pending: 'รอจ่ายงาน', assigned: 'มอบหมายแล้ว', finished: 'เสร็จงาน', surveyed: 'รอตรวจ', reviewed: 'อนุมัติแล้ว', declined: 'ปฏิเสธ', cancelled: 'ยกเลิก',
 };
 
 export default function AdminCaseTrashPage() {
