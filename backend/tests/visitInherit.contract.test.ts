@@ -165,6 +165,14 @@ check('รายการเคสสำหรับบอทส่ง opponent_
     && read('src', 'services', 'case.service.ts').includes('staffGroupService.filterFor(user.id, user.role)'));
   check('เว็บ: ตัวกรองจังหวัดติ๊กได้หลายค่า จากจังหวัดในรายการ · ตัวกรองสถานะยังอยู่',
     pull.includes('provinceCounts') && pull.includes('toggleProvince') && pull.includes('ไม่ติ๊กเลย = ทุกจังหวัด') && pull.includes('toggleStatus'));
+  // 22/09/69 (รอบ 2) user: checkbox "ทีมพนักงาน" — server ติดธง in_team ทุกแถว (ไม่ตัดแถว) · เว็บกรองเองเมื่อติ๊ก · บัญชีไม่ผูกทีมติ๊กไม่ได้
+  check('backend: listPending ติดธง in_team ให้ทุกแถวจากรายชื่อลูกทีม แต่ไม่ตัดแถวทิ้ง (applied ยัง false)',
+    /const team = await staffGroupService\.filterFor\(userId, role\);/.test(pullSvc) && pullSvc.includes('in_team: inTeam(r)')
+    && !/rows = rows\.filter\(\(r\) => team\.match/.test(pullSvc) && pullSvc.includes('in_team?: boolean | null;') && pullSvc.includes('applied: false, group_name: team?.group.name'));
+  check('เว็บ: checkbox "ทีมพนักงาน" = ขอบเขต in_team === true ก่อนตัวกรองสถานะ/จังหวัด · ติ๊กไม่ได้ถ้าไม่ผูกทีม · จำไว้ในแท็บ (cache v5)',
+    pull.includes('(rows ?? []).filter((r) => r.in_team === true)') && pull.includes('const base = useMemo(() => (teamScoped ? teamRows : (rows ?? [])), [teamScoped, teamRows, rows]);')
+    && pull.includes('disabled={!hasTeam || searching}') && pull.includes('team_only: teamOnly') && pull.includes("'isurvey-pending-cache-v5'")
+    && pull.includes('เฉพาะลูกทีม') && pull.includes('>นอกทีม</span>'));
 }
 
 console.log(failed === 0 ? '\n✅ ผ่านทั้งหมด\n' : `\n❌ ไม่ผ่าน ${failed} ข้อ\n`);

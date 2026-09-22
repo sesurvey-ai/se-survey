@@ -11,6 +11,7 @@ import { db } from '../config/database';
 import { env } from '../config/env';
 import { AppError } from '../middleware/errorHandler';
 import { isurveyCredService } from './isurveyCred.service';
+import { staffGroupService } from './staffGroup.service';
 import { notifyCaseChanged } from './caseEvents';
 
 export interface PendingRow {
@@ -20,6 +21,8 @@ export interface PendingRow {
   dispatch_dt?: string; send_report_dt?: string;
   /** เคสที่มีอยู่แล้วในระบบเรา (เลขเคลม+เซอร์เวย์เดียวกัน) — กันดึงซ้ำ */
   imported_case_id?: number | null; imported_status?: string | null;
+  /** ช่างของใบนี้อยู่ในรายชื่อลูกทีมของบัญชีที่โหลดไหม (22/09/69: หน้าเว็บมี checkbox "ทีมพนักงาน" กรองเอง — server ไม่ตัดแถว) · null = บัญชีไม่ผูกทีม/แอดมิน */
+  in_team?: boolean | null;
 }
 
 async function callService<T>(path: string, body: Record<string, unknown>, timeoutMs: number): Promise<T> {
@@ -108,7 +111,7 @@ export const isurveyPullService = {
    * แอดมิน / บัญชีที่ยังไม่ผูกทีม = เห็นทั้งหมด (บอกไว้ใน filter เพื่อให้หน้าจอแจ้งผู้ใช้)
    */
   async listPending(userId: number, role: string, dateFrom?: string, dateTo?: string):
-    Promise<{ cases: PendingRow[]; filter: { applied: boolean; group_name: string | null; members: number; hidden: number } }> {
+    Promise<{ cases: PendingRow[]; filter: { applied: boolean; group_name: string | null; members: number; hidden: number; in_team: number } }> {
     const creds = await isurveyCredService.getPlain(userId);
     let rows: PendingRow[];
     try {
@@ -134,8 +137,13 @@ export const isurveyPullService = {
     // ทำให้งานตกหล่น (เคลม 2026013150636 มี 7 ครั้ง 2 ครั้งเป็นของช่างทีมอื่น หัวหน้ามองไม่เห็น) → เห็นทั้งบริษัท
     // แล้วกรองเองด้วยจังหวัด/สถานะ/ค้นหาบนหน้าเว็บ · หน้า "รายการงาน" (getForReview) ยังกรองตามทีมเหมือนเดิม
     // รูปทรง filter คงไว้ให้หน้าเว็บเก่า/cache อ่านได้ (applied=false ตลอด)
-    void role;
-    const filter = { applied: false, group_name: null as string | null, members: 0, hidden: 0 };
+    // 22/09/69 (รอบ 2) user ขอ checkbox "ทีมพนักงาน" บนหน้าเว็บ: server แค่**ติดธง** in_team ให้ทุกแถว (จับคู่รหัสช่าง/ชื่อบริษัท OSS
+    // กับรายชื่อลูกทีม แบบเดียวกับที่เคยกรอง) ไม่ตัดแถวทิ้ง — หน้าเว็บเลือกเองว่าจะดูทั้งบริษัทหรือเฉพาะทีม · ไม่ผูกทีม/แอดมิน = null ทุกแถว
+    const team = await staffGroupService.filterFor(userId, role);
+    const inTeam = (r: PendingRow): boolean | null => (team ? team.match(String(r.surveyor_name ?? '')) : null);
+    rows = rows.map((r) => ({ ...r, in_team: inTeam(r) }));
+    const filter = { applied: false, group_name: team?.group.name ?? null, members: team?.group.members?.length ?? 0, hidden: 0,
+                     in_team: rows.filter((r) => r.in_team === true).length };
     if (rows.length === 0) return { cases: rows, filter };
     const hits = await this.importedStatus(rows);
     const cases = rows.map((r) => {

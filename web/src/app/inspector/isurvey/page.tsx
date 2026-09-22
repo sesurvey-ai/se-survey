@@ -10,6 +10,7 @@
  *   - วันที่เริ่มที่ "วันนี้" ทั้งคู่ ผู้ใช้เลือกช่วงเอง · ไม่โหลดอัตโนมัติ (บางบัญชีงานค้างมาก ช้า) กด "โหลดรายการ" เอง
  *   - โหลดมาทุกสถานะ แล้วเลือกสถานะที่จะดูได้ (ค่าเริ่มต้น "รอตรวจข้อมูล")
  *     08/09/69: เลือกได้หลายสถานะพร้อมกัน (ติ๊ก checkbox เช่น "เสร็จงาน" + "ถึงที่ตรวจสอบ") · ไม่ติ๊กเลย = ทั้งหมด
+ *   - 22/09/69: เห็นงาน**ทั้งบริษัท** (เลิกกรองตามทีมอัตโนมัติ — งานตกหล่น) · ตัวกรองจังหวัดหลายค่า · ติ๊ก "ทีมพนักงาน" เองถ้าจะดูเฉพาะลูกทีม
  *   - "ดึงเข้า" ทีละงานเสร็จ → เด้งไปหน้าเคสนั้นเลย · "ดึงทั้งหมด" ไม่เด้ง
  *   - 08/09/69: งานที่อนุมัติแล้วบนเว็บเรา **หายจากรายการ "รอตรวจข้อมูล" เอง** ไม่ต้องกด "โหลดรายการ" —
  *     หน้านี้ถามสถานะ "ในระบบเรา" ใหม่ (endpoint เร็ว ไม่แตะ ISURVEY) เมื่อมีสัญญาณเคสเปลี่ยน/กลับมาที่แท็บ
@@ -26,10 +27,12 @@ type Row = {
   plate_no: string; finish_dt: string; status: string; emcs_sent: boolean;
   dispatch_dt?: string; send_report_dt?: string;   // จ่ายงานเวลา / ส่งรายงานเวลา (user ขอ 07/09/69)
   imported_case_id?: number | null; imported_status?: string | null;
+  /** ช่างในรายชื่อลูกทีมของบัญชีนี้ไหม (server ติดธงให้ 22/09/69 — checkbox "ทีมพนักงาน") · null = บัญชีไม่ผูกทีม */
+  in_team?: boolean | null;
   /** "ครั้งที่" ของใบนี้ในเคลม + ครั้งก่อนหน้าที่ยังไม่มีในระบบเรา (ถามทีหลังจากโหลด — 22/09/69) · undefined = ยังไม่ได้ถาม */
   visit_no?: number | null; visit_total?: number; earlier_missing?: string[]; rounds_error?: string;
 };
-type Filter = { applied: boolean; group_name: string | null; members: number; hidden: number };
+type Filter = { applied: boolean; group_name: string | null; members: number; hidden: number; in_team?: number };
 type PullResult = {
   caseId?: number; warnings?: string[]; photos?: { added?: number; error?: string; note?: string };
   /** ครั้งที่ของใบที่ดึง (ตามเลขเซอร์เวย์) + ครั้งก่อนหน้าที่ระบบดึงมาเป็นเคสอ้างอิงให้เอง (13/09/69) */
@@ -49,8 +52,8 @@ const NO_STATUS = '(ไม่ระบุ)';
  * จำรายการที่โหลดล่าสุดไว้ในแท็บนี้ (sessionStorage) — เปลี่ยนเมนู/เด้งไปหน้าเคสแล้วกลับมาไม่ต้องโหลดใหม่
  * (โหลดครั้งหนึ่ง 10 กว่าวินาที) · ปิดแท็บ = หาย · กด "โหลดรายการ" = ดึงสดทับ
  */
-const CACHE_KEY = 'isurvey-pending-cache-v4';   // v4: + ตัวกรองจังหวัด (provinces) 22/09/69 · v3 สถานะหลายค่า · v2 ค่าเดียว
-type Cache = { from: string; to: string; statuses: string[]; provinces?: string[]; rows: Row[]; filter: Filter | null; loadedAt: string };
+const CACHE_KEY = 'isurvey-pending-cache-v5';   // v5: + ธง in_team/ติ๊ก "ทีมพนักงาน" 22/09/69 · v4 ตัวกรองจังหวัด · v3 สถานะหลายค่า · v2 ค่าเดียว
+type Cache = { from: string; to: string; statuses: string[]; provinces?: string[]; team_only?: boolean; rows: Row[]; filter: Filter | null; loadedAt: string };
 const readCache = (): Cache | null => {
   try { const raw = sessionStorage.getItem(CACHE_KEY); return raw ? (JSON.parse(raw) as Cache) : null; } catch { return null; }
 };
@@ -80,6 +83,8 @@ export default function IsurveyPendingPage() {
   /** ตัวกรองจังหวัด (user ขอ 22/09/69 แทนการกรองตามทีม) — ติ๊กได้หลายจังหวัด · ไม่ติ๊กเลย = ทุกจังหวัด */
   const [provinces, setProvinces] = useState<string[]>([]);
   const [provinceOpen, setProvinceOpen] = useState(false);
+  /** ติ๊ก "ทีมพนักงาน" = เหลือเฉพาะงานของช่าง/บริษัทในรายชื่อลูกทีม (user ขอ 22/09/69 หลังเลิกกรองอัตโนมัติ) · ไม่ติ๊ก = ทั้งบริษัท */
+  const [teamOnly, setTeamOnly] = useState(false);
   const provinceBoxRef = useRef<HTMLDivElement>(null);
   const statusBoxRef = useRef<HTMLDivElement | null>(null);
   /** งานที่อนุมัติแล้วในระบบเรา ซ่อนจากมุมมอง "รอตรวจข้อมูล" — กดโชว์ได้ */
@@ -103,12 +108,12 @@ export default function IsurveyPendingPage() {
     const c = readCache();
     if (c && Array.isArray(c.rows)) {
       setFrom(c.from); setTo(c.to); setRows(c.rows); setFilter(c.filter ?? null);
-      setStatuses(Array.isArray(c.statuses) ? c.statuses : [PENDING]); setProvinces(Array.isArray(c.provinces) ? c.provinces : []); setLoadedAt(c.loadedAt);
+      setStatuses(Array.isArray(c.statuses) ? c.statuses : [PENDING]); setProvinces(Array.isArray(c.provinces) ? c.provinces : []); setTeamOnly(Boolean(c.team_only)); setLoadedAt(c.loadedAt);
     }
   }, []);
   useEffect(() => {
-    if (rows && loadedAt) writeCache({ from, to, statuses, provinces, rows, filter, loadedAt });
-  }, [rows, filter, statuses, provinces, from, to, loadedAt]);
+    if (rows && loadedAt) writeCache({ from, to, statuses, provinces, team_only: teamOnly, rows, filter, loadedAt });
+  }, [rows, filter, statuses, provinces, teamOnly, from, to, loadedAt]);
 
   // ปิดกล่องเลือกสถานะ/จังหวัดเมื่อคลิกนอกกล่อง
   useEffect(() => {
@@ -178,14 +183,23 @@ export default function IsurveyPendingPage() {
     return () => { socket.off('case_changed', scheduleSync); if (syncTimer.current) clearTimeout(syncTimer.current); };
   }, [socket, scheduleSync]);
 
-  // สถานะที่มีในรายการที่โหลดมา + จำนวน — ไว้ทำตัวเลือก
+  /**
+   * ขอบเขต "ทีมพนักงาน" (user ขอ 22/09/69): ติ๊กแล้วทุกตัวเลข/ตัวเลือกถัดจากนี้ (สถานะ · จังหวัด · ดึงทั้งหมด) นับเฉพาะงานของลูกทีม
+   * server ติดธง in_team ให้ทุกแถวจากรายชื่อทีม (รหัสช่าง/ชื่อบริษัท OSS) ไม่ตัดแถวทิ้ง · บัญชีไม่ผูกทีม = ติ๊กไม่ได้ เห็นทั้งบริษัท
+   * ค้นหาไม่สนขอบเขตนี้ (ค้นทุกรายการที่โหลดมา เหมือนที่พักตัวกรองสถานะ/จังหวัด)
+   */
+  const hasTeam = Boolean(filter?.group_name);
+  const teamScoped = teamOnly && hasTeam;
+  const teamRows = useMemo(() => (rows ?? []).filter((r) => r.in_team === true), [rows]);
+  const base = useMemo(() => (teamScoped ? teamRows : (rows ?? [])), [teamScoped, teamRows, rows]);
+  // สถานะที่มีในรายการที่โหลดมา (ในขอบเขตทีมถ้าติ๊ก) + จำนวน — ไว้ทำตัวเลือก
   const statusCounts = useMemo(() => {
     const m = new Map<string, number>();
-    for (const r of rows ?? []) m.set(statusOf(r), (m.get(statusOf(r)) ?? 0) + 1);
+    for (const r of base) m.set(statusOf(r), (m.get(statusOf(r)) ?? 0) + 1);
     return Array.from(m.entries()).sort((a, b) => (a[0] === PENDING ? -1 : b[0] === PENDING ? 1 : b[1] - a[1]));
-  }, [rows]);
+  }, [base]);
   const isAll = statuses.length === 0;
-  const byStatus = useMemo(() => (rows ?? []).filter((r) => isAll || statuses.includes(statusOf(r))), [rows, statuses, isAll]);
+  const byStatus = useMemo(() => base.filter((r) => isAll || statuses.includes(statusOf(r))), [base, statuses, isAll]);
   // จังหวัดที่มีในมุมมองสถานะปัจจุบัน + จำนวน (เรียงจำนวนมากก่อน) — ตัวเลือกของตัวกรองจังหวัด
   const provinceCounts = useMemo(() => {
     const m = new Map<string, number>();
@@ -245,7 +259,7 @@ export default function IsurveyPendingPage() {
   const provinceLabel = isAllProv ? `ทุกจังหวัด (${byStatus.length})`
     : provinces.length === 1 ? `${provinces[0]} (${provinceCounts.find(([p]) => p === provinces[0])?.[1] ?? 0})`
     : `${provinces.length} จังหวัด (${byProvince.length})`;
-  const statusLabel = isAll ? `ทั้งหมด (${rows?.length ?? 0})`
+  const statusLabel = isAll ? `ทั้งหมด (${base.length})`
     : statuses.length === 1 ? `${statuses[0]} (${statusCounts.find(([s]) => s === statuses[0])?.[1] ?? 0})`
     : `${statuses.length} สถานะ (${byStatus.length})`;
 
@@ -288,7 +302,8 @@ export default function IsurveyPendingPage() {
   const pullAll = async () => {
     const todo = visible.filter((r) => !r.imported_case_id && r.claim_no && pullable(r));   // ไม่มีเลขเคลม/สถานะดึงไม่ได้ = ข้าม
     if (todo.length === 0) return;
-    const label = (isAll ? 'ทุกสถานะ' : `สถานะ "${statuses.join('", "')}"`) + (isAllProv ? '' : ` · จังหวัด "${provinces.join('", "')}"`);
+    const label = (isAll ? 'ทุกสถานะ' : `สถานะ "${statuses.join('", "')}"`) + (isAllProv ? '' : ` · จังหวัด "${provinces.join('", "')}"`)
+      + (teamScoped ? ` · เฉพาะทีม ${filter?.group_name}` : '');
     if (!window.confirm(`ดึงงานที่ยังไม่มีในระบบ (${label}) ทั้งหมด ${todo.length} เรื่อง? (ทีละเรื่อง ใช้เวลาประมาณ ${todo.length * 15} วินาที)`)) return;
     setBulk(true);
     try {
@@ -341,7 +356,7 @@ export default function IsurveyPendingPage() {
                 <div className="absolute z-20 top-full left-0 mt-1 w-64 bg-white border border-gray-300 shadow-lg p-2 text-sm text-gray-800">
                   <label className="flex items-center gap-2 px-1 py-1 cursor-pointer hover:bg-gray-50">
                     <input type="checkbox" checked={isAll} onChange={() => setStatuses([])} />
-                    <span className="font-semibold">ทั้งหมด</span><span className="text-gray-500">({rows.length})</span>
+                    <span className="font-semibold">ทั้งหมด</span><span className="text-gray-500">({base.length})</span>
                   </label>
                   <div className="border-t border-gray-100 my-1" />
                   {statusCounts.map(([s, n]) => (
@@ -376,9 +391,22 @@ export default function IsurveyPendingPage() {
                       <span className={p === NO_PROVINCE ? 'text-gray-500' : ''}>{p}</span><span className="text-gray-500">({n})</span>
                     </label>
                   ))}
-                  <div className="text-[0.6875rem] text-gray-500 px-1 pt-1">ติ๊กได้หลายจังหวัด · ไม่ติ๊กเลย = ทุกจังหวัด · จำนวนนับตามสถานะที่เลือกอยู่</div>
+                  <div className="text-[0.6875rem] text-gray-500 px-1 pt-1">ติ๊กได้หลายจังหวัด · ไม่ติ๊กเลย = ทุกจังหวัด · จำนวนนับตามสถานะ/ทีมที่เลือกอยู่</div>
                 </div>
               )}
+            </div>
+          )}
+          {rows && (
+            /* checkbox "ทีมพนักงาน" (user ขอ 22/09/69) — ติ๊ก = เหลือเฉพาะงานของช่าง/บริษัทในรายชื่อลูกทีมของบัญชีนี้ (server ติดธง in_team)
+               ไม่ติ๊ก = ทั้งบริษัท · บัญชีที่ยังไม่ผูกทีม (แอดมิน/หัวหน้าใหม่) ติ๊กไม่ได้ · ตอนค้นหาพักไว้เหมือนตัวกรองอื่น */
+            <div className={`flex flex-col text-xs text-gray-600 ${searching ? 'opacity-50' : ''}`}>ทีมพนักงาน
+              <label className={`border px-2 py-1 text-sm flex items-center gap-1.5 select-none min-w-[9rem] ${hasTeam && !searching ? 'cursor-pointer bg-white border-gray-300 text-gray-800' : 'cursor-not-allowed bg-gray-50 border-gray-200 text-gray-400'}`}
+                title={!hasTeam ? 'บัญชีนี้ยังไม่ผูกทีม — แอดมินผูกได้ที่ "จัดการทีมผู้ตรวจ"'
+                  : searching ? 'กำลังค้นหาทุกรายการ — ล้างคำค้นก่อนถึงจะกรองทีม'
+                  : `เหลือเฉพาะงานของทีม ${filter?.group_name} (${filter?.members ?? 0} รายชื่อ) — ช่างที่ยังไม่ถูกใส่ชื่อในทีมจะไม่โผล่`}>
+                <input type="checkbox" checked={teamScoped} disabled={!hasTeam || searching} onChange={(e) => setTeamOnly(e.target.checked)} />
+                <span>เฉพาะลูกทีม{hasTeam ? ` (${teamRows.length})` : ''}</span>
+              </label>
             </div>
           )}
           {rows && (
@@ -412,10 +440,16 @@ export default function IsurveyPendingPage() {
         </div>
       )}
       {rows && (
-        /* 22/09/69 user: เลิกกรองตามทีมบนหน้านี้ — ช่างนอกทีม/ทีมอื่นทำครั้งถัดไปของเคลมเดียวกันเคยทำให้งานตกหล่น · ใช้ตัวกรองจังหวัดแทน */
+        /* 22/09/69 user: เลิกกรองตามทีมอัตโนมัติ — ช่างนอกทีม/ทีมอื่นทำครั้งถัดไปของเคลมเดียวกันเคยทำให้งานตกหล่น
+           เห็นทั้งบริษัทเป็นค่าเริ่มต้น แล้วติ๊ก "ทีมพนักงาน" เองถ้าจะดูเฉพาะลูกทีม */
         <div className="mb-2 text-xs text-gray-600">
-          แสดงงานทั้งบริษัททุกทีม (ไม่กรองตามรายชื่อลูกทีมแล้ว จะได้ไม่มีงานตกหล่น) — กรองด้วยจังหวัด/สถานะ หรือค้นหาแทน
-          {filter?.applied && <> · รายการนี้โหลดไว้ก่อนเปลี่ยนกติกา กด &quot;โหลดรายการ&quot; ใหม่จะเห็นทุกทีม</>}
+          {teamScoped ? (
+            <>แสดงเฉพาะงานของทีม <span className="font-semibold">{filter?.group_name}</span> ({filter?.members ?? 0} รายชื่อ) — {teamRows.length} จาก {rows.length} รายการที่โหลดมา
+              · ช่างที่ยังไม่ถูกใส่ชื่อในทีมจะไม่โผล่ · <button type="button" className="text-blue-700 hover:underline" onClick={() => setTeamOnly(false)}>ดูทั้งบริษัท</button></>
+          ) : (
+            <>แสดงงานทั้งบริษัททุกทีม (ไม่กรองตามรายชื่อลูกทีมอัตโนมัติ จะได้ไม่มีงานตกหล่น) — กรองด้วยจังหวัด/สถานะ
+              {hasTeam ? <> หรือติ๊ก &quot;ทีมพนักงาน&quot; เพื่อดูเฉพาะลูกทีม ({teamRows.length} รายการ · ใบของช่างนอกทีมมีป้าย &quot;นอกทีม&quot;)</> : ' หรือค้นหาแทน'}</>
+          )}
         </div>
       )}
       {rows && (hiddenApproved > 0 || showApproved) && !isAll && statuses.includes(PENDING) && (
@@ -430,7 +464,7 @@ export default function IsurveyPendingPage() {
         <div className="mb-2 text-xs text-gray-700">
           ค้นหา &quot;<span className="font-semibold">{q.trim()}</span>&quot; ใน<span className="font-semibold">ทุกสถานะ</span> ({rows.length} รายการที่โหลดมา) — พบ {visible.length} รายการ
           {' · '}<button type="button" className="text-blue-700 hover:underline" onClick={() => setQ('')}>ล้างคำค้น</button>
-          <span className="text-gray-500"> · ตัวกรองสถานะพักไว้ระหว่างค้นหา</span>
+          <span className="text-gray-500"> · ตัวกรองสถานะพักไว้ระหว่างค้นหา (จังหวัด/ทีมพนักงานด้วย)</span>
         </div>
       )}
       {rows && (
@@ -454,8 +488,9 @@ export default function IsurveyPendingPage() {
               {visible.length === 0 && (
                 <tr><td colSpan={10} className="px-3 py-6 text-center text-gray-500">
                   {rows.length === 0 ? 'ไม่มีงานในช่วงวันที่นี้'
+                    : teamScoped && teamRows.length === 0 ? 'ไม่มีงานของลูกทีมในช่วงวันที่นี้ — ติ๊ก "ทีมพนักงาน" ออกเพื่อดูทั้งบริษัท'
                     : hiddenApproved > 0 ? 'งานในสถานะที่เลือกอนุมัติแล้วทั้งหมด — กด "แสดง" ด้านบนถ้าต้องการดู'
-                    : 'ไม่มีงานในสถานะที่เลือก — เปลี่ยนสถานะด้านบน'}
+                    : 'ไม่มีงานในสถานะ/จังหวัดที่เลือก — เปลี่ยนตัวกรองด้านบน'}
                 </td></tr>
               )}
               {visible.map((r, i) => {
@@ -484,7 +519,13 @@ export default function IsurveyPendingPage() {
                         </span>
                       )}
                     </td>
-                    <td className="px-2 py-2 min-w-[9rem]">{r.surveyor_name}</td>
+                    <td className="px-2 py-2 min-w-[9rem]">
+                      {r.surveyor_name}
+                      {/* ดูทั้งบริษัทอยู่ → บอกว่าใบไหนเป็นของช่าง/บริษัทนอกรายชื่อทีม (22/09/69) */}
+                      {hasTeam && !teamScoped && r.in_team === false && (
+                        <span className="ml-1 text-[0.65rem] px-1 py-0.5 border border-gray-300 text-gray-500 bg-gray-50 whitespace-nowrap" title="ช่าง/บริษัทนี้ไม่อยู่ในรายชื่อลูกทีมของคุณ">นอกทีม</span>
+                      )}
+                    </td>
                     <td className="px-2 py-2 whitespace-nowrap">{r.acc_province}</td>
                     <td className="px-2 py-2 whitespace-nowrap">{r.plate_no}</td>
                     <td className="px-2 py-2 whitespace-nowrap">
