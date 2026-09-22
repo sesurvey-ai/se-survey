@@ -110,7 +110,7 @@ export const caseController = {
     const caseId = parseInt(req.params.id as string);
     const photoId = parseInt(req.params.photoId as string);
     if (!Number.isFinite(photoId)) throw new AppError(400, 'photoId ไม่ถูกต้อง');
-    const result = await caseService.deleteCasePhoto(caseId, photoId);
+    const result = await caseService.deleteCasePhoto(caseId, photoId, req.user?.id);
     sendSuccess(res, result);
   }),
 

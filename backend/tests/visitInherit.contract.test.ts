@@ -99,10 +99,18 @@ check('photos-zip รับเคสอ้างอิง (isurvey_reference) �
  * ⛔ OSS ตั้งชื่อรูป _1_.jpg ซ้ำทุกหมวด — ตัวดึงงาน (se-autokey download_images) ต้องกันซ้ำด้วย path ไม่ใช่ชื่อ
  *    และฝั่ง backend โหมดดึงซ้ำ/เติมรูปต้องเทียบเนื้อไฟล์ ไม่ใช่ชื่อ ไม่งั้นเติมรูปที่หายไม่ได้
  */
-check('importPhotoZip โหมด skipExisting เทียบ sha1 ของเนื้อไฟล์ (อ่านไฟล์เดิมจาก storage) ไม่ใช่ชื่อไฟล์',
-  /const sha1 = \(b: Buffer\) => createHash\('sha1'\)\.update\(b\)\.digest\('hex'\);/.test(svc)
-  && /const buf = await storage\.getBuffer\(String\(r\.file_path\)\);\s*if \(buf\) existing\.add\(sha1\(buf\)\);/.test(svc)
+check('importPhotoZip โหมด skipExisting เทียบ sha1 ของเนื้อไฟล์ ไม่ใช่ชื่อไฟล์',
+  /const sha1Of = \(b: Buffer\) => createHash\('sha1'\)\.update\(b\)\.digest\('hex'\);/.test(svc)
   && /if \(existing\.has\(h\)\) \{ skipped\+\+; continue; \}/.test(svc) && !/existing\.has\(base\)/.test(svc));
+/** ลายนิ้วมือรูป (migration 066, user เคาะ 22/09/69): จำ sha1 ต้นฉบับ + ใบที่ลบ — ดึงรูปเพิ่มไม่ต้องอ่าน storage และไม่เอาใบที่หมุนแล้ว/ลบแล้วกลับมา */
+check('ลายนิ้วมือรูป: นำเข้า/อัปโหลดเก็บ src_sha1 · ดึงซ้ำเทียบ src_sha1 + tombstones (แถวเก่า backfill ครั้งเดียว) · ลบรูปจด tombstone พร้อมคนลบ',
+  fs.existsSync(path.join(__dirname, '..', 'src', 'db', 'migrations', '066_photo_fingerprint.sql'))
+  && svc.includes("'INSERT INTO survey_photos (report_id, file_path, category, src_sha1) VALUES ($1, $2, $3, $4)'")
+  && svc.includes("'INSERT INTO survey_photos (report_id, file_path, category, src_sha1) VALUES ($1, $2, $3, $4) RETURNING id'")
+  && svc.includes("SELECT src_sha1 FROM survey_photo_tombstones WHERE report_id = $1")
+  && svc.includes("UPDATE survey_photos SET src_sha1 = $2 WHERE id = $1 AND src_sha1 IS NULL")
+  && svc.includes("INSERT INTO survey_photo_tombstones (report_id, src_sha1, file_name, deleted_by)")
+  && read('src', 'controllers', 'case.controller.ts').includes('caseService.deleteCasePhoto(caseId, photoId, req.user?.id)'));
 check('photos-zip ?topup=1 เติมรูปเคสที่อนุมัติแล้วได้เฉพาะยังไม่เข้า EMCS (emcs_imported_at ว่าง) · ไม่ส่ง topup ยังล็อกเหมือนเดิม',
   /const topup = String\(req\.query\.topup \?\? ''\) === '1';/.test(routes) && routes.includes('SELECT status, source, emcs_imported_at FROM cases WHERE id = $1')
   && /if \(!topup\) \{[\s\S]{0,200}อนุมัติแล้ว — เพิ่มรูปไม่ได้จนกว่าแอดมินจะปลดล็อก/.test(routes)

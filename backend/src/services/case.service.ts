@@ -8,6 +8,10 @@ import { omitHeavy } from './listRows';
 import { generateSurveyXml, emcsNameWarnings, sanitizeReportDates } from './xmlExport.service';
 import { invalidateCaseOwner } from '../middleware/uploadsAuth';
 import { storage, normalizeKey, contentTypeOf } from '../config/storage';
+import { createHash } from 'crypto';
+
+/** ลายนิ้วมือรูป = sha1 ของไบต์ทั้งไฟล์ (migration 066) — เก็บที่ survey_photos.src_sha1 ตอนนำเข้า/อัปโหลด · ใช้กันรูปซ้ำตอน "ดึงรูปเพิ่มจาก ISURVEY" */
+const sha1Of = (b: Buffer) => createHash('sha1').update(b).digest('hex');
 import { normalizeVehicleFields, normalizeDamageLevels } from './vehicleBrand';
 import { effectiveReport, mainLockedFields, VISIT_OWN_FIELDS } from './visitInherit';
 import type { XmlImportResult } from './xmlImport.service';
@@ -1489,8 +1493,8 @@ export const caseService = {
       const name = `web_${Date.now()}_${added}${ext}`;
       await storage.put(`${folderKey}/${name}`, f.buffer, f.mimetype);
       const ins = await db.query(
-        'INSERT INTO survey_photos (report_id, file_path, category) VALUES ($1, $2, $3) RETURNING id',
-        [reportId, `case_${caseId}/job_${caseId}/${name}`, category]);
+        'INSERT INTO survey_photos (report_id, file_path, category, src_sha1) VALUES ($1, $2, $3, $4) RETURNING id',
+        [reportId, `case_${caseId}/job_${caseId}/${name}`, category, sha1Of(f.buffer)]);
       ids.push(Number(ins.rows[0].id));
       added++;
     }
@@ -1504,14 +1508,24 @@ export const caseService = {
    * เข้าระบบประกัน" คือผู้ตรวจสอบ — รูปเบลอ/รูปซ้ำ/รูปผิดเคส ต้องเอาออกได้
    * แต่ลบได้ **ก่อนอนุมัติ** เท่านั้น หลังอนุมัติชุดรูปถือว่าถูกรับรองไปแล้ว
    */
-  async deleteCasePhoto(caseId: number, photoId: number) {
+  async deleteCasePhoto(caseId: number, photoId: number, byUserId?: number | null) {
     await assertNotApproved(caseId, { allowReference: true });
     // ผูก photo กับ case ใน query เดียว — กันลบรูปของเคสอื่นด้วยการเดา id
     const r = await db.query(
-      `SELECT sp.id, sp.file_path FROM survey_photos sp
+      `SELECT sp.id, sp.file_path, sp.report_id, sp.src_sha1 FROM survey_photos sp
          JOIN survey_reports sr ON sp.report_id = sr.id
         WHERE sp.id = $1 AND sr.case_id = $2`, [photoId, caseId]);
     if (r.rows.length === 0) throw new NotFoundError('ไม่พบรูปนี้ในเคส');
+    const row = r.rows[0] as { file_path: string; report_id: number; src_sha1: string | null };
+
+    // จำใบที่ตั้งใจลบไว้ (migration 066) — "ดึงรูปเพิ่มจาก ISURVEY"/ดึงรูปซ้ำ จะได้ไม่เอากลับมา · แถวเก่าไม่มี sha1 = คำนวณจากไฟล์ก่อนลบ
+    try {
+      let h = row.src_sha1 ? String(row.src_sha1).trim() : '';
+      if (!h) { const buf = await storage.getBuffer(String(row.file_path)); if (buf) h = sha1Of(buf); }
+      if (h) await db.query(
+        'INSERT INTO survey_photo_tombstones (report_id, src_sha1, file_name, deleted_by) VALUES ($1, $2, $3, $4)',
+        [row.report_id, h, String(row.file_path).split('/').pop() ?? null, byUserId ?? null]);
+    } catch (e) { console.warn('[photo] จดใบที่ลบไม่ได้:', (e as Error).message); }   // จดไม่ได้ก็ยังลบได้
 
     await db.query('DELETE FROM survey_photos WHERE id = $1', [photoId]);
     // ไฟล์ลบไม่ได้ก็ไม่ล้มทั้งงาน — แถวหายแล้วรูปก็ไม่โผล่ที่ไหนอีก (ไฟล์ค้างดีกว่าลบพลาด)
@@ -1576,16 +1590,24 @@ export const caseService = {
     // (22/09/69: บริษัท OSS ตั้งชื่อรูปซ้ำทุกหมวด _1_.jpg — เทียบชื่อจะข้ามรูปคนละใบ เติมรูปที่หายให้เคลม 2026013173663 ไม่ได้)
     // อ่านรายชื่อจาก DB ไม่ใช่ดิสก์ เพราะไฟล์ที่ไม่มีแถวใน survey_photos จะไม่มีใครเห็นอยู่แล้ว ถือว่ายังไม่มี ·
     // เคสใหม่ไม่มีแถว = ไม่ต้องอ่านไฟล์เลย
-    const { createHash } = await import('crypto');
-    const sha1 = (b: Buffer) => createHash('sha1').update(b).digest('hex');
+    const sha1 = sha1Of;
+    // migration 066: ลายนิ้วมือ **ต้นฉบับ** อยู่ในแถวรูป (src_sha1 — หมุนรูปแล้วก็ไม่เปลี่ยน) + ใบที่ตั้งใจลบ (survey_photo_tombstones)
+    // แถวเก่าที่ยังไม่มี sha1 → คำนวณจากไฟล์ปัจจุบันครั้งเดียวแล้วเติมให้ (ครั้งถัดไปไม่ต้องอ่าน storage อีก)
     const existing = new Set<string>();
     if (opts.skipExisting) {
-      const cur = await db.query(
-        'SELECT file_path FROM survey_photos WHERE report_id = $1', [reportId]);
+      const cur = await db.query('SELECT id, file_path, src_sha1 FROM survey_photos WHERE report_id = $1', [reportId]);
       for (const r of cur.rows) {
-        const buf = await storage.getBuffer(String(r.file_path));
-        if (buf) existing.add(sha1(buf));
+        let h = r.src_sha1 ? String(r.src_sha1).trim() : '';
+        if (!h) {
+          const buf = await storage.getBuffer(String(r.file_path));
+          if (!buf) continue;
+          h = sha1(buf);
+          await db.query('UPDATE survey_photos SET src_sha1 = $2 WHERE id = $1 AND src_sha1 IS NULL', [r.id, h]);
+        }
+        existing.add(h);
       }
+      const tomb = await db.query('SELECT src_sha1 FROM survey_photo_tombstones WHERE report_id = $1', [reportId]);
+      for (const t of tomb.rows) existing.add(String(t.src_sha1).trim());   // ใบที่หัวหน้าลบทิ้งแล้ว — ไม่เอากลับมา
     }
     let skipped = 0;
 
@@ -1607,9 +1629,9 @@ export const caseService = {
       const base = parts[parts.length - 1];
       if (!base || !IMG.test(base)) continue;             // ข้าม PDF/ไฟล์อื่น
       const data = e.getData();
+      const h = sha1(data);                               // ลายนิ้วมือต้นฉบับ — เก็บลงแถวรูปทุกใบ (migration 066)
       if (opts.skipExisting) {
-        const h = sha1(data);
-        if (existing.has(h)) { skipped++; continue; }     // ใบเดิม (เนื้อเดียวกัน) มีแล้ว — ชื่อจะต่างก็ไม่เอาซ้ำ
+        if (existing.has(h)) { skipped++; continue; }     // ใบเดิม (เนื้อเดียวกัน) มีแล้ว / ตั้งใจลบไปแล้ว — ชื่อจะต่างก็ไม่เอาซ้ำ
         existing.add(h);                                  // ใบเดียวกันโผล่ซ้ำใน zip เดียวกัน = เอาครั้งเดียว
       }
       const cat = CAT[(parts[1] || '').toUpperCase()] ?? 'รูปประกอบ';
@@ -1622,8 +1644,8 @@ export const caseService = {
       await storage.put(`${folderKey}/${name}`, data, contentTypeOf(name));
       taken.add(name);
       await db.query(
-        'INSERT INTO survey_photos (report_id, file_path, category) VALUES ($1, $2, $3)',
-        [reportId, `case_${caseId}/job_${caseId}/${name}`, cat]);
+        'INSERT INTO survey_photos (report_id, file_path, category, src_sha1) VALUES ($1, $2, $3, $4)',
+        [reportId, `case_${caseId}/job_${caseId}/${name}`, cat, h]);
       added++;
       perCat[cat] = (perCat[cat] ?? 0) + 1;
     }
