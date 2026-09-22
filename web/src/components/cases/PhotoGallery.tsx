@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import api, { getPhotoUrl } from '@/lib/api';
 
 interface Photo { id: number; file_path?: string; filename?: string; category?: string | null; }
@@ -18,7 +18,7 @@ const UPLOAD_CATS = [
  * มักมีรูป 1-5 ใบ (ช่างทยอยอัปทีหลัง) และบางรูปหัวหน้าได้มาทาง LINE/อีเมล
  * ซึ่งไม่มีวันไปโผล่ที่ระบบต้นทางให้ดึงได้เลย
  */
-function PhotoUploader({ caseId, onUploaded }: { caseId: number; onUploaded?: () => void }) {
+function PhotoUploader({ caseId, onUploaded, extra }: { caseId: number; onUploaded?: () => void; extra?: ReactNode }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [cat, setCat] = useState(UPLOAD_CATS[0]);
   const [files, setFiles] = useState<File[]>([]);
@@ -63,12 +63,51 @@ function PhotoUploader({ caseId, onUploaded }: { caseId: number; onUploaded?: ()
         {busy ? 'กำลังอัปโหลด...' : `อัปโหลด${files.length ? ` ${files.length} รูป` : ''}`}
       </button>
       {msg && <span className="text-sm text-gray-600">{msg}</span>}
+      {extra ? <span className="ml-auto flex flex-wrap items-center gap-2">{extra}</span> : null}
     </div>
   );
 }
 
+/**
+ * ปุ่ม "ดึงรูปเพิ่มจาก ISURVEY" (user สั่ง 22/09/69) — เคสที่ดึงจาก ISURVEY มักได้รูปไม่ครบ (ช่างอัปเพิ่มหลังดึง / โหลดพลาดบางใบ)
+ * กดแล้ว backend ไปอ่าน ISURVEY ด้วยบัญชีของคนกด เอาเฉพาะรูปที่ยังไม่มี (เทียบเนื้อไฟล์ ไม่ได้รูปซ้ำ)
+ * กดได้ทั้งตอนรอตรวจและอนุมัติแล้ว จนกว่าจะเข้า EMCS (พ่อของ component เป็นคนตัดสินว่าจะโชว์ปุ่มไหม)
+ */
+function IsurveyRefetch({ caseId, onDone }: { caseId: number; onDone?: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const run = async () => {
+    setBusy(true); setMsg('');
+    try {
+      const r = await api.post(`/api/isurvey/cases/${caseId}/refetch-photos`, {}, { timeout: 300000 });
+      const d = (r.data?.data ?? {}) as { added?: number; skipped?: number; isurvey_photo_listed?: number; error?: string; note?: string };
+      if (d.error) setMsg(`ดึงรูปไม่ได้: ${d.error}`);
+      else if (d.added) setMsg(`ได้รูปเพิ่ม ${d.added} ใบ (ISURVEY มี ${d.isurvey_photo_listed ?? '?'} ใบ)`);
+      else setMsg(d.note ? d.note : `ไม่มีรูปใหม่ — ISURVEY มี ${d.isurvey_photo_listed ?? '?'} ใบ ครบแล้ว`);
+      if (d.added) onDone?.();
+    } catch (e) {
+      const err = e as { response?: { status?: number; data?: { message?: string } } };
+      setMsg(err.response?.data?.message || 'ดึงรูปเพิ่มไม่สำเร็จ');
+    } finally { setBusy(false); }
+  };
+  return (
+    <>
+      <button type="button" onClick={run} disabled={busy}
+        title="อ่านรายการรูปของงานนี้บน ISURVEY ด้วยบัญชี ISURVEY ของคุณ แล้วเอาเฉพาะรูปที่เคสนี้ยังไม่มี"
+        className="rounded-none border border-[var(--md-blue)] bg-white px-3 py-1.5 text-sm font-medium text-[var(--md-blue)] hover:bg-[var(--md-blue-tint)] disabled:opacity-50">
+        {busy ? 'กำลังดึงรูปจาก ISURVEY…' : 'ดึงรูปเพิ่มจาก ISURVEY'}
+      </button>
+      {msg && <span className="text-sm text-gray-600">{msg}</span>}
+    </>
+  );
+}
+
 export default function PhotoGallery(
-  { photos, caseId, onUploaded }: { photos: Photo[]; caseId?: number; onUploaded?: () => void },
+  { photos, caseId, onUploaded, isurveyRefetch }: {
+    photos: Photo[]; caseId?: number; onUploaded?: () => void;
+    /** เคสที่ดึงจาก ISURVEY และยังไม่เข้า EMCS → โชว์ปุ่ม "ดึงรูปเพิ่มจาก ISURVEY" (แม้อนุมัติแล้วซึ่งแถบอัปโหลดถูกซ่อน) */
+    isurveyRefetch?: { caseId: number };
+  },
 ) {
   const [selected, setSelected] = useState<Photo | null>(null);
   const [zoom, setZoom] = useState(1);
@@ -331,10 +370,17 @@ buildFilter();applyFilter(ALL.length?ALL[Math.min(i,ALL.length-1)].id:null);
 
   // แถบเพิ่มรูปต้องอยู่**นอก** early-return ของ "ไม่มีรูปภาพ" — เคสที่ต้นทางยังไม่ส่งรูปมาเลย
   // คือเคสที่ต้องเห็นปุ่มมากที่สุด แต่เดิมจะไม่เห็นเพราะจอว่าง
+  // 22/09/69: ปุ่ม "ดึงรูปเพิ่มจาก ISURVEY" อยู่แถบเดียวกัน (ท้ายแถว) · เคสอนุมัติแล้ว (ไม่มีแถบอัปโหลด) ก็ยังมีปุ่มนี้ตราบใดที่ยังไม่เข้า EMCS
+  const refetchBtn = isurveyRefetch ? <IsurveyRefetch caseId={isurveyRefetch.caseId} onDone={onUploaded} /> : null;
+  const toolbar = caseId
+    ? <PhotoUploader caseId={caseId} onUploaded={onUploaded} extra={refetchBtn} />
+    : refetchBtn
+      ? <div className="mb-4 flex flex-wrap items-center gap-2 rounded-none border border-gray-200 bg-gray-50 px-3 py-2">{refetchBtn}</div>
+      : null;
   if (!photos || photos.length === 0) {
     return (
       <div>
-        {caseId ? <PhotoUploader caseId={caseId} onUploaded={onUploaded} /> : null}
+        {toolbar}
         <div className="text-gray-500 text-center py-8">ไม่มีรูปภาพ</div>
       </div>
     );
@@ -353,7 +399,7 @@ buildFilter();applyFilter(ALL.length?ALL[Math.min(i,ALL.length-1)].id:null);
 
   return (
     <>
-      {caseId ? <PhotoUploader caseId={caseId} onUploaded={onUploaded} /> : null}
+      {toolbar}
       <div className="space-y-4">
         {groups.map((g) => (
           <div key={g.category}>

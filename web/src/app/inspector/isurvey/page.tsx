@@ -34,7 +34,9 @@ type Row = {
 };
 type Filter = { applied: boolean; group_name: string | null; members: number; hidden: number; in_team?: number };
 type PullResult = {
-  caseId?: number; warnings?: string[]; photos?: { added?: number; error?: string; note?: string };
+  caseId?: number; warnings?: string[];
+  /** isurvey_photo_listed = ไฟล์จริงที่ ISURVEY มี (22/09/69) — ได้มา (added+skipped) น้อยกว่า = เตือนให้กด "ดึงรูปเพิ่ม" */
+  photos?: { added?: number; skipped?: number; error?: string; note?: string; isurvey_photo_listed?: number; isurvey_photo_failed?: number };
   /** ครั้งที่ของใบที่ดึง (ตามเลขเซอร์เวย์) + ครั้งก่อนหน้าที่ระบบดึงมาเป็นเคสอ้างอิงให้เอง (13/09/69) */
   visit_no?: number | null;
   references?: { survey_no: string; round: number; caseId?: number | null; skipped?: string | null;
@@ -95,7 +97,8 @@ export default function IsurveyPendingPage() {
   const [error, setError] = useState('');
   const [needAccount, setNeedAccount] = useState(false);
   const [pulling, setPulling] = useState<Record<string, boolean>>({});
-  const [results, setResults] = useState<Record<string, { ok: boolean; text: string; caseId?: number }>>({});
+  const [results, setResults] = useState<Record<string, { ok: boolean; text: string; caseId?: number; gap?: { listed: number; got: number } }>>({});
+  const [refetching, setRefetching] = useState<Record<string, boolean>>({});
   const [bulk, setBulk] = useState(false);
   const [loadedAt, setLoadedAt] = useState<string | null>(null);
   const [syncedAt, setSyncedAt] = useState<string | null>(null);
@@ -281,7 +284,11 @@ export default function IsurveyPendingPage() {
           + (refs.some((x) => x.caseId) ? ` (${refs.filter((x) => x.caseId).map((x) => `ครั้งที่ ${x.round}: ${refPhotos(x)}`).join(', ')})` : '')
           + (refs.some((x) => x.skipped) ? ` (ข้าม ${refs.filter((x) => x.skipped).map((x) => `ครั้งที่ ${x.round}: ${x.skipped}`).join(', ')})` : '')
         : '';
-      setResults((m) => ({ ...m, [k]: { ok: true, text: `ดึงแล้ว → เคส #${d.caseId} (${photos}${warn})${refTxt}`, caseId: d.caseId } }));
+      // ได้รูปน้อยกว่าที่ ISURVEY มี (โหลดพลาด/ต้นทางเปลี่ยนระหว่างดึง) → เตือนสีส้ม + ปุ่มดึงรูปเพิ่ม (user ขอ 22/09/69)
+      const listed = Number(d.photos?.isurvey_photo_listed ?? 0);
+      const got = Number(d.photos?.added ?? 0) + Number(d.photos?.skipped ?? 0);
+      const gap = listed > got ? { listed, got } : undefined;
+      setResults((m) => ({ ...m, [k]: { ok: true, text: `ดึงแล้ว → เคส #${d.caseId} (${photos}${warn})${refTxt}`, caseId: d.caseId, gap } }));
       setRows((rs) => (rs ?? []).map((x) => (key(x) === k ? { ...x, imported_case_id: d.caseId ?? null, imported_status: 'surveyed' } : x)));
       // ดึงทีละงาน = ตั้งใจจะไปตรวจงานนั้นต่อ → เปิดหน้าเคสให้เลย ไม่ต้องไปหาในรายการงาน
       if (opts.navigate && d.caseId) router.push(`/inspector/cases/${d.caseId}`);
@@ -297,6 +304,22 @@ export default function IsurveyPendingPage() {
   const confirmPull = (r: Row): boolean => {
     if (r.status === PENDING) return true;
     return window.confirm(`งานนี้สถานะ "${r.status}" ไม่ใช่ "รอตรวจข้อมูล"${r.emcs_sent ? ' และเข้า EMCS ไปแล้ว' : ''} — ดึงเข้ามาเป็นเคสใหม่แน่ใจ?`);
+  };
+
+  /** "ดึงรูปเพิ่ม" จากคำเตือนรูปไม่ครบ — เอาเฉพาะรูปที่เคสยังไม่มี (backend เทียบเนื้อไฟล์) */
+  const refetchPhotos = async (k: string, caseId: number) => {
+    setRefetching((p) => ({ ...p, [k]: true }));
+    try {
+      const r = await api.post(`/api/isurvey/cases/${caseId}/refetch-photos`, {}, { timeout: 300000 });
+      const d = (r.data?.data ?? {}) as { added?: number; skipped?: number; isurvey_photo_listed?: number; error?: string };
+      const listed = Number(d.isurvey_photo_listed ?? 0);
+      const got = Number(d.added ?? 0) + Number(d.skipped ?? 0);
+      setResults((m) => ({ ...m, [k]: { ...(m[k] ?? { ok: true, text: '' }),
+        text: `${m[k]?.text ?? ''} · ดึงรูปเพิ่ม ${d.error ? `ไม่ได้ (${d.error})` : `+${d.added ?? 0} ใบ`}`,
+        gap: !d.error && listed > got ? { listed, got } : undefined } }));
+    } catch (e) {
+      setResults((m) => ({ ...m, [k]: { ...(m[k] ?? { ok: true, text: '' }), text: `${m[k]?.text ?? ''} · ดึงรูปเพิ่มไม่สำเร็จ: ${errMsg(e)}` } }));
+    } finally { setRefetching((p) => ({ ...p, [k]: false })); }
   };
 
   const pullAll = async () => {
@@ -543,6 +566,13 @@ export default function IsurveyPendingPage() {
                           {res.text}{res.ok && res.caseId ? <> · <Link href={`/inspector/cases/${res.caseId}`} className="underline">เปิดเคส</Link></> : null}
                         </div>
                       )}
+                      {res?.gap && res.caseId ? (
+                        <div className="text-xs mt-0.5 text-amber-700 font-semibold">
+                          ⚠ ISURVEY มี {res.gap.listed} ได้มา {res.gap.got} ·{' '}
+                          <button type="button" disabled={Boolean(refetching[k])} onClick={() => void refetchPhotos(k, res.caseId as number)}
+                            className="underline disabled:opacity-50">{refetching[k] ? 'กำลังดึงรูป…' : 'ดึงรูปเพิ่ม'}</button>
+                        </div>
+                      ) : null}
                     </td>
                     <td className="px-2 py-2 text-right whitespace-nowrap">
                       {pullable(r) ? (

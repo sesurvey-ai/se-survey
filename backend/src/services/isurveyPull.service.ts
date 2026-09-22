@@ -333,4 +333,27 @@ export const isurveyPullService = {
     await isurveyCredService.markResult(userId, true);
     return r.result ?? {};
   },
+
+  /**
+   * ปุ่ม "ดึงรูปเพิ่มจาก ISURVEY" บนหน้าเคส (user สั่ง 22/09/69) — เอาเฉพาะรูปที่ยังไม่มี (backend เทียบเนื้อไฟล์ใน importPhotoZip)
+   * ให้เคสที่ดึงจาก ISURVEY · กดได้จนกว่าจะเข้า EMCS (รูปที่เติมหลังจากนั้นไม่ตามไป EMCS → 423) · ใช้บัญชี ISURVEY ของคนกดเหมือนตอนดึงเข้า
+   * ไม่เอาเอกสารที่ ISURVEY สร้างเองตอนปิดงาน (DOC_*) — ไม่ใช่รูปช่าง
+   */
+  async refetchPhotos(userId: number, caseId: number): Promise<Record<string, unknown>> {
+    const q = await db.query(
+      `SELECT c.source, c.status, c.emcs_imported_at, sr.claim_no, sr.survey_job_no
+         FROM cases c JOIN survey_reports sr ON sr.case_id = c.id WHERE c.id = $1`, [caseId]);
+    if (q.rows.length === 0) throw new AppError(404, 'ไม่พบเคส');
+    const c = q.rows[0] as { source: string | null; emcs_imported_at: Date | null; claim_no: string | null; survey_job_no: string | null };
+    if (!String(c.source ?? '').startsWith('isurvey')) throw new AppError(400, 'เคสนี้ไม่ได้ดึงจาก ISURVEY — ดึงรูปเพิ่มทางนี้ไม่ได้');
+    if (c.emcs_imported_at) throw new AppError(423, `เคส #${caseId} เข้า EMCS แล้ว — ดึงรูปเพิ่มทางนี้ไม่ได้ (รูปที่เติมจะไม่ตามไป EMCS)`);
+    if (!c.claim_no || !c.survey_job_no) throw new AppError(400, 'เคสนี้ไม่มีเลขเคลม/เลขเซอร์เวย์ของ ISURVEY');
+    const creds = await isurveyCredService.getPlain(userId);
+    const r = await callService<{ result: Record<string, unknown> }>('/photos',
+      { ...creds, claim: String(c.claim_no), survey_no: String(c.survey_job_no), case_id: caseId }, 300000);
+    await isurveyCredService.markResult(userId, true);
+    const result = r.result ?? {};
+    if (Number((result as { added?: number }).added ?? 0) > 0) notifyCaseChanged(caseId, 'isurvey', userId);
+    return result;
+  },
 };

@@ -107,6 +107,23 @@ check('photos-zip ?topup=1 เติมรูปเคสที่อนุม�
   /const topup = String\(req\.query\.topup \?\? ''\) === '1';/.test(routes) && routes.includes('SELECT status, source, emcs_imported_at FROM cases WHERE id = $1')
   && /if \(!topup\) \{[\s\S]{0,200}อนุมัติแล้ว — เพิ่มรูปไม่ได้จนกว่าแอดมินจะปลดล็อก/.test(routes)
   && /if \(c\.rows\[0\]\.emcs_imported_at\) \{[\s\S]{0,200}เข้า EMCS แล้ว — เติมรูปทางนี้ไม่ได้/.test(routes));
+/** ปุ่ม "ดึงรูปเพิ่มจาก ISURVEY" + เตือนรูปไม่ครบตอนดึงเข้า (user สั่ง 22/09/69) */
+const pullSvc = read('src', 'services', 'isurveyPull.service.ts');
+check('backend: POST /api/isurvey/cases/:id/refetch-photos → service /photos ด้วยบัญชีของคนกด · เข้า EMCS แล้ว 423 · ไม่ใช่เคส ISURVEY 400',
+  /router\.post\('\/cases\/:id\/refetch-photos', \.\.\.guard/.test(read('src', 'routes', 'isurvey.routes.ts'))
+  && /async refetchPhotos\(userId: number, caseId: number\)/.test(pullSvc) && pullSvc.includes("callService<{ result: Record<string, unknown> }>('/photos'")
+  && /if \(c\.emcs_imported_at\) throw new AppError\(423/.test(pullSvc) && /startsWith\('isurvey'\)\) throw new AppError\(400/.test(pullSvc));
+{
+  const gal = read('..', 'web', 'src', 'components', 'cases', 'PhotoGallery.tsx');
+  const cd2 = read('..', 'web', 'src', 'components', 'cases', 'CaseDetail.tsx');
+  const pull2 = read('..', 'web', 'src', 'app', 'inspector', 'isurvey', 'page.tsx');   // ประกาศ pull จริงอยู่ล่างกว่านี้
+  check('เว็บ: ปุ่มอยู่ในแถบรูป ทั้งตอนมีแถบอัปโหลดและตอนอนุมัติแล้ว (ไม่มีแถบ) · หน้าเคสโชว์เฉพาะเคส ISURVEY ที่ยังไม่เข้า EMCS',
+    gal.includes('ดึงรูปเพิ่มจาก ISURVEY') && gal.includes('/refetch-photos') && gal.includes('extra={refetchBtn}')
+    && cd2.includes('isurveyRefetch={fromIsurvey && !caseData?.emcs_imported_at && caseData?.id ? { caseId: Number(caseData.id) } : undefined}'));
+  check('เว็บ: หน้างานรอตรวจเตือน "ISURVEY มี N ได้มา M" เมื่อ added+skipped < isurvey_photo_listed + ปุ่มดึงรูปเพิ่ม',
+    pull2.includes('const gap = listed > got ? { listed, got } : undefined;') && pull2.includes('ISURVEY มี {res.gap.listed} ได้มา {res.gap.got}')
+    && pull2.includes("api.post(`/api/isurvey/cases/${caseId}/refetch-photos`"));
+}
 {
   const botApi = path.join(__dirname, '..', '..', '..', 'se-autokey', 'autokey', 'isurvey_api.py');
   if (fs.existsSync(botApi)) {
@@ -114,6 +131,11 @@ check('photos-zip ?topup=1 เติมรูปเคสที่อนุม�
     check('ตัวดึงงาน (se-autokey) โหลดรูปแยกโฟลเดอร์ตามหมวด + กันซ้ำด้วย path ไม่ใช่ชื่อไฟล์',
       a.includes('path_key = str(url).split("?")[0].lstrip("/")') && a.includes('target = dest_dir / cat.lower() / (f"{grp}_{name}" if grp else name)')
       && !a.includes('if not name or not url or name in seen:'));
+    const core = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'se-autokey', 'autokey', 'pull_core.py'), 'utf8');
+    const psv = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'se-autokey', 'pull_service.py'), 'utf8');
+    check('ตัวดึงงาน: service /photos → refetch_photos (topup=1, ไม่เอา DOC_*) · _push_photos คืน isurvey_photo_listed',
+      psv.includes('if path == "/photos":') && core.includes('def refetch_photos(') && core.includes('topup=True, exclude_docs=True')
+      && core.includes('"isurvey_photo_listed": stats.get("listed"') && a.includes('self.last_image_stats = {"listed": len(seen)'));
   } else {
     console.log('[SKIP] ไม่มี repo se-autokey ข้าง ๆ — ข้ามเทสตัวดึงงาน');
   }

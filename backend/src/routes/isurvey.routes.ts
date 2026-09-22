@@ -75,4 +75,10 @@ router.post('/pull', ...guard, asyncHandler(async (req: Request, res: Response) 
   sendSuccess(res, result);
 }));
 
+/** ปุ่ม "ดึงรูปเพิ่มจาก ISURVEY" บนหน้าเคส (22/09/69) — เอาเฉพาะรูปที่ยังไม่มี · เคสเข้า EMCS แล้ว = 423 */
+router.post('/cases/:id/refetch-photos', ...guard, asyncHandler(async (req: Request, res: Response) => {
+  const result = await isurveyPullService.refetchPhotos(req.user!.id, parseInt(req.params.id as string));
+  sendSuccess(res, result);
+}));
+
 export default router;

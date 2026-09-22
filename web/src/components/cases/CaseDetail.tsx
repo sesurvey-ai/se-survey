@@ -3373,6 +3373,7 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
           {/* onReviewSubmitted = โหลดเคสใหม่ทั้งก้อน — ใช้ซ้ำเพื่อให้รูปที่เพิ่งอัปโผล่ทันที
               (อนุมัติแล้วซ่อนแถบอัป — backend กันซ้ำอีกชั้นด้วย 423) */}
           <PhotoGallery photos={photos} caseId={locked ? undefined : caseData?.id}
+                        isurveyRefetch={fromIsurvey && !caseData?.emcs_imported_at && caseData?.id ? { caseId: Number(caseData.id) } : undefined}
                         onUploaded={onReviewSubmitted} />
         </div>
       </div>
