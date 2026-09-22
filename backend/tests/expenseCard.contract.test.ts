@@ -489,7 +489,7 @@ console.log('\n── ตัวสลับฟอนต์ ──');
         !sw.includes("localStorage.setItem('ui_font'") && !sw.includes('<select') && !lay.includes("localStorage.getItem('ui_font')")
         && sw.includes("localStorage.removeItem('ui_font')"));
   check('ขนาดตัวอักษรยังตั้งก่อนหน้าถูกวาด (ไม่แวบเปลี่ยนทุกครั้งที่เปิดหน้า)',
-        lay.includes("localStorage.getItem('ui_scale')") && lay.includes('dangerouslySetInnerHTML'));
+        lay.includes("localStorage.getItem('ui_scale_v2')") && lay.includes('dangerouslySetInnerHTML'));
     check('⛔ localStorage ห่อ try/catch (โหมดส่วนตัวเข้าถึงแล้ว throw)',
         (sw.match(/catch/g) ?? []).length >= 2 && lay.includes('catch(e){}'));
 
@@ -506,16 +506,17 @@ console.log('\n── ตัวสลับฟอนต์ ──');
   check('ตอนเมนูยุบก็ยังปรับขนาดได้ (ดันลงล่างสุด)',
         nav.includes('<div className="flex-1" />'));
 
-  // 22/09/69 รอบ 2 user เคาะ: ค่าเริ่มต้น **100%** (เคยเป็น 90 ครึ่งวัน) · ย่อได้ถึง 80 · ค่าที่เลือกจำต่อเครื่อง (ui_scale) ล็อกจนกว่าจะเปลี่ยนเอง
-  check('ขนาดตัวอักษร 7 ระดับ 80-140 ค่าเริ่มต้น 100', sw.includes('const SCALES = [80, 90, 100, 110, 120, 130, 140]') && sw.includes('export const DEFAULT_SCALE = 100;')
-        && sw.includes('useState(DEFAULT_SCALE)'));
-  check('CSS ไม่บังคับ font-size ของ <html> (ค่าเริ่มต้น = 100% ของเบราว์เซอร์)', !/html\s*\{[^}]*font-size/.test(css));
-  check('ปรับขนาดด้วย font-size ของ <html> เขียน px ชัดทุกระดับ',
-        sw.includes("documentElement.style.fontSize = `${(16 * pct) / 100}px`") && !sw.includes("pct === 100 ? ''"));
-  check('⛔ ช่วงค่าที่สคริปต์บูตยอมรับ ครอบคลุมทุกระดับ (80-140) และจำจาก localStorage ui_scale ทุกครั้งที่เปิด',
-        lay.includes('s>=80&&s<=140') && lay.includes("localStorage.getItem('ui_scale')"));
-  check('⛔ คีย์ขนาดตรงกันทั้งสองที่',
-        lay.includes("localStorage.getItem('ui_scale')") && sw.includes("localStorage.setItem('ui_scale'"));
+  // 22/09/69 รอบ 3 user เคาะ: "100% = ขนาด 90% เดิม" → ฐาน 14.4px ใน CSS (html 90%) · ค่าเริ่มต้น 100 · ย่อได้ถึง 80 · จำต่อเครื่อง (ui_scale_v2)
+  check('ขนาดตัวอักษร 7 ระดับ 80-140 ค่าเริ่มต้น 100 บนฐาน 14.4px', sw.includes('const SCALES = [80, 90, 100, 110, 120, 130, 140]')
+        && sw.includes('export const DEFAULT_SCALE = 100;') && sw.includes('export const BASE_PX = 14.4;') && sw.includes('useState(DEFAULT_SCALE)'));
+  check('ฐาน 100% ใหม่อยู่ใน CSS (html font-size 90% = 14.4px) ไม่ต้องรอ JS', css.includes('html { font-size: 90%; }'));
+  check('ปรับขนาดด้วย font-size ของ <html> เขียน px ชัดทุกระดับ คูณจากฐาน 14.4',
+        sw.includes("documentElement.style.fontSize = `${(BASE_PX * pct) / 100}px`") && !sw.includes("pct === 100 ? ''"));
+  check('⛔ สคริปต์บูต: ช่วง 80-140 · ฐาน 14.4 · คีย์ ui_scale_v2',
+        lay.includes('s>=80&&s<=140') && lay.includes("(14.4*s/100)+'px'") && lay.includes("localStorage.getItem('ui_scale_v2')"));
+  check('⛔ คีย์ขนาดตรงกันทั้งสองที่ (ui_scale_v2 — ฐาน 14.4px; คีย์เก่า ui_scale ถูกล้างทิ้ง)',
+        lay.includes("localStorage.getItem('ui_scale_v2')") && sw.includes("export const SCALE_KEY = 'ui_scale_v2';")
+        && sw.includes('localStorage.setItem(SCALE_KEY, String(next))') && sw.includes("localStorage.removeItem('ui_scale');"));
   /**
    * ⛔ ขนาดตัวอักษรจะโตทั้งหน้าได้ ต่อเมื่อหน้าวัดเป็น rem — ค่า px ตายตัว
    *    จะค้างขนาดเดิมแล้วหน้าเพี้ยน (ตัวหนังสือโตแต่กล่องไม่โต)

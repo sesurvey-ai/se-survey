@@ -29,12 +29,13 @@ export const metadata: Metadata = {
 /**
  * ตั้งขนาดตัวอักษรที่จำไว้ **ก่อน** หน้าถูกวาด — ถ้าไปตั้งใน useEffect
  * ผู้ใช้จะเห็นค่าตั้งต้นแวบหนึ่งแล้วค่อยกระโดดเปลี่ยนทุกครั้งที่เปิดหน้า
- * ⛔ คีย์กับช่วงค่าต้องตรงกับ AppearanceControls.tsx (ui_scale 80-140) · ไม่มีค่าที่จำไว้ = 100% ของเบราว์เซอร์ (16px) — user เคาะ 22/09/69 รอบ 2
+ * ⛔ คีย์/ฐาน/ช่วงค่าต้องตรงกับ AppearanceControls.tsx (ui_scale_v2 80-140 · ฐาน 14.4px) · ไม่มีค่าที่จำไว้ = ปล่อยให้ globals.css ให้ 90% ของ 16px
+ *    = 14.4px ซึ่งคือ "100%" ใหม่ (user เคาะ 22/09/69 รอบ 3: 100% ต้องเท่า 90% เดิม)
  * (ค่าฟอนต์ 'ui_font' ที่เคยจำไว้ไม่อ่านแล้ว — ฟอนต์เป็น Sarabun ตัวเดียวตั้งแต่ 15/09/69)
  */
 const UI_BOOT = `try{var d=document.documentElement;
-var s=+localStorage.getItem('ui_scale');
-if(s>=80&&s<=140)d.style.fontSize=(16*s/100)+'px';}catch(e){}`;
+var s=+localStorage.getItem('ui_scale_v2');
+if(s>=80&&s<=140)d.style.fontSize=(14.4*s/100)+'px';}catch(e){}`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

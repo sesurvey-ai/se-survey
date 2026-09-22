@@ -18,16 +18,20 @@ import { useEffect, useState } from 'react';
  *    ซึ่งอ่านค่าเดียวกันนี้ก่อนหน้าถูกวาด (ไม่งั้นหน้าแวบเปลี่ยนทุกครั้งที่เปิด)
  */
 /**
- * 7 ระดับ 80–140 · **ค่าเริ่มต้น 100%** = ขนาดที่ออกแบบ (user เคาะรอบ 2 22/09/69: เคยตั้ง 90 เป็นค่าเริ่มต้นอยู่ครึ่งวัน
- * แล้วเปลี่ยนเป็น "ให้แต่ละคนเลือกเอง" — เพิ่มขั้น 80/90 ให้ย่อได้ แต่ทุกคนเริ่มที่ 100)
- * ค่าที่เลือก **จำต่อเครื่อง/เบราว์เซอร์** (localStorage ui_scale) และตั้งให้ทุกครั้งที่เปิดหน้า = "ล็อก" ไว้จนกว่าจะกดเปลี่ยนเอง
- * ไม่ผูกกับบัญชี — ล็อกอินเครื่องอื่นได้ 100% · ⛔ ช่วงค่าต้องตรงกับสคริปต์บูตใน layout.tsx (s>=80&&s<=140)
+ * 7 ระดับ 80–140 · **ค่าเริ่มต้น 100%** · ฐาน 100% = **14.4px** (= 90% ของ 16px เดิม) — user เคาะรอบ 3 22/09/69:
+ * "100% ต้องเท่ากับขนาด 90% เดิม และเป็นค่าเริ่มต้น" (ลอง zoom เบราว์เซอร์ 90% แล้วพอดี) · ฐานอยู่ใน globals.css (`html { font-size: 90% }`)
+ * จึงได้ตั้งแต่ยังไม่มี JS · ทุกขั้นคูณจากฐานนี้ (80% = 11.5px … 140% = 20.2px)
+ * ค่าที่เลือก **จำต่อเครื่อง/เบราว์เซอร์** (localStorage ui_scale_v2) และตั้งให้ทุกครั้งที่เปิดหน้า = "ล็อก" ไว้จนกว่าจะกดเปลี่ยนเอง
+ * ไม่ผูกกับบัญชี · คีย์เก่า ui_scale (ฐาน 16px) ทิ้ง — ความหมายตัวเลขเปลี่ยน คนที่เคยเลือกไว้เริ่มที่ 100% ใหม่แล้วเลือกอีกทีถ้าต้องการ
+ * ⛔ BASE_PX/คีย์/ช่วงค่า ต้องตรงกับ globals.css และสคริปต์บูตใน layout.tsx (s>=80&&s<=140)
  */
 const SCALES = [80, 90, 100, 110, 120, 130, 140];
 export const DEFAULT_SCALE = 100;
+export const BASE_PX = 14.4;
+export const SCALE_KEY = 'ui_scale_v2';
 
 export const applyScale = (pct: number) => {
-  document.documentElement.style.fontSize = `${(16 * pct) / 100}px`;
+  document.documentElement.style.fontSize = `${(BASE_PX * pct) / 100}px`;
 };
 
 /** แถว "ขนาดตัวอักษร ก− 100% ก+" — วางในแผงตั้งค่า (พื้นเข้ม) */
@@ -36,10 +40,11 @@ export function FontScaleRow() {
 
   useEffect(() => {
     try {
-      const s = Number(localStorage.getItem('ui_scale'));
+      const s = Number(localStorage.getItem(SCALE_KEY));
       if (SCALES.includes(s)) setScale(s);
-      // ค่าฟอนต์ที่เคยเลือกไว้ (ก่อน 15/09/69) ไม่มีผลแล้ว — ล้างทิ้งกันสับสน
+      // ค่าฟอนต์ที่เคยเลือกไว้ (ก่อน 15/09/69) และค่าขนาดฐานเก่า ui_scale (ก่อน 22/09/69 ค่ำ) ไม่มีผลแล้ว — ล้างทิ้งกันสับสน
       localStorage.removeItem('ui_font');
+      localStorage.removeItem('ui_scale');
     } catch { /* โหมดส่วนตัว/ปิดคุกกี้ — ใช้ค่าตั้งต้นไป ไม่ต้องพัง */ }
   }, []);
 
@@ -48,7 +53,7 @@ export function FontScaleRow() {
     const next = SCALES[Math.min(SCALES.length - 1, Math.max(0, (i < 0 ? 0 : i) + dir))];
     setScale(next);
     applyScale(next);
-    try { localStorage.setItem('ui_scale', String(next)); } catch { /* เหมือนข้างบน */ }
+    try { localStorage.setItem(SCALE_KEY, String(next)); } catch { /* เหมือนข้างบน */ }
   };
 
   const BTN = 'w-7 h-7 flex items-center justify-center border border-white/25 text-gray-200 rounded'
