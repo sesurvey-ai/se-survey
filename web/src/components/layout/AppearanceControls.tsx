@@ -17,16 +17,22 @@ import { useEffect, useState } from 'react';
  * ⛔ คีย์ ui_scale กับรูปแบบค่า ต้องตรงกับสคริปต์ท้าย <head> ใน layout.tsx
  *    ซึ่งอ่านค่าเดียวกันนี้ก่อนหน้าถูกวาด (ไม่งั้นหน้าแวบเปลี่ยนทุกครั้งที่เปิด)
  */
-/** 5 ระดับ · 100% คือขนาดออกแบบ ที่เหลือคือใหญ่ขึ้นเท่านั้น (เล็กกว่านี้อ่านฟอร์มไม่ไหว) */
-const SCALES = [100, 110, 120, 130, 140];
+/**
+ * 6 ระดับ · **ค่าเริ่มต้น 90%** (user เคาะ 22/09/69: ลอง zoom เบราว์เซอร์ 90% แล้ว "กำลังดี ไม่ใหญ่เกิน") · 100% = ขนาดที่ออกแบบ ·
+ * เล็กกว่า 90 อ่านฟอร์มไม่ไหว · ค่าเริ่มต้นอยู่ใน globals.css (`html { font-size: 90% }`) จึงได้ 90% ตั้งแต่ยังไม่มี JS —
+ * คนที่กดเลือกเองจะได้ inline style ทับ (รวม 100% ที่ต้องเขียน 16px ชัด ๆ ไม่ใช่ล้างค่า ไม่งั้นตกกลับไป 90)
+ * ⛔ DEFAULT_SCALE ต้องตรงกับ globals.css และช่วงค่าในสคริปต์บูต layout.tsx
+ */
+const SCALES = [90, 100, 110, 120, 130, 140];
+export const DEFAULT_SCALE = 90;
 
 export const applyScale = (pct: number) => {
-  document.documentElement.style.fontSize = pct === 100 ? '' : `${(16 * pct) / 100}px`;
+  document.documentElement.style.fontSize = `${(16 * pct) / 100}px`;
 };
 
 /** แถว "ขนาดตัวอักษร ก− 100% ก+" — วางในแผงตั้งค่า (พื้นเข้ม) */
 export function FontScaleRow() {
-  const [scale, setScale] = useState(100);
+  const [scale, setScale] = useState(DEFAULT_SCALE);
 
   useEffect(() => {
     try {

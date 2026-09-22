@@ -35,6 +35,12 @@
   --md-purple: #831cd2;    /* ตีกลับผู้สำรวจ */
 }
 
+/* ค่าเริ่มต้นขนาดตัวอักษรทั้งเว็บ = 90% ของ 16px (user เคาะ 22/09/69: ลอง zoom เบราว์เซอร์ 90% แล้วพอดี ไม่ใหญ่เกิน)
+   ทั้งเว็บวัดเป็น rem จึงย่อตามกันหมด (ต่างจาก zoom เบราว์เซอร์ตรงค่า px คงที่กับจุดสลับเลย์เอาต์ที่ไม่เปลี่ยน)
+   คนที่เลือกขนาดเองในเมนูตั้งค่า (localStorage ui_scale) ได้ inline style บน <html> ทับค่านี้
+   ⛔ ต้องตรงกับ DEFAULT_SCALE ใน components/layout/AppearanceControls.tsx */
+html { font-size: 90%; }
+
 body {
   color: var(--foreground);
   background: var(--background);
