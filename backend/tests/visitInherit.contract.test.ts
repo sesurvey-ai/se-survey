@@ -119,6 +119,8 @@ check('backend: POST /api/isurvey/cases/:id/refetch-photos → service /photos �
   const pull2 = read('..', 'web', 'src', 'app', 'inspector', 'isurvey', 'page.tsx');   // ประกาศ pull จริงอยู่ล่างกว่านี้
   check('เว็บ: ปุ่มอยู่ในแถบรูป ทั้งตอนมีแถบอัปโหลดและตอนอนุมัติแล้ว (ไม่มีแถบ) · หน้าเคสโชว์เฉพาะเคส ISURVEY ที่ยังไม่เข้า EMCS',
     gal.includes('ดึงรูปเพิ่มจาก ISURVEY') && gal.includes('/refetch-photos') && gal.includes('extra={refetchBtn}')
+    // ⛔ ต้องไม่ใช่ <button> — เคสอนุมัติแล้วอยู่ใน <fieldset disabled> ปุ่มจริงจะถูกปิดตาม (กดแล้วเงียบ เจอ 22/09/69)
+    && gal.includes('<span role="button" tabIndex={0} onClick={go}')
     && cd2.includes('isurveyRefetch={fromIsurvey && !caseData?.emcs_imported_at && caseData?.id ? { caseId: Number(caseData.id) } : undefined}'));
   check('เว็บ: หน้างานรอตรวจเตือน "ISURVEY มี N ได้มา M" เมื่อ added+skipped < isurvey_photo_listed + ปุ่มดึงรูปเพิ่ม',
     pull2.includes('const gap = listed > got ? { listed, got } : undefined;') && pull2.includes('ISURVEY มี {res.gap.listed} ได้มา {res.gap.got}')

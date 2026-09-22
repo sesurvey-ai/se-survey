@@ -90,13 +90,17 @@ function IsurveyRefetch({ caseId, onDone }: { caseId: number; onDone?: () => voi
       setMsg(err.response?.data?.message || 'ดึงรูปเพิ่มไม่สำเร็จ');
     } finally { setBusy(false); }
   };
+  // ⛔ ไม่ใช่ <button>: หน้าเคสที่อนุมัติแล้วครอบทุกอย่างด้วย <fieldset disabled> (CaseDetail) ซึ่งปิด <button> ทุกตัวข้างในรวมตัวนี้
+  //    (เจอตอนเทส 22/09/69: กดแล้วเงียบ) — ปุ่มนี้ต้องกดได้แม้ล็อกแล้ว จึงใช้ <span role="button"> ที่ fieldset ไม่ยุ่ง
+  const go = () => { if (!busy) void run(); };
   return (
     <>
-      <button type="button" onClick={run} disabled={busy}
+      <span role="button" tabIndex={0} onClick={go} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } }}
+        aria-disabled={busy}
         title="อ่านรายการรูปของงานนี้บน ISURVEY ด้วยบัญชี ISURVEY ของคุณ แล้วเอาเฉพาะรูปที่เคสนี้ยังไม่มี"
-        className="rounded-none border border-[var(--md-blue)] bg-white px-3 py-1.5 text-sm font-medium text-[var(--md-blue)] hover:bg-[var(--md-blue-tint)] disabled:opacity-50">
+        className={`inline-block select-none rounded-none border border-[var(--md-blue)] bg-white px-3 py-1.5 text-sm font-medium text-[var(--md-blue)] ${busy ? 'opacity-50 cursor-wait' : 'cursor-pointer hover:bg-[var(--md-blue-tint)]'}`}>
         {busy ? 'กำลังดึงรูปจาก ISURVEY…' : 'ดึงรูปเพิ่มจาก ISURVEY'}
-      </button>
+      </span>
       {msg && <span className="text-sm text-gray-600">{msg}</span>}
     </>
   );
