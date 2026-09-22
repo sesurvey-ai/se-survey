@@ -506,13 +506,14 @@ console.log('\n── ตัวสลับฟอนต์ ──');
   check('ตอนเมนูยุบก็ยังปรับขนาดได้ (ดันลงล่างสุด)',
         nav.includes('<div className="flex-1" />'));
 
-  // 22/09/69 user เคาะ: ค่าเริ่มต้น 90% (ลอง zoom เบราว์เซอร์ 90% แล้วพอดี) — CSS ให้ 90 ตั้งแต่ยังไม่มี JS · เลือกเองได้ 90-140
-  check('ขนาดตัวอักษร 6 ระดับ เริ่ม 90', sw.includes('const SCALES = [90, 100, 110, 120, 130, 140]') && sw.includes('export const DEFAULT_SCALE = 90;')
+  // 22/09/69 รอบ 2 user เคาะ: ค่าเริ่มต้น **100%** (เคยเป็น 90 ครึ่งวัน) · ย่อได้ถึง 80 · ค่าที่เลือกจำต่อเครื่อง (ui_scale) ล็อกจนกว่าจะเปลี่ยนเอง
+  check('ขนาดตัวอักษร 7 ระดับ 80-140 ค่าเริ่มต้น 100', sw.includes('const SCALES = [80, 90, 100, 110, 120, 130, 140]') && sw.includes('export const DEFAULT_SCALE = 100;')
         && sw.includes('useState(DEFAULT_SCALE)'));
-  check('ค่าเริ่มต้น 90% อยู่ใน CSS (html font-size 90%) ไม่ต้องรอ JS', css.includes('html { font-size: 90%; }'));
-  check('ปรับขนาดด้วย font-size ของ <html> เขียน px ชัดทุกระดับ (100% ต้องเป็น 16px ไม่ใช่ล้างค่า ไม่งั้นตกกลับ 90)',
+  check('CSS ไม่บังคับ font-size ของ <html> (ค่าเริ่มต้น = 100% ของเบราว์เซอร์)', !/html\s*\{[^}]*font-size/.test(css));
+  check('ปรับขนาดด้วย font-size ของ <html> เขียน px ชัดทุกระดับ',
         sw.includes("documentElement.style.fontSize = `${(16 * pct) / 100}px`") && !sw.includes("pct === 100 ? ''"));
-  check('⛔ ช่วงค่าที่สคริปต์บูตยอมรับ ครอบคลุมทุกระดับ (90-140)', lay.includes('s>=90&&s<=140'));
+  check('⛔ ช่วงค่าที่สคริปต์บูตยอมรับ ครอบคลุมทุกระดับ (80-140) และจำจาก localStorage ui_scale ทุกครั้งที่เปิด',
+        lay.includes('s>=80&&s<=140') && lay.includes("localStorage.getItem('ui_scale')"));
   check('⛔ คีย์ขนาดตรงกันทั้งสองที่',
         lay.includes("localStorage.getItem('ui_scale')") && sw.includes("localStorage.setItem('ui_scale'"));
   /**
