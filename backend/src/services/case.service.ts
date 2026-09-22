@@ -1572,13 +1572,20 @@ export const caseService = {
     if (rid.rows.length === 0) throw new NotFoundError('Report not found');
     const reportId = rid.rows[0].id;
 
-    // ชื่อไฟล์ที่เคสนี้มีอยู่แล้ว — ใช้เฉพาะโหมดดึงซ้ำ (อ่านจาก DB ไม่ใช่ดิสก์
-    // เพราะไฟล์ที่ไม่มีแถวใน survey_photos จะไม่มีใครเห็นอยู่แล้ว ถือว่ายังไม่มี)
+    // รูปที่เคสนี้มีอยู่แล้ว — ใช้เฉพาะโหมดดึงซ้ำ/เติมรูป: เทียบด้วย **เนื้อไฟล์ (sha1)** ไม่ใช่ชื่อไฟล์
+    // (22/09/69: บริษัท OSS ตั้งชื่อรูปซ้ำทุกหมวด _1_.jpg — เทียบชื่อจะข้ามรูปคนละใบ เติมรูปที่หายให้เคลม 2026013173663 ไม่ได้)
+    // อ่านรายชื่อจาก DB ไม่ใช่ดิสก์ เพราะไฟล์ที่ไม่มีแถวใน survey_photos จะไม่มีใครเห็นอยู่แล้ว ถือว่ายังไม่มี ·
+    // เคสใหม่ไม่มีแถว = ไม่ต้องอ่านไฟล์เลย
+    const { createHash } = await import('crypto');
+    const sha1 = (b: Buffer) => createHash('sha1').update(b).digest('hex');
     const existing = new Set<string>();
     if (opts.skipExisting) {
       const cur = await db.query(
         'SELECT file_path FROM survey_photos WHERE report_id = $1', [reportId]);
-      for (const r of cur.rows) existing.add(String(r.file_path).split('/').pop() ?? '');
+      for (const r of cur.rows) {
+        const buf = await storage.getBuffer(String(r.file_path));
+        if (buf) existing.add(sha1(buf));
+      }
     }
     let skipped = 0;
 
@@ -1599,7 +1606,12 @@ export const caseService = {
       const parts = e.entryName.split('/');
       const base = parts[parts.length - 1];
       if (!base || !IMG.test(base)) continue;             // ข้าม PDF/ไฟล์อื่น
-      if (opts.skipExisting && existing.has(base)) { skipped++; continue; }
+      const data = e.getData();
+      if (opts.skipExisting) {
+        const h = sha1(data);
+        if (existing.has(h)) { skipped++; continue; }     // ใบเดิม (เนื้อเดียวกัน) มีแล้ว — ชื่อจะต่างก็ไม่เอาซ้ำ
+        existing.add(h);                                  // ใบเดียวกันโผล่ซ้ำใน zip เดียวกัน = เอาครั้งเดียว
+      }
       const cat = CAT[(parts[1] || '').toUpperCase()] ?? 'รูปประกอบ';
       // กันชื่อชนกันข้ามหมวด (zip ของพอร์ทัลตั้งชื่อซ้ำได้) — ไม่ทับไฟล์เดิม
       let name = base;
@@ -1607,7 +1619,7 @@ export const caseService = {
         const dot = base.lastIndexOf('.');
         name = `${base.slice(0, dot)}_${i}${base.slice(dot)}`;
       }
-      await storage.put(`${folderKey}/${name}`, e.getData(), contentTypeOf(name));
+      await storage.put(`${folderKey}/${name}`, data, contentTypeOf(name));
       taken.add(name);
       await db.query(
         'INSERT INTO survey_photos (report_id, file_path, category) VALUES ($1, $2, $3)',

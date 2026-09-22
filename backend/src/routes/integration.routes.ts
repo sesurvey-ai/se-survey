@@ -209,12 +209,22 @@ router.post('/cases/:id/photos-zip', integrationAuth, uploadZipOnly,
   asyncHandler(async (req: Request, res: Response) => {
     const caseId = parseInt(req.params.id as string);
     const { db } = await import('../config/database');
-    const c = await db.query('SELECT status, source FROM cases WHERE id = $1', [caseId]);
+    const c = await db.query('SELECT status, source, emcs_imported_at FROM cases WHERE id = $1', [caseId]);
     if (c.rows.length === 0) { res.status(404).json({ success: false, message: 'case not found' }); return; }
     const isReference = c.rows[0].source === 'isurvey_reference';
+    // 22/09/69 "เติมรูป" (?topup=1 ระบุชัด ๆ เท่านั้น): เคสที่อนุมัติแล้วรับรูปเพิ่มได้ **ถ้ายังไม่เข้า EMCS** — ใช้เติมรูปที่ตัวดึงงาน
+    // เคยทิ้งเพราะชื่อไฟล์ซ้ำข้ามหมวด (เคลม 2026013173663 หาย 13 ใบ) · เข้า EMCS แล้วห้าม เพราะรูปที่เติมจะไม่ตามไป EMCS เอง
+    // (ต้องให้บอทกรอกทับเรื่องเดิม) · เทียบซ้ำด้วยเนื้อไฟล์ (importPhotoZip) จึงยิงซ้ำได้ไม่ได้รูปซ้ำ
+    const topup = String(req.query.topup ?? '') === '1';
     if (c.rows[0].status === 'reviewed' && !isReference) {
-      res.status(423).json({ success: false, message: `เคส #${caseId} อนุมัติแล้ว — เพิ่มรูปไม่ได้จนกว่าแอดมินจะปลดล็อก` });
-      return;
+      if (!topup) {
+        res.status(423).json({ success: false, message: `เคส #${caseId} อนุมัติแล้ว — เพิ่มรูปไม่ได้จนกว่าแอดมินจะปลดล็อก` });
+        return;
+      }
+      if (c.rows[0].emcs_imported_at) {
+        res.status(423).json({ success: false, message: `เคส #${caseId} เข้า EMCS แล้ว — เติมรูปทางนี้ไม่ได้ (รูปที่เติมจะไม่ตามไป EMCS)` });
+        return;
+      }
     }
     if (c.rows[0].source !== 'isurvey_live' && !isReference) {
       res.status(403).json({ success: false, message: `ทางนี้ใช้ได้เฉพาะเคสที่ดึงจาก ISURVEY (source='${c.rows[0].source}')` });
@@ -222,7 +232,11 @@ router.post('/cases/:id/photos-zip', integrationAuth, uploadZipOnly,
     }
     if (!req.file) { res.status(400).json({ success: false, message: 'ต้องแนบไฟล์ zip ในฟิลด์ชื่อ zip' }); return; }
     const photos = await caseService.importPhotoZip(caseId, req.file.buffer, { skipExisting: true });
-    res.json({ success: true, data: photos });
+    if (topup && photos.added > 0) {
+      console.log(`[photos-zip] เติมรูปเคส #${caseId} (อนุมัติแล้ว ยังไม่เข้า EMCS): +${photos.added} ข้าม ${photos.skipped} ${JSON.stringify(photos.perCat)}`);
+      notifyCaseChanged(caseId, 'saved', null);   // หน้าเคส/รายการที่เปิดอยู่รีเฟรชแกลเลอรี
+    }
+    res.json({ success: true, data: { ...photos, topup } });
   }));
 
 // XML สำหรับ import เข้า EMCS — เนื้อหาเดียวกับ GET /api/cases/:id/export-xml (ฝั่ง user)

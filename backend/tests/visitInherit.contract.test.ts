@@ -94,6 +94,30 @@ check('รายการเคสสำหรับบอทส่ง visit_no 
 check('photos-zip รับเคสอ้างอิง (isurvey_reference) ทั้งที่ reviewed · เคสที่คนอนุมัติจริงยังล็อก',
   /const isReference = c\.rows\[0\]\.source === 'isurvey_reference'/.test(routes) && /status === 'reviewed' && !isReference/.test(routes)
   && routes.includes('อนุมัติแล้ว — เพิ่มรูปไม่ได้จนกว่าแอดมินจะปลดล็อก'));
+/**
+ * ── รูปชื่อซ้ำข้ามหมวด (22/09/69, เคลม 2026013173663 หาย 13/26 ใบ) ──
+ * ⛔ OSS ตั้งชื่อรูป _1_.jpg ซ้ำทุกหมวด — ตัวดึงงาน (se-autokey download_images) ต้องกันซ้ำด้วย path ไม่ใช่ชื่อ
+ *    และฝั่ง backend โหมดดึงซ้ำ/เติมรูปต้องเทียบเนื้อไฟล์ ไม่ใช่ชื่อ ไม่งั้นเติมรูปที่หายไม่ได้
+ */
+check('importPhotoZip โหมด skipExisting เทียบ sha1 ของเนื้อไฟล์ (อ่านไฟล์เดิมจาก storage) ไม่ใช่ชื่อไฟล์',
+  /const sha1 = \(b: Buffer\) => createHash\('sha1'\)\.update\(b\)\.digest\('hex'\);/.test(svc)
+  && /const buf = await storage\.getBuffer\(String\(r\.file_path\)\);\s*if \(buf\) existing\.add\(sha1\(buf\)\);/.test(svc)
+  && /if \(existing\.has\(h\)\) \{ skipped\+\+; continue; \}/.test(svc) && !/existing\.has\(base\)/.test(svc));
+check('photos-zip ?topup=1 เติมรูปเคสที่อนุมัติแล้วได้เฉพาะยังไม่เข้า EMCS (emcs_imported_at ว่าง) · ไม่ส่ง topup ยังล็อกเหมือนเดิม',
+  /const topup = String\(req\.query\.topup \?\? ''\) === '1';/.test(routes) && routes.includes('SELECT status, source, emcs_imported_at FROM cases WHERE id = $1')
+  && /if \(!topup\) \{[\s\S]{0,200}อนุมัติแล้ว — เพิ่มรูปไม่ได้จนกว่าแอดมินจะปลดล็อก/.test(routes)
+  && /if \(c\.rows\[0\]\.emcs_imported_at\) \{[\s\S]{0,200}เข้า EMCS แล้ว — เติมรูปทางนี้ไม่ได้/.test(routes));
+{
+  const botApi = path.join(__dirname, '..', '..', '..', 'se-autokey', 'autokey', 'isurvey_api.py');
+  if (fs.existsSync(botApi)) {
+    const a = fs.readFileSync(botApi, 'utf8');
+    check('ตัวดึงงาน (se-autokey) โหลดรูปแยกโฟลเดอร์ตามหมวด + กันซ้ำด้วย path ไม่ใช่ชื่อไฟล์',
+      a.includes('path_key = str(url).split("?")[0].lstrip("/")') && a.includes('target = dest_dir / cat.lower() / (f"{grp}_{name}" if grp else name)')
+      && !a.includes('if not name or not url or name in seen:'));
+  } else {
+    console.log('[SKIP] ไม่มี repo se-autokey ข้าง ๆ — ข้ามเทสตัวดึงงาน');
+  }
+}
 
 /* ── เคสอ้างอิงแก้ข้อมูลตั้งต้นได้โดยไม่ต้องปลดล็อก ── */
 check('ตัวล็อกอนุมัติมีช่องยกเว้นเคสอ้างอิง · แก้รายงาน + รูป 4 ฟังก์ชันยอม · ตัวระบุตัวเคสยังล็อก',
