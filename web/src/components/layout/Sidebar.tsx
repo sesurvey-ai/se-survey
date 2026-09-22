@@ -85,7 +85,10 @@ export default function Sidebar() {
           แถมเนื้อหาข้างในสลับทันทีตั้งแต่เฟรมแรก เมนูเต็มจึงถูกยัดในแถบ 56px แล้วค่อย ๆ คลี่
           ดูเป็นตัวหนังสือเด้งไปมา ไม่ใช่เลื่อนออก · ตัดทิ้ง = คำนวณเลย์เอาต์ครั้งเดียว เปลี่ยนทันที
           · overflow-hidden กันเมนูเต็มล้นออกนอกแถบตอนสลับ */}
-      <aside className={`bg-[var(--md-ink)] text-white sticky top-0 self-start h-screen shrink-0 flex flex-col overflow-hidden ${collapsed ? 'w-14' : 'w-64'}`}>
+      {/* ⛔ z-30: sticky สร้าง stacking context ของตัวเอง แผงตั้งค่า (z-40 ข้างใน) จึงไม่มีผลกับเนื้อหาข้างนอก —
+          รูปในแกลเลอรีหน้าเคส (relative/absolute มาทีหลังใน DOM) เคยวาดทับแผงตั้งค่าจนกดปุ่มขนาดตัวอักษรไม่ได้
+          (user เจอ 22/09/69) · ยกทั้งแถบขึ้นเหนือเนื้อหา (z-30) แต่ยังต่ำกว่ากล่องโต้ตอบ/หน้าต่างดูรูป (z-50) */}
+      <aside className={`bg-[var(--md-ink)] text-white sticky top-0 z-30 self-start h-screen shrink-0 flex flex-col overflow-hidden ${collapsed ? 'w-14' : 'w-64'}`}>
         {collapsed ? (
           <>
           <button
