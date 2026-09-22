@@ -17,7 +17,8 @@ const read = (...p: string[]) => fs.readFileSync(path.join(__dirname, '..', ...p
 
 const mig = read('src', 'db', 'migrations', '067_cancel_status.sql');
 check('migration 067: คอลัมน์ยกเลิกบน cases_all + สร้าง VIEW cases ซ้ำ (กติกา CLAUDE.md)',
-  mig.includes('ALTER TABLE cases_all ADD COLUMN IF NOT EXISTS cancelled_at') && mig.includes('status_before_cancel')
+  mig.includes("ALTER TYPE case_status ADD VALUE IF NOT EXISTS 'cancelled';")   // status เป็น ENUM — ลืมแล้ว 500 (เจอ 22/09/69)
+  && mig.includes('ALTER TABLE cases_all ADD COLUMN IF NOT EXISTS cancelled_at') && mig.includes('status_before_cancel')
   && mig.includes('CREATE OR REPLACE VIEW cases AS SELECT * FROM cases_all WHERE deleted_at IS NULL;'));
 
 const svc = read('src', 'services', 'case.service.ts');
