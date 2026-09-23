@@ -120,7 +120,7 @@ check('หน้าแอดมินฟังสัญญาณแล้วโ�
   check('หน้าจ่ายงานกับหน้าตรวจใช้ลิสต์เดียวกัน (กันสองหน้าเพี้ยนจากกัน)',
         read('..', 'web', 'src', 'components', 'cases', 'AssignSurveyor.tsx').includes('CLAIM_TYPE_OPTIONS')
         && read('..', 'web', 'src', 'components', 'cases', 'CaseDetail.tsx').includes('CLAIM_TYPE_OPTIONS'));
-  check('controller ส่ง claim_type ต่อเข้า service', ctl.includes('caseService.assign(caseId, surveyor_id, claim_type)'));
+  check('controller ส่ง claim_type ต่อเข้า service (+ ผู้จ่ายงาน สำหรับประวัติจ่ายงาน 22/09/69)', ctl.includes('caseService.assign(caseId, surveyor_id, claim_type, req.user!.id)'));
   // ⛔ ไม่เลือก = ต้องไม่ล้างค่าเดิม (reassign หลังช่างปฏิเสธ จะได้ไม่ลบของที่กรอกไว้)
   check('ไม่เลือกประเภทเคลม = ไม่ทับของเดิม (COALESCE)',
         svc.includes('claim_type = COALESCE($2, claim_type)'));

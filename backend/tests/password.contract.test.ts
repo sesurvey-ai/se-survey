@@ -87,9 +87,11 @@ check('zod ของแอดมินไม่ต่ำกว่ากติก
       !/password: z\.string\(\)\.min\([0-7][,)]/.test(adminRoutes));
 
 console.log('\n── หน้าเว็บ ──');
+// 22/09/69 user ย้าย "เปลี่ยนรหัสผ่าน" จากแถบหัวไปไว้ในเมนูตั้งค่า (รูปเฟืองท้ายเมนูข้าง) — ทุก role ยังเห็น
 const header = read('..', 'web', 'src', 'components', 'layout', 'Header.tsx');
-check('มีปุ่มเปลี่ยนรหัสผ่านบนแถบหัว (ทุก role ที่เข้าเว็บเห็น)',
-      header.includes('เปลี่ยนรหัสผ่าน') && header.includes('ChangePasswordDialog'));
+const settings = read('..', 'web', 'src', 'components', 'layout', 'SettingsMenu.tsx');
+check('มีรายการเปลี่ยนรหัสผ่านในเมนูตั้งค่า (ทุก role ที่เข้าเว็บเห็น) และไม่อยู่บนแถบหัวแล้ว',
+      settings.includes('เปลี่ยนรหัสผ่าน') && settings.includes('ChangePasswordDialog') && !header.includes('ChangePasswordDialog'));
 
 const dlg = read('..', 'web', 'src', 'components', 'layout', 'ChangePasswordDialog.tsx');
 check('ให้พิมพ์รหัสใหม่ 2 ครั้งกันพิมพ์ผิด', dlg.includes('พิมพ์รหัสผ่านใหม่อีกครั้ง'));

@@ -185,7 +185,7 @@ check('ตัวไล่ช่องบังคับข้ามช่อง�
   /if \(mainFromFirstRef\.current && mainLockedRef\.current\.has\(\(el as HTMLInputElement\)\.name\)\) return;/.test(cd)
   && cd.includes("form.querySelector('[name=\"survey_result\"]') as HTMLTextAreaElement | null") && cd.includes('setResultEmpty('));
 check('เคสอ้างอิง: locked = approved && !isReference · แถบ "แก้ข้อมูลตั้งต้นได้" + ปุ่มบันทึก',
-  cd.includes('const locked = approved && !isReference;') && cd.includes('อ้างอิง ISURVEY · แก้ข้อมูลตั้งต้นได้')
+  cd.includes('const locked = (approved && !isReference) || cancelled;')   // 22/09/69 ยกเลิกแล้วก็ล็อกเหมือนอนุมัติ && cd.includes('อ้างอิง ISURVEY · แก้ข้อมูลตั้งต้นได้')
   && /const actionBar = approved && isReference \? \(/.test(cd));
 const pull = read('..', 'web', 'src', 'app', 'inspector', 'isurvey', 'page.tsx');
 check('หน้าดึงงานบอกจำนวนรูปของแต่ละครั้งก่อนหน้า', pull.includes('refPhotos(x)'));
