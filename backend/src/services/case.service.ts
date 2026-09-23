@@ -443,6 +443,10 @@ export const caseService = {
     if (caseResult.rows.length === 0) throw new NotFoundError('Case not found');
 
     const caseData = caseResult.rows[0];
+    // ยกเลิกแล้ว (23/09/69) — guard ใน UPDATE กันอยู่แล้ว แต่ข้อความเดิม "อาจถูกมอบหมายไปแล้ว" ทำให้คนจ่ายงานเข้าใจผิด
+    if (caseData.status === 'cancelled') {
+      throw new ForbiddenError('เคสนี้ยกเลิกแล้ว — ต้องให้แอดมินกด "เลิกยกเลิก" ที่หน้าเคสก่อนจึงจะมอบหมายได้');
+    }
 
     const surveyorResult = await db.query(
       "SELECT id, fcm_token, first_name, last_name FROM users WHERE id = $1 AND role = 'surveyor' AND is_active = true",
@@ -1121,8 +1125,10 @@ export const caseService = {
     // (อยู่คนละตารางกับ cases จึงต้อง join ไม่ใช่ SELECT * เฉย ๆ)
     // ชื่อคนที่ปฏิเสธ join แยก — assigned_to ถูกล้างตอนปฏิเสธ จึงหาจากตรงนั้นไม่ได้
     const result = await db.query(
-      `SELECT c.*, sr.acc_province, sr.acc_district, sr.claim_type,
-              d.first_name AS declined_first_name, d.last_name AS declined_last_name, d.code AS declined_code
+      `SELECT c.*, sr.acc_province, sr.acc_district, sr.claim_type, sr.claim_no,
+              d.first_name AS declined_first_name, d.last_name AS declined_last_name, d.code AS declined_code,
+              -- หน้าจ่ายงานของคอลเซ็นเตอร์โชว์ว่าเคสถูกยกเลิกโดยใคร (23/09/69)
+              (SELECT TRIM(COALESCE(cu.first_name, '') || ' ' || COALESCE(cu.last_name, '')) FROM users cu WHERE cu.id = c.cancelled_by) AS cancelled_by_name
          FROM cases c
          LEFT JOIN survey_reports sr ON sr.case_id = c.id
          LEFT JOIN users d ON d.id = c.declined_by
@@ -2204,6 +2210,8 @@ export const caseService = {
       `SELECT c.*, u.first_name AS surveyor_first_name, u.last_name AS surveyor_last_name,
               d.first_name AS declined_first_name, d.last_name AS declined_last_name, d.code AS declined_code,
               sr.claim_no, sr.survey_job_no, sr.claim_ref_no,
+              -- ยกเลิกงาน (23/09/69): แถวที่ยกเลิกโชว์เหตุผล + คนยกเลิกใต้ป้าย (cancel_reason/cancelled_at มากับ c.* แล้ว)
+              (SELECT TRIM(COALESCE(cu.first_name, '') || ' ' || COALESCE(cu.last_name, '')) FROM users cu WHERE cu.id = c.cancelled_by) AS cancelled_by_name,
               COALESCE(c.visit_no, ROW_NUMBER() OVER (PARTITION BY sr.claim_no ORDER BY c.created_at))::int AS visit_count,${LAST_RECALL_SELECT}
        FROM cases c LEFT JOIN users u ON c.assigned_to = u.id
        LEFT JOIN users d ON c.declined_by = d.id
@@ -2240,6 +2248,8 @@ export const caseService = {
         `SELECT c.*, u.first_name AS surveyor_first_name, u.last_name AS surveyor_last_name,
                 d.first_name AS declined_first_name, d.last_name AS declined_last_name, d.code AS declined_code,
                 sr.claim_no, sr.survey_job_no, sr.claim_ref_no,
+                -- ยกเลิกงาน (23/09/69): แถวที่ยกเลิกโชว์เหตุผล + คนยกเลิกใต้ป้าย (cancel_reason/cancelled_at มากับ c.* แล้ว)
+                (SELECT TRIM(COALESCE(cu.first_name, '') || ' ' || COALESCE(cu.last_name, '')) FROM users cu WHERE cu.id = c.cancelled_by) AS cancelled_by_name,
                 COALESCE(c.visit_no, ROW_NUMBER() OVER (PARTITION BY sr.claim_no ORDER BY c.created_at))::int AS visit_count,${LAST_RECALL_SELECT}
          FROM cases c
          LEFT JOIN users u ON c.assigned_to = u.id

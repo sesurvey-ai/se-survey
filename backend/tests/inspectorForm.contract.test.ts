@@ -199,11 +199,17 @@ check('deps ครบทุกสถานะไฮไลต์ที่ React �
  * เก็บไปด้วยตอนกดบันทึก → เขียนทับตัวระบุตัวเคสที่ตั้งใจล็อกไว้ (และซ้ำชื่อกับที่อื่นด้วย)
  */
 console.log('\n── หน้าตรวจเคส: แผงแก้ของแอดมินต้องไม่หลุดเข้าฟอร์มหลัก ──');
-const panel = /\{keyEdit && \(([\s\S]*?)\n              \)\}/.exec(src);
-check('มีแผงแก้ของแอดมิน', Boolean(panel));
+// 23/09/69 แผงย้ายออกมาอยู่เหนือ <fieldset disabled> (ย่อหน้า 6 ช่อง) — แอดมินเห็นหน้าเคสแบบล็อกเสมอ ถ้าอยู่ข้างในจะกดไม่ได้
+const panel = /\{keyEdit && \(([\s\S]*?)\n      \)\}/.exec(src);
+check('มีแผงแก้ของแอดมิน', Boolean(panel) && panel![1].includes('บันทึกเลขระบุเคส'));
 check('ช่องในแผงไม่มี name เลย', Boolean(panel) && !/\bname=/.test(panel![1]));
+check('แผงอยู่นอก <fieldset disabled> (ไม่งั้นแอดมินพิมพ์/กดบันทึกไม่ได้)',
+      Boolean(panel) && src.indexOf('{keyEdit && (') < src.indexOf('<fieldset disabled={locked}'));
+// ปุ่มเปิดแผงย้ายจากหัวหมวด "รายละเอียด" (อยู่ใน fieldset) ไปแถบปุ่มแอดมิน = กิ่ง "ยังไม่อนุมัติ" ของ actionBar
+const adminBar = /\) : isAdmin \? \(([\s\S]*?)\) : \(/.exec(src);
 check('ปุ่มเปิดแผงขึ้นเฉพาะแอดมิน และเฉพาะตอนยังไม่อนุมัติ',
-      /isAdmin && !approved && !keyEdit \? \(/.test(src));
+      Boolean(adminBar) && /\{!keyEdit && \(\s*<button type="button" onClick=\{openKeyEdit\}/.test(adminBar![1])
+      && src.indexOf(') : approved ? (') > -1 && src.indexOf(') : approved ? (') < src.indexOf(') : isAdmin ? ('));
 
 /**
  * -- ค่าใช้จ่ายย้ายไปคอลัมน์ขวา (เฉพาะจอกว้าง) --

@@ -178,6 +178,12 @@ export default function AdminCasesPage() {
                           {xmlBusyId === c.id ? 'กำลังสร้าง...' : 'XML'}
                         </button>
                       )}
+                      {/* หน้าตรวจเคส (23/09/69) — แอดมินเข้าได้แบบอ่านอย่างเดียว: เลิกยกเลิก · ปลดล็อก · แก้เลขระบุเคส · ยกเลิกงาน */}
+                      <Link href={`/inspector/cases/${c.id}`}
+                        title="เปิดหน้าตรวจเคส — เลิกยกเลิก / ปลดล็อก / แก้เลขระบุเคส / ยกเลิกงาน"
+                        className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors whitespace-nowrap">
+                        เปิดหน้าเคส
+                      </Link>
                       <Link href={`/admin/cases/${c.id}/edit`} className="px-3 py-1 text-xs bg-yellow-500 text-white rounded hover:bg-yellow-600 transition-colors">
                         แก้ไข
                       </Link>

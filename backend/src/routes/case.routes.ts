@@ -266,7 +266,8 @@ router.get('/review', auth, requireRole('checker'), caseController.getForReview)
 // ใบเบิกเงิน (.xlsx) — ต้องอยู่ก่อน '/:id/...' ไม่งั้น 'pay' จะถูกจับเป็น id
 router.get('/pay/export.xlsx', auth, requireRole('checker', 'admin'), caseController.exportPayXlsx);
 router.get('/:id', auth, requireRole('callcenter', 'checker'), caseController.getCase);
-router.get('/:id/detail', auth, requireRole('checker', 'surveyor'), caseController.getDetail);
+// แอดมินเปิดหน้าตรวจเคสได้ (user สั่ง 23/09/69) — ใช้ปุ่มเลิกยกเลิก/ปลดล็อก/แก้เลขระบุเคส (หน้าเว็บเป็นอ่านอย่างเดียวสำหรับแอดมิน)
+router.get('/:id/detail', auth, requireRole('checker', 'surveyor', 'admin'), caseController.getDetail);
 router.get('/:id/export-xml', auth, requireRole('surveyor', 'checker', 'admin', 'callcenter'), caseController.exportXml);
 router.post('/:id/assign', auth, requireRole('callcenter'), validate(assignCaseSchema), caseController.assign);
 // "ดึงงานกลับ" (22/09/69) — ถอนงานที่มอบหมายแล้วกลับมารอจ่ายใหม่ + ยิง push ปิดการ์ดบนเครื่องช่าง (เฉพาะสถานะ assigned)

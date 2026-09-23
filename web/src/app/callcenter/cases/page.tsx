@@ -6,6 +6,7 @@ import Link from 'next/link';
 import api from '@/lib/api';
 import { downloadCaseXml } from '@/lib/downloadXml';
 import RecallJobButton, { recallNotice } from '@/components/cases/RecallJobButton';
+import CancelJobButton, { canCancelStatus, cancelNotice } from '@/components/cases/CancelJobButton';
 
 interface CaseRow {
   id: number;
@@ -26,6 +27,10 @@ interface CaseRow {
   recalled_by_first_name?: string | null;
   recalled_by_last_name?: string | null;
   recalled_at?: string | null;
+  /** ยกเลิกงาน (23/09/69) — เหตุผล/คน/เวลา โชว์ใต้ป้าย "ยกเลิก" */
+  cancel_reason?: string | null;
+  cancelled_by_name?: string | null;
+  cancelled_at?: string | null;
 }
 
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
@@ -244,6 +249,16 @@ export default function CallcenterCasesPage() {
                         <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${s.bg} ${s.color}`}>
                           {s.label}
                         </span>
+                        {c.status === 'cancelled' && (c.cancel_reason || c.cancelled_by_name) && (
+                          /* ยกเลิกแล้ว (23/09/69) — ต้องเห็นว่าทำไม ใครยกเลิก เมื่อไร (คืนงานได้เฉพาะแอดมิน) */
+                          <span className="block mt-1 text-xs text-red-700 max-w-[240px]">
+                            {c.cancel_reason || '-'}
+                            <span className="block text-gray-500">
+                              {c.cancelled_by_name ? `โดย ${c.cancelled_by_name}` : ''}
+                              {c.cancelled_at ? ` · ${formatDate(c.cancelled_at)}` : ''}
+                            </span>
+                          </span>
+                        )}
                       </td>
                       <td className="px-5 py-3 text-gray-600">{c.claim_no || '-'}</td>
                       <td className="px-5 py-3 text-gray-600">{c.survey_job_no || '-'}</td>
@@ -281,6 +296,7 @@ export default function CallcenterCasesPage() {
                         })()}
                       </td>
                       <td className="px-5 py-3">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                         {(c.status === 'surveyed' || c.status === 'reviewed') ? (
                           <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                             <button
@@ -323,9 +339,24 @@ export default function CallcenterCasesPage() {
                               fetchCases();   // แถวนี้ต้องกลายเป็น "รอมอบหมาย" (คลิกแล้วไปจ่ายงานได้เลย)
                             }}
                           />
-                        ) : (
+                        ) : !canCancelStatus(c.status) ? (
                           <span className="text-gray-300 text-xs">-</span>
+                        ) : null}
+                        {/* ยกเลิกงาน (23/09/69) — ทุกสถานะที่ยังไม่อนุมัติ · ต้องบอกเหตุผล · งานที่อยู่กับช่างถูกถอนการ์ดให้ · แอดมินเลิกยกเลิกได้ */}
+                        {canCancelStatus(c.status) && (
+                          <CancelJobButton
+                            caseId={c.id}
+                            claimNo={c.claim_no}
+                            status={c.status}
+                            surveyorName={c.surveyor_first_name ? `${c.surveyor_first_name} ${c.surveyor_last_name || ''}`.trim() : undefined}
+                            onCancelled={(r) => {
+                              const who = c.surveyor_first_name ? `${c.surveyor_first_name} ${c.surveyor_last_name || ''}`.trim() : undefined;
+                              setNotice(cancelNotice(r, c.claim_no, who));
+                              fetchCases();   // แถวนี้ต้องกลายเป็น "ยกเลิก" พร้อมเหตุผล
+                            }}
+                          />
                         )}
+                        </div>
                       </td>
                     </tr>
                   );

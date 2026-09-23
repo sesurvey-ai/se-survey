@@ -5,11 +5,15 @@ import { useParams, useRouter } from 'next/navigation';
 import api from '@/lib/api';
 import CaseDetail from '@/components/cases/CaseDetail';
 import { confirmLeaveIfDirty } from '@/lib/dirtyGuard';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function CaseDetailPage() {
   const params = useParams();
   const router = useRouter();
   const caseId = params.id as string;
+  // แอดมินเปิดหน้านี้จาก "จัดการเคส" (23/09/69) — ปุ่มกลับต้องพากลับไปที่นั่น ไม่ใช่รายการงานของหัวหน้า (เปิดไม่ได้)
+  const { user } = useAuth();
+  const backHref = user?.role === 'admin' ? '/admin/cases' : '/inspector';
 
   const [caseData, setCaseData] = useState(null);
   const [report, setReport] = useState(null);
@@ -90,7 +94,7 @@ export default function CaseDetailPage() {
   if (error || !caseData) return (
     <div>
       <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-none mb-4">{error || 'ไม่พบข้อมูลเคส'}</div>
-      <button onClick={() => router.push('/inspector')} className="text-blue-600 hover:text-blue-800 text-sm">กลับไปรายการงาน</button>
+      <button onClick={() => router.push(backHref)} className="text-blue-600 hover:text-blue-800 text-sm">กลับไปรายการงาน</button>
     </div>
   );
 
@@ -99,7 +103,7 @@ export default function CaseDetailPage() {
       <div className="mb-4 flex items-center gap-4">
         {/* ⛔ ถามก่อนถ้ายังมีของพิมพ์ค้าง — router.push ไม่ยิง beforeunload
             จึงต้องถามเองที่นี่ (ธงตั้งจากฟอร์มใน CaseDetail) */}
-        <button onClick={() => { if (confirmLeaveIfDirty()) router.push('/inspector'); }}
+        <button onClick={() => { if (confirmLeaveIfDirty()) router.push(backHref); }}
           className="text-[var(--md-muted-2)] hover:text-[var(--md-ink)]">&larr; กลับ</button>
         {/* เลขเคสเป็นสีน้ำเงินตัวเดียวในหัวเรื่อง — ที่หมายตาเวลาเปิดหลายแท็บ (แบบ Modernist) */}
         <h1 className="text-2xl font-extrabold tracking-tight text-[var(--md-ink)]">

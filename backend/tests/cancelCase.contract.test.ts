@@ -53,7 +53,7 @@ check('เหตุการณ์ socket มี cancelled', read('src', 'servic
 const web = (...p: string[]) => read('..', 'web', 'src', ...p);
 const cd = web('components', 'cases', 'CaseDetail.tsx');
 check('หน้าเคส: ยกเลิกแล้ว = ล็อกเหมือนอนุมัติ · แถบปุ่มเปลี่ยนเป็นป้าย "ยกเลิกแล้ว" + แอดมิน "เลิกยกเลิก" · แบนเนอร์เหตุผล/คน/เวลา',
-  cd.includes("const cancelled = caseData?.status === 'cancelled';") && cd.includes('const locked = (approved && !isReference) || cancelled;')
+  cd.includes("const cancelled = caseData?.status === 'cancelled';") && cd.includes('const locked = (approved && !isReference) || cancelled || isAdmin;')
   && cd.includes('{cancelled ? cancelBar : actionBar}') && cd.includes("api.post(`/api/cases/${caseData.id}/uncancel`, {})")
   && cd.includes('ยกเลิกงานแล้ว') && cd.includes('caseData?.cancel_reason'));
 check('หน้าเคส: ปุ่ม "ยกเลิกงาน" กางช่องเหตุผล + ยืนยันก่อน · ยิง /cancel',
@@ -71,6 +71,43 @@ for (const [name, src] of maps) check(`ป้ายสถานะ "ยกเล
 check('ตัวกรองสถานะคอลเซ็นเตอร์/แอดมิน มีตัวเลือก ยกเลิก',
   web('app', 'callcenter', 'cases', 'page.tsx').includes('<option value="cancelled">ยกเลิก</option>')
   && web('app', 'admin', 'cases', 'page.tsx').includes('<option value="cancelled">ยกเลิก</option>'));
+
+// ── แอดมินเปิดหน้าตรวจเคสได้ (user สั่ง 23/09/69) — เดิม layout ให้เฉพาะ checker ปุ่มเลิกยกเลิก/ปลดล็อกจึงไม่มีใครกดได้จริง ──
+const layout = web('app', 'inspector', 'layout.tsx');
+check('layout หน้าหัวหน้า: แอดมินเข้าได้เฉพาะหน้าเคสรายใบ (รายการงาน/งานรอตรวจ ISURVEY ยังเฉพาะ checker)',
+  layout.includes('const ADMIN_CASE_PAGE = /^\\/inspector\\/cases\\/\\d+\\/?$/;')
+  && layout.includes("user?.role === 'admin' && ADMIN_CASE_PAGE.test(pathname)")
+  && layout.includes("user?.role !== 'checker' && !adminCasePage"));
+check('API รายละเอียดเคสรับแอดมิน (ไม่งั้นหน้าเคสโหลดไม่ขึ้น)',
+  /router\.get\('\/:id\/detail', auth, requireRole\('checker', 'surveyor', 'admin'\), caseController\.getDetail\)/.test(routes));
+check('หน้าเคสของแอดมิน: อ่านอย่างเดียว · แถบปุ่มแอดมิน (แก้เลขระบุเคส/ยกเลิกงาน) แทนบันทึก/ตีกลับ/อนุมัติ · ไม่มีปุ่มดึงรูป ISURVEY',
+  cd.includes(') : isAdmin ? (') && cd.includes('แอดมิน · ดูอย่างเดียว')
+  && cd.includes('isurveyRefetch={!isAdmin && fromIsurvey'));
+check('แผงแก้เลขระบุเคสอยู่นอก <fieldset disabled> (แอดมินเห็นหน้าแบบล็อกเสมอ ถ้าอยู่ในนั้นจะกดไม่ได้)',
+  cd.indexOf('{keyEdit && (') > -1 && cd.indexOf('{keyEdit && (') < cd.indexOf('<fieldset disabled={locked}'));
+check('จัดการเคส (แอดมิน) มีลิงก์ "เปิดหน้าเคส" · ปุ่มกลับของหน้าเคสพาแอดมินกลับไปจัดการเคส',
+  web('app', 'admin', 'cases', 'page.tsx').includes('href={`/inspector/cases/${c.id}`}')
+  && web('app', 'inspector', 'cases', '[id]', 'page.tsx').includes("user?.role === 'admin' ? '/admin/cases' : '/inspector'"));
+check('หน้าแก้ไขเคสของแอดมิน: เปลี่ยนเข้า/ออกสถานะยกเลิกตรง ๆ ไม่ได้ (ไม่เก็บเหตุผล · ไม่ถอน/คืนการ์ดช่าง · ช่องยกเลิกค้าง)',
+  read('src', 'services', 'admin.service.ts').includes("(prevStatus === 'cancelled' || data.status === 'cancelled')")
+  && web('app', 'admin', 'cases', '[id]', 'edit', 'page.tsx').includes('<option value="cancelled" disabled>ยกเลิก</option>'));
+
+// ── คอลเซ็นเตอร์ยกเลิกงานได้ (user สั่ง 23/09/69) — เดิมหลังบ้านอนุญาตแล้วแต่หน้าจอไม่มีปุ่ม ──
+const cjb = web('components', 'cases', 'CancelJobButton.tsx');
+check('ปุ่มยกเลิกของคอลเซ็นเตอร์: ต้องมีเหตุผล · ยิง /cancel · สถานะที่ยกเลิกได้ตรงกับหลังบ้าน (ไม่รวม reviewed/cancelled) · ไม่ลามไปคลิกแถว',
+  cjb.includes('api.post(`/api/cases/${caseId}/cancel`, { reason: text })') && cjb.includes("if (!text) { setErr('ต้องบอกเหตุผลที่ยกเลิก'); return; }")
+  && cjb.includes("export const CANCELLABLE_STATUSES = ['pending', 'assigned', 'finished', 'surveyed', 'declined'] as const;")
+  && cjb.includes('e.stopPropagation()'));
+const ccPages = [
+  ['app/callcenter/cases/page.tsx', web('app', 'callcenter', 'cases', 'page.tsx')],
+  ['app/callcenter/page.tsx', web('app', 'callcenter', 'page.tsx')],
+  ['app/callcenter/cases/[id]/assign/page.tsx', web('app', 'callcenter', 'cases', '[id]', 'assign', 'page.tsx')],
+] as const;
+for (const [name, src] of ccPages) {
+  check(`คอลเซ็นเตอร์มีปุ่มยกเลิกงาน: ${name}`, src.includes('<CancelJobButton') && src.includes('canCancelStatus(') && src.includes('cancelNotice('));
+}
+check('หลังบ้าน: มอบหมายเคสที่ยกเลิกแล้วไม่ได้ (บอกตรง ๆ) · รายการ/แดชบอร์ด/หน้าจ่ายงานรู้ชื่อคนยกเลิก',
+  svc.includes("if (caseData.status === 'cancelled') {") && (svc.match(/AS cancelled_by_name/g) ?? []).length >= 4);
 
 // ── มือถือ (native): ข้อความตอนการ์ดถูกถอนเพราะยกเลิก — APK ถัดไป (เครื่องเก่าได้ข้อความกลาง "งานถูกถอนแล้ว")
 const kt = fs.readFileSync(path.join(__dirname, '..', '..', 'mobile', 'android', 'app', 'src', 'main', 'kotlin', 'com', 'sesurvey', 'se_survey', 'NotificationHelper.kt'), 'utf8');

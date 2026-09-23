@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 // หน้าคิวตรวจ/หน้าเคสฟังสัญญาณ case_changed เพื่ออัปเดตเองโดยไม่ต้องกด F5
 // ไม่มี provider = useSocket() คืน null แล้วเหลือแต่การโหลดซ้ำตามเวลา (ช้ากว่ามาก)
@@ -9,16 +9,25 @@ import { SocketProvider } from '@/providers/SocketProvider';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 
+/**
+ * แอดมินเปิด "หน้าตรวจเคสรายใบ" ได้ (user สั่ง 23/09/69) — เดิมทั้งส่วนนี้ให้เฉพาะ checker
+ * ปุ่มของแอดมินในหน้าเคส (เลิกยกเลิก · ปลดล็อก · แก้เลขระบุเคส) จึงไม่มีใครกดได้จริง
+ * หน้าอื่นของหัวหน้า (รายการงาน · งานรอตรวจ ISURVEY · นำเข้า XML) ยังเฉพาะ checker — API พวกนั้นรับเฉพาะหัวหน้า
+ */
+const ADMIN_CASE_PAGE = /^\/inspector\/cases\/\d+\/?$/;
+
 export default function InspectorLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, loading, user } = useAuth();
   const router = useRouter();
+  const pathname = usePathname() ?? '';
+  const adminCasePage = user?.role === 'admin' && ADMIN_CASE_PAGE.test(pathname);
 
   useEffect(() => {
     if (!loading) {
       if (!isAuthenticated) router.replace('/login');
-      else if (user?.role !== 'checker') router.replace('/login');
+      else if (user?.role !== 'checker' && !adminCasePage) router.replace(user?.role === 'admin' ? '/admin' : '/login');
     }
-  }, [isAuthenticated, loading, user, router]);
+  }, [isAuthenticated, loading, user, router, adminCasePage]);
 
   if (loading || !isAuthenticated) {
     return <div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div></div>;

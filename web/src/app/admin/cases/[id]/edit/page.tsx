@@ -66,8 +66,10 @@ export default function EditCasePage() {
       } else {
         setError(res.data.message || 'ไม่สามารถอัพเดทได้');
       }
-    } catch {
-      setError('เกิดข้อผิดพลาด กรุณาลองใหม่');
+    } catch (err) {
+      // backend บอกเหตุผลเป็นภาษาคน (เช่น เคสยกเลิกอยู่ต้องใช้ปุ่มเลิกยกเลิก) — ส่งต่อให้เห็น
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setError(msg || 'เกิดข้อผิดพลาด กรุณาลองใหม่');
     } finally {
       setSubmitting(false);
     }
@@ -100,14 +102,26 @@ export default function EditCasePage() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">สถานะ</label>
-            <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900">
+            <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}
+              disabled={form.status === 'cancelled'}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 disabled:bg-gray-100">
               <option value="pending">รอดำเนินการ</option>
               <option value="assigned">มอบหมายแล้ว</option>
               <option value="finished">เสร็จงานแล้ว (รอส่งรายงาน)</option>
               <option value="surveyed">สำรวจแล้ว</option>
               <option value="reviewed">ตรวจสอบแล้ว</option>
               <option value="declined">ปฏิเสธแล้ว</option>
+              {/* ยกเลิกงาน (23/09/69): มีไว้แสดงค่าปัจจุบันเท่านั้น — เข้า/ออกจากสถานะนี้ต้องใช้ปุ่มที่หน้าเคส
+                  (เก็บเหตุผล · ถอน/คืนการ์ดงานบนเครื่องช่าง) backend ปฏิเสธถ้าเปลี่ยนตรงนี้ */}
+              <option value="cancelled" disabled>ยกเลิก</option>
             </select>
+            {form.status === 'cancelled' && (
+              <p className="mt-1 text-xs text-red-700">
+                เคสนี้ยกเลิกอยู่ — คืนสถานะด้วยปุ่ม &quot;เลิกยกเลิก&quot; ที่{' '}
+                <Link href={`/inspector/cases/${caseId}`} className="underline">หน้าเคส</Link>
+                {' '}ระบบจะคืนสถานะเดิมและส่งการ์ดงานคืนช่างให้
+              </p>
+            )}
           </div>
 
           <div>

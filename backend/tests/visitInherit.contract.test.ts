@@ -129,7 +129,8 @@ check('backend: POST /api/isurvey/cases/:id/refetch-photos → service /photos �
     gal.includes('ดึงรูปเพิ่มจาก ISURVEY') && gal.includes('/refetch-photos') && gal.includes('extra={refetchBtn}')
     // ⛔ ต้องไม่ใช่ <button> — เคสอนุมัติแล้วอยู่ใน <fieldset disabled> ปุ่มจริงจะถูกปิดตาม (กดแล้วเงียบ เจอ 22/09/69)
     && gal.includes('<span role="button" tabIndex={0} onClick={go}')
-    && cd2.includes('isurveyRefetch={fromIsurvey && !caseData?.emcs_imported_at && caseData?.id ? { caseId: Number(caseData.id) } : undefined}'));
+    // 23/09/69 แอดมินไม่มีปุ่มนี้ (ดึงด้วยบัญชี ISURVEY ของคนกด ซึ่งมีแต่หัวหน้า)
+    && cd2.includes('isurveyRefetch={!isAdmin && fromIsurvey && !caseData?.emcs_imported_at && caseData?.id ? { caseId: Number(caseData.id) } : undefined}'));
   check('เว็บ: หน้างานรอตรวจเตือน "ISURVEY มี N ได้มา M" เมื่อ added+skipped < isurvey_photo_listed + ปุ่มดึงรูปเพิ่ม',
     pull2.includes('const gap = listed > got ? { listed, got } : undefined;') && pull2.includes('ISURVEY มี {res.gap.listed} ได้มา {res.gap.got}')
     && pull2.includes("api.post(`/api/isurvey/cases/${caseId}/refetch-photos`"));
@@ -185,7 +186,9 @@ check('ตัวไล่ช่องบังคับข้ามช่อง�
   /if \(mainFromFirstRef\.current && mainLockedRef\.current\.has\(\(el as HTMLInputElement\)\.name\)\) return;/.test(cd)
   && cd.includes("form.querySelector('[name=\"survey_result\"]') as HTMLTextAreaElement | null") && cd.includes('setResultEmpty('));
 check('เคสอ้างอิง: locked = approved && !isReference · แถบ "แก้ข้อมูลตั้งต้นได้" + ปุ่มบันทึก',
-  cd.includes('const locked = (approved && !isReference) || cancelled;')   // 22/09/69 ยกเลิกแล้วก็ล็อกเหมือนอนุมัติ && cd.includes('อ้างอิง ISURVEY · แก้ข้อมูลตั้งต้นได้')
+  // 22/09/69 ยกเลิกแล้วก็ล็อกเหมือนอนุมัติ · 23/09/69 แอดมินเห็นหน้าเคสแบบล็อกเสมอ (API บันทึกรายงานรับเฉพาะหัวหน้า)
+  cd.includes('const locked = (approved && !isReference) || cancelled || isAdmin;')
+  && cd.includes('อ้างอิง ISURVEY · แก้ข้อมูลตั้งต้นได้')
   && /const actionBar = approved && isReference \? \(/.test(cd));
 const pull = read('..', 'web', 'src', 'app', 'inspector', 'isurvey', 'page.tsx');
 check('หน้าดึงงานบอกจำนวนรูปของแต่ละครั้งก่อนหน้า', pull.includes('refPhotos(x)'));

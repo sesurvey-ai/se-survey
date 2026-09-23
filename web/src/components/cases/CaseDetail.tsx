@@ -827,7 +827,14 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
   const isReference = String(caseData?.source ?? '') === 'isurvey_reference';
   /** ยกเลิกงาน (user สั่ง 22/09/69): อ่านอย่างเดียวเหมือนอนุมัติแล้ว จนกว่าแอดมินจะ "เลิกยกเลิก" */
   const cancelled = caseData?.status === 'cancelled';
-  const locked = (approved && !isReference) || cancelled;
+  /**
+   * แอดมินเปิดหน้านี้ได้ (user สั่ง 23/09/69 — เดิม layout ให้เฉพาะ checker ปุ่มแอดมินในหน้านี้จึงไม่มีใครกดได้จริง)
+   * ใช้ทำ: เลิกยกเลิก · ปลดล็อก · แก้เลขระบุเคส · ยกเลิกงาน · ส่ง se-billing ซ้ำ
+   * ⛔ ช่องกรอกอ่านอย่างเดียวสำหรับแอดมิน — บันทึกรายงาน (PUT /report) ตีกลับ และอนุมัติ (POST /review) เป็นงานของหัวหน้าผู้ตรวจ
+   *    (API รับเฉพาะ checker) ถ้าเปิดให้พิมพ์ได้ แอดมินจะแก้แล้วบันทึกไม่ได้โดยไม่รู้ตัว
+   */
+  const isAdmin = user?.role === 'admin';
+  const locked = (approved && !isReference) || cancelled || isAdmin;
   /**
    * ครั้งที่ 2+ (user เคาะ 15/09/69 แบบ EMCS): ข้อมูลหลักของเคลม (รถ กรมธรรม์ ผู้ขับขี่ เหตุ ตำรวจ ความเสียหาย คู่กรณี
    * ผู้บาดเจ็บ ทรัพย์สิน) แสดงของครั้งที่ 1 สด **อ่านอย่างเดียว** ที่นี่ — แก้ที่ครั้งที่ 1 (ปุ่มในแถบด้านบน)
@@ -857,7 +864,6 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
       }
     });
   });
-  const isAdmin = user?.role === 'admin';
   /**
    * ที่มาของงานที่ระบบ **เตือน** ว่ายังไม่ได้กรอกยอด — ไม่ใช่ตัวล็อกช่องอีกแล้ว
    *
@@ -2108,13 +2114,20 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
     // เคสอ้างอิง (15/09/69): แก้ข้อมูลตั้งต้นได้โดยไม่ต้องปลดล็อก — ไม่มีอนุมัติ/ตีกลับ/se-billing/ปิด ISURVEY
     // เพราะครั้งนี้ปิดจบบนระบบเก่าไปแล้ว บันทึกที่นี่มีผลกับเว็บเราและครั้งถัดไปที่ดึงใหม่เท่านั้น
     <div className="flex items-center gap-2 flex-wrap justify-end">
-      <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-gray-200 text-gray-800 whitespace-nowrap">อ้างอิง ISURVEY · แก้ข้อมูลตั้งต้นได้</span>
-      <span className="text-xs text-gray-600 hidden lg:inline">บันทึกแล้วครั้งถัดไปที่ดึงใหม่จะใช้ข้อมูลนี้ · ไม่ส่งเข้า EMCS/se-billing</span>
-      <button type="button" onClick={handleSave} disabled={saving || previewing}
-        title={previewing ? 'กำลังดูครั้งอื่น — กลับไปครั้งของเคสนี้ก่อน' : ''}
-        className="h-9 px-4 border border-[#2eb593] bg-[var(--md-green)] text-white text-sm font-bold hover:brightness-105 disabled:opacity-40 disabled:cursor-not-allowed transition">
-        {saving ? 'กำลังบันทึก...' : 'บันทึก'}
-      </button>
+      <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-gray-200 text-gray-800 whitespace-nowrap">
+        {isAdmin ? 'อ้างอิง ISURVEY · แอดมินดูอย่างเดียว' : 'อ้างอิง ISURVEY · แก้ข้อมูลตั้งต้นได้'}
+      </span>
+      {/* แอดมินบันทึกรายงานไม่ได้ (PUT /report รับเฉพาะหัวหน้า) — ไม่โชว์ปุ่มที่กดแล้วพัง */}
+      {!isAdmin && (
+        <>
+          <span className="text-xs text-gray-600 hidden lg:inline">บันทึกแล้วครั้งถัดไปที่ดึงใหม่จะใช้ข้อมูลนี้ · ไม่ส่งเข้า EMCS/se-billing</span>
+          <button type="button" onClick={handleSave} disabled={saving || previewing}
+            title={previewing ? 'กำลังดูครั้งอื่น — กลับไปครั้งของเคสนี้ก่อน' : ''}
+            className="h-9 px-4 border border-[#2eb593] bg-[var(--md-green)] text-white text-sm font-bold hover:brightness-105 disabled:opacity-40 disabled:cursor-not-allowed transition">
+            {saving ? 'กำลังบันทึก...' : 'บันทึก'}
+          </button>
+        </>
+      )}
     </div>
   ) : approved ? (
     <div className="flex items-center gap-2 flex-wrap justify-end">
@@ -2187,6 +2200,26 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
       ) : (
         <span className="text-xs text-gray-500">ต้องให้แอดมินปลดล็อกก่อน</span>
       )}
+    </div>
+  ) : isAdmin ? (
+    // แอดมิน (23/09/69): ดูอย่างเดียว + ปุ่มของแอดมิน — ไม่มีบันทึก/ตีกลับ/อนุมัติ (API รับเฉพาะหัวหน้า ตีกลับต้องบันทึกก่อน)
+    // แถบนี้อยู่นอก <fieldset disabled> จึงกดได้แม้ช่องกรอกถูกล็อก
+    <div className="flex items-center gap-2 flex-wrap justify-end">
+      <span className="text-xs text-gray-600 bg-gray-50 border border-gray-200 px-2 py-1 whitespace-nowrap"
+        title="บันทึกรายงาน ตีกลับ และอนุมัติ เป็นงานของหัวหน้าผู้ตรวจ">
+        แอดมิน · ดูอย่างเดียว
+      </span>
+      {!keyEdit && (
+        <button type="button" onClick={openKeyEdit} disabled={previewing}
+          title="แก้บริษัทประกัน/เลขเซอร์เวย์/เลขรับแจ้ง/เลขเคลม — ใช้เฉพาะตอนเลขผิดมาตั้งแต่ต้นทาง"
+          className="h-9 px-4 border border-amber-600 text-amber-700 bg-white text-sm font-bold hover:bg-amber-50 disabled:opacity-50 disabled:cursor-not-allowed transition">
+          แก้เลขระบุเคส
+        </button>
+      )}
+      <button type="button" onClick={() => { setCcOpen(true); setSbOpen(false); }} disabled={saving || previewing}
+        className="h-9 px-4 border border-red-600 text-red-700 bg-white text-sm font-bold hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition">
+        ยกเลิกงาน
+      </button>
     </div>
   ) : (
     // ทุกช่องพิมพ์ได้ตลอด จึงไม่มีปุ่ม "แก้ไขทั้งหมด" / "ยกเลิก" อีกแล้ว
@@ -2362,6 +2395,58 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
           {' — อ่านอย่างเดียว ไม่เข้าคิวตรวจ/EMCS/se-billing · แอดมินกด "เลิกยกเลิก" ที่แถบบนเพื่อคืนสถานะเดิม'}
         </div>
       )}
+      {/* แอดมินแก้เลขระบุเคส (18/08/69) — ย้ายมาอยู่นอก <fieldset disabled> 23/09/69 เพราะแอดมินเห็นหน้านี้แบบล็อกเสมอ
+          ⛔ ช่องในนี้ไม่มี name โดยตั้งใจ (อยู่ใน <form> เดียวกับฟอร์มหลัก
+             ถ้ามี name จะโดน FormData เก็บไปทับค่าที่ล็อกไว้ตอนกดบันทึก) */}
+      {keyEdit && (
+        <div className="rounded-none border border-amber-300 bg-amber-50 p-3 space-y-2">
+          <p className="text-xs text-amber-900">
+            แก้เลขระบุเคส — ใช้เฉพาะตอนเลขผิดมาตั้งแต่ต้นทาง
+            <span className="text-amber-700"> · เลขเซอร์เวย์ห้ามซ้ำกับเคสอื่น (ใช้อ้างอิงเบิกเงิน)</span>
+          </p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-2">
+            <F label="บริษัทประกัน">
+              <select value={keyEdit.insurance_company} className={CTL(false)}
+                onChange={(e) => setKeyEdit({ ...keyEdit, insurance_company: e.target.value })}>
+                <option value="">-- ระบุ --</option>
+                {INSURER_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                {keyEdit.insurance_company && !INSURER_OPTIONS.includes(keyEdit.insurance_company) && (
+                  <option value={keyEdit.insurance_company}>{keyEdit.insurance_company} (ค่าเดิม)</option>
+                )}
+              </select>
+            </F>
+            <F label="สาขา">
+              <select value={keyEdit.insurance_branch} className={CTL(false)}
+                onChange={(e) => setKeyEdit({ ...keyEdit, insurance_branch: e.target.value })}>
+                <option value="กรุงเทพ">กรุงเทพ</option>
+              </select>
+            </F>
+            <F label="เลขเรื่องเซอร์เวย์">
+              <input type="text" value={keyEdit.survey_job_no} className={CTL(false)}
+                onChange={(e) => setKeyEdit({ ...keyEdit, survey_job_no: e.target.value })} />
+            </F>
+            <F label="เลขที่รับแจ้ง">
+              <input type="text" value={keyEdit.claim_ref_no} className={CTL(false)}
+                onChange={(e) => setKeyEdit({ ...keyEdit, claim_ref_no: e.target.value })} />
+            </F>
+            <F label="เลขที่เคลม">
+              <input type="text" value={keyEdit.claim_no} className={CTL(false)}
+                onChange={(e) => setKeyEdit({ ...keyEdit, claim_no: e.target.value })} />
+            </F>
+          </div>
+          {keyMsg && <p className="text-xs text-red-700">{keyMsg}</p>}
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={saveKeyEdit}
+              className="px-4 py-1.5 bg-amber-600 text-white rounded-none text-sm font-medium hover:bg-amber-700">
+              บันทึกเลขระบุเคส
+            </button>
+            <button type="button" onClick={() => { setKeyEdit(null); setKeyMsg(''); }}
+              className="px-4 py-1.5 border border-gray-300 rounded-none text-sm text-gray-700 hover:bg-[var(--md-tint)]">
+              ยกเลิก
+            </button>
+          </div>
+        </div>
+      )}
       {/* อนุมัติแล้ว = ปิดทั้งชุดด้วย <fieldset disabled> — ครอบทุกช่องในหน้าทีเดียว
           ไม่ต้องไล่ใส่ disabled ทีละช่อง (มี ~200 ช่อง พลาดช่องเดียวก็รั่ว)
           แถบปุ่มอยู่ *นอก* fieldset เพื่อให้แอดมินยังกด "ปลดล็อก" ได้ตอนถูกล็อก */}
@@ -2482,13 +2567,8 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
           )}
           {/* รายละเอียดรถยนต์ — header + ข้อมูลบริษัท/เคลม (แบบตาราง) */}
           <div data-section="biz" className="border border-[var(--md-line)] bg-white">
-          <SectionBar title="รายละเอียด" gap={(gapSec ?? []).includes('biz')}
-            right={isAdmin && !approved && !keyEdit ? (
-              <button type="button" onClick={openKeyEdit}
-                className="text-xs text-blue-700 hover:text-blue-900 hover:underline">
-                แก้เลขระบุเคส (แอดมิน)
-              </button>
-            ) : undefined} />
+          {/* ปุ่ม "แก้เลขระบุเคส" ของแอดมินย้ายไปแถบบน (23/09/69) — ตรงนี้อยู่ใน <fieldset disabled> ซึ่งล็อกเสมอสำหรับแอดมิน */}
+          <SectionBar title="รายละเอียด" gap={(gapSec ?? []).includes('biz')} />
           <div>
           <div className="bg-white overflow-hidden text-sm">
             {/* Header bar with claim type & damage level */}
@@ -2544,58 +2624,7 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
               </F>
 
               {/* 4 ช่องนี้เป็นข้อมูลบริษัทเรา ไม่ได้แก้ที่นี่ (มาจากตั้งค่าระบบ) — แสดงอย่างเดียว */}
-              {/* แผงแก้ของแอดมิน — โผล่เฉพาะตอนกดปุ่มบนหัวหมวด
-                  ⛔ ช่องในนี้ไม่มี name โดยตั้งใจ (อยู่ใน <form> เดียวกับฟอร์มหลัก
-                     ถ้ามี name จะโดน FormData เก็บไปทับค่าที่ล็อกไว้ตอนกดบันทึก) */}
-              {keyEdit && (
-                <div className="col-span-2 md:col-span-4 rounded-none border border-amber-300 bg-amber-50 p-3 space-y-2">
-                  <p className="text-xs text-amber-900">
-                    แก้เลขระบุเคส — ใช้เฉพาะตอนเลขผิดมาตั้งแต่ต้นทาง
-                    <span className="text-amber-700"> · เลขเซอร์เวย์ห้ามซ้ำกับเคสอื่น (ใช้อ้างอิงเบิกเงิน)</span>
-                  </p>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-2">
-                    <F label="บริษัทประกัน">
-                      <select value={keyEdit.insurance_company} className={CTL(false)}
-                        onChange={(e) => setKeyEdit({ ...keyEdit, insurance_company: e.target.value })}>
-                        <option value="">-- ระบุ --</option>
-                        {INSURER_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                        {keyEdit.insurance_company && !INSURER_OPTIONS.includes(keyEdit.insurance_company) && (
-                          <option value={keyEdit.insurance_company}>{keyEdit.insurance_company} (ค่าเดิม)</option>
-                        )}
-                      </select>
-                    </F>
-                    <F label="สาขา">
-                      <select value={keyEdit.insurance_branch} className={CTL(false)}
-                        onChange={(e) => setKeyEdit({ ...keyEdit, insurance_branch: e.target.value })}>
-                        <option value="กรุงเทพ">กรุงเทพ</option>
-                      </select>
-                    </F>
-                    <F label="เลขเรื่องเซอร์เวย์">
-                      <input type="text" value={keyEdit.survey_job_no} className={CTL(false)}
-                        onChange={(e) => setKeyEdit({ ...keyEdit, survey_job_no: e.target.value })} />
-                    </F>
-                    <F label="เลขที่รับแจ้ง">
-                      <input type="text" value={keyEdit.claim_ref_no} className={CTL(false)}
-                        onChange={(e) => setKeyEdit({ ...keyEdit, claim_ref_no: e.target.value })} />
-                    </F>
-                    <F label="เลขที่เคลม">
-                      <input type="text" value={keyEdit.claim_no} className={CTL(false)}
-                        onChange={(e) => setKeyEdit({ ...keyEdit, claim_no: e.target.value })} />
-                    </F>
-                  </div>
-                  {keyMsg && <p className="text-xs text-red-700">{keyMsg}</p>}
-                  <div className="flex items-center gap-2">
-                    <button type="button" onClick={saveKeyEdit}
-                      className="px-4 py-1.5 bg-amber-600 text-white rounded-none text-sm font-medium hover:bg-amber-700">
-                      บันทึกเลขระบุเคส
-                    </button>
-                    <button type="button" onClick={() => { setKeyEdit(null); setKeyMsg(''); }}
-                      className="px-4 py-1.5 border border-gray-300 rounded-none text-sm text-gray-700 hover:bg-[var(--md-tint)]">
-                      ยกเลิก
-                    </button>
-                  </div>
-                </div>
-              )}
+              {/* แผงแก้เลขระบุเคสของแอดมินย้ายไปอยู่เหนือ <fieldset> แล้ว (23/09/69) */}
 
               {/* 4 ช่องนี้ **แสดงอย่างเดียว ห้ามทำให้แก้ได้** (user เคาะ 18/08/69)
                   · 3 ช่องบริษัทผู้จัดเรื่องคือข้อมูลของเราเอง เหมือนกันทุกเคส จึงตรึงค่าไว้
@@ -3451,9 +3480,10 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
         </div>
         <div className="p-4">
           {/* onReviewSubmitted = โหลดเคสใหม่ทั้งก้อน — ใช้ซ้ำเพื่อให้รูปที่เพิ่งอัปโผล่ทันที
-              (อนุมัติแล้วซ่อนแถบอัป — backend กันซ้ำอีกชั้นด้วย 423) */}
+              (อนุมัติแล้วซ่อนแถบอัป — backend กันซ้ำอีกชั้นด้วย 423)
+              แอดมินไม่มีปุ่ม "ดึงรูปเพิ่มจาก ISURVEY" — ดึงด้วยบัญชี ISURVEY ของคนกด ซึ่งมีแต่หัวหน้า (23/09/69) */}
           <PhotoGallery photos={photos} caseId={locked ? undefined : caseData?.id}
-                        isurveyRefetch={fromIsurvey && !caseData?.emcs_imported_at && caseData?.id ? { caseId: Number(caseData.id) } : undefined}
+                        isurveyRefetch={!isAdmin && fromIsurvey && !caseData?.emcs_imported_at && caseData?.id ? { caseId: Number(caseData.id) } : undefined}
                         onUploaded={onReviewSubmitted} />
         </div>
       </div>

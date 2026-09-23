@@ -296,6 +296,14 @@ export const adminService = {
     // ค่าก่อนแก้ — ไว้ตัดสินว่างานเพิ่ง "หลุดจากมือช่างคนเดิม" หรือ "ไปถึงมือช่างคนใหม่" หรือเปล่า
     const prev = await db.query('SELECT assigned_to, status FROM cases WHERE id = $1', [id]);
     if (prev.rows.length === 0) throw new NotFoundError('Case not found');
+    // ยกเลิก/เลิกยกเลิก ต้องผ่านปุ่มที่หน้าเคสเท่านั้น (23/09/69) — เปลี่ยนสถานะตรงนี้จะไม่มีเหตุผล/คนยกเลิก
+    // ไม่ถอนหรือคืนการ์ดงานบนเครื่องช่าง และช่อง cancelled_* ค้างอยู่ (caseService.cancelCase / uncancelCase ทำครบ)
+    const prevStatus = String(prev.rows[0].status ?? '');
+    if (data.status !== undefined && data.status !== prevStatus && (prevStatus === 'cancelled' || data.status === 'cancelled')) {
+      throw new AppError(400, prevStatus === 'cancelled'
+        ? 'เคสนี้ยกเลิกอยู่ — ใช้ปุ่ม "เลิกยกเลิก" ที่หน้าเคส (คืนสถานะเดิมและส่งการ์ดงานคืนช่างให้)'
+        : 'ยกเลิกงานต้องใช้ปุ่ม "ยกเลิกงาน" ที่หน้าเคส (ต้องบอกเหตุผล)');
+    }
 
     params.push(id);
     const result = await db.query(
