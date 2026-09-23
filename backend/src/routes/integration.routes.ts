@@ -255,8 +255,11 @@ router.get('/cases/:id/export-xml', integrationAuth, asyncHandler(async (req: Re
 // ใช้ของใบครั้งที่ 1 ของเคลม (fv) ถ้ามี ไม่งั้นของใบนั้นเอง = ชุดเดียวกับ effectiveReport ที่บอทกรอก · ไม่ใช่ array (ข้อมูลเก่ารูปทรงอื่น) = 0 เหมือน parseJsonArr ของ XML
 const jsonCount = (col: string) =>
   `(CASE WHEN jsonb_typeof(COALESCE(fv.${col}, sr.${col})) = 'array' THEN jsonb_array_length(COALESCE(fv.${col}, sr.${col})) ELSE 0 END)::int`;
-router.get('/cases', integrationAuth, asyncHandler(async (_req: Request, res: Response) => {
+router.get('/cases', integrationAuth, asyncHandler(async (req: Request, res: Response) => {
   const { db } = await import('../config/database');
+  // 23/09/69: เดิม 100 ใบล่าสุดเท่านั้น — เคสที่อนุมัติมานานแต่ยังไม่เข้า EMCS (ตกค้าง) หลุดจากรายการของบอท กดนำเข้าไม่ได้
+  // → ใบที่ยังไม่เข้า EMCS มาก่อนเสมอ แล้วค่อยใบที่เข้าแล้ว (โหมดกรอกทับยังต้องเห็น) · เพดาน 400 (ขอเพิ่มได้ ?limit= สูงสุด 1000)
+  const limit = Math.min(1000, Math.max(1, parseInt(String(req.query.limit ?? '400')) || 400));
   const r = await db.query(
     `SELECT c.id, c.status, sr.claim_no, sr.survey_job_no, sr.insurance_company,
             (u.first_name || ' ' || u.last_name) AS surveyor_name,
@@ -296,8 +299,8 @@ router.get('/cases', integrationAuth, asyncHandler(async (_req: Request, res: Re
       WHERE c.status = 'reviewed'
         -- เคสอ้างอิง (ครั้งก่อนหน้าที่ปิดแล้ว) อยู่ในเรื่องบน EMCS อยู่แล้ว — ห้ามโผล่ในรายการนำเข้าของบอท
         AND c.source <> 'isurvey_reference'
-      ORDER BY c.created_at DESC
-      LIMIT 100`
+      ORDER BY (c.emcs_imported_at IS NULL) DESC, c.created_at DESC
+      LIMIT $1`, [limit]
   );
   res.json({ success: true, data: { cases: r.rows } });
 }));
