@@ -178,6 +178,24 @@ async function s3ListNames(prefix: string): Promise<string[]> {
   return names;
 }
 
+/** ชื่อไฟล์ที่รากของที่เก็บ (ไม่ลงโฟลเดอร์) ที่ขึ้นต้นด้วย namePrefix เช่น 'att_' */
+async function s3ListRootNames(namePrefix: string): Promise<string[]> {
+  const base = PREFIX ? `${PREFIX}/` : '';
+  const names: string[] = [];
+  let token: string | undefined;
+  do {
+    const out = await client().send(new ListObjectsV2Command({
+      Bucket: BUCKET, Prefix: base + namePrefix, Delimiter: '/', ContinuationToken: token,
+    }));
+    for (const o of out.Contents ?? []) {
+      const name = (o.Key ?? '').slice(base.length);
+      if (name && !name.includes('/')) names.push(name);
+    }
+    token = out.IsTruncated ? out.NextContinuationToken : undefined;
+  } while (token);
+  return names;
+}
+
 /** key ทั้งหมดใต้ prefix (ทุกชั้น) — ใช้ตอนลบโฟลเดอร์เคสทิ้งทั้งก้อน */
 async function s3ListAllKeys(prefix: string): Promise<string[]> {
   const base = objKey(prefix) + '/';
@@ -224,6 +242,15 @@ function localListNames(prefix: string): string[] {
   try {
     return fs.readdirSync(dir, { withFileTypes: true })
       .filter((e) => e.isFile() && !e.name.startsWith('.'))
+      .map((e) => e.name);
+  } catch { return []; }
+}
+
+/** ไฟล์ที่รากดิสก์ (UPLOAD_DIR) ที่ขึ้นต้นด้วย namePrefix — normalizeKey ไม่รับ key ว่าง จึงอ่าน ROOT ตรง ๆ */
+function localListRootNames(namePrefix: string): string[] {
+  try {
+    return fs.readdirSync(ROOT, { withFileTypes: true })
+      .filter((e) => e.isFile() && !e.name.startsWith('.') && e.name.startsWith(namePrefix))
       .map((e) => e.name);
   } catch { return []; }
 }
@@ -351,6 +378,15 @@ export const storage = {
     if (p === null) return [];
     const names = new Set<string>(localListNames(p));
     if (driver === 's3') for (const n of await s3ListNames(p)) names.add(n);
+    return [...names].sort();
+  },
+
+  /** ชื่อไฟล์ที่รากของที่เก็บ (ไม่ลงโฟลเดอร์ · ไม่รวม dotfile) ที่ขึ้นต้นด้วย namePrefix เช่น 'att_' (รูปลงเวลา)
+   *  — list(prefix) ใช้กับรากไม่ได้ เพราะต่อ '/' ท้าย prefix เสมอ · s3: รวมของบนดิสก์ที่ยังไม่ย้ายด้วย */
+  async listRootFiles(namePrefix: string): Promise<string[]> {
+    if (!/^[\w.-]+$/.test(namePrefix)) return [];
+    const names = new Set<string>(localListRootNames(namePrefix));
+    if (driver === 's3') for (const n of await s3ListRootNames(namePrefix)) names.add(n);
     return [...names].sort();
   },
 

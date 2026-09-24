@@ -5,6 +5,7 @@ import { initFirebase } from './config/firebase';
 import { setupSocket } from './socket';
 import { startUploadSweeper } from './utils/uploadSweeper';
 import { startTrashPurge } from './utils/trashPurge';
+import { startPhotoRetention } from './utils/photoRetention';
 import { startUploadMigrator } from './utils/uploadMigrator';
 import { storage } from './config/storage';
 
@@ -27,6 +28,8 @@ setupSocket(server);
 startUploadSweeper();
 // ลบจริงเคสในถังขยะที่พักครบ 30 วัน (migration 062, 14/09/69)
 startTrashPurge();
+// อายุเก็บรูปลงเวลา 1 เดือน (user เคาะ 24/09/69) — รายงานอย่างเดียวจนกว่าจะตั้ง PHOTO_RETENTION_ENABLED=1
+startPhotoRetention();
 // ย้ายไฟล์ที่ค้างบนดิสก์ขึ้น S3 (เฉพาะเมื่อตั้ง S3_MIGRATE_LOCAL — ครั้งเดียวตอนเปิดโหมด s3)
 startUploadMigrator();
 

@@ -114,6 +114,14 @@ async function functional(): Promise<void> {
   fs.writeFileSync(path.join(tmp, 'att_1.jpg'), 'CCC');
   await storage.putFromFile(path.join(tmp, 'att_1.jpg'), 'att_1.jpg');
   check('putFromFile ที่เดียวกัน = ไม่ทำอะไร (รูปลงเวลาที่ราก)', fs.readFileSync(path.join(tmp, 'att_1.jpg'), 'utf8') === 'CCC');
+  // ตัวลบรูปลงเวลาตามอายุ (photoRetention 24/09/69) ลิสต์รูป att_* ที่รากด้วย listRootFiles
+  fs.mkdirSync(path.join(tmp, 'att_folder'));
+  fs.writeFileSync(path.join(tmp, 'up_tmp9.jpg'), 'D');
+  check('listRootFiles คืนเฉพาะไฟล์ที่รากที่ขึ้นต้นตามที่ขอ (ไม่รวมโฟลเดอร์/ไฟล์อื่น/ชื่อไม่ปลอดภัย)',
+    JSON.stringify(await storage.listRootFiles('att_')) === '["att_1.jpg"]'
+    && JSON.stringify(await storage.listRootFiles('../')) === '[]');
+  fs.rmdirSync(path.join(tmp, 'att_folder'));
+  fs.unlinkSync(path.join(tmp, 'up_tmp9.jpg'));
 
   check('list คืนชื่อไฟล์เรียงแล้ว ไม่รวม dotfile', JSON.stringify(await storage.list('case_9/job_9')) === '["a.jpg","b.jpg"]'
     && JSON.stringify(await storage.list('none/none')) === '[]');
