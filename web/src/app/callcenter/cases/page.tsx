@@ -27,6 +27,11 @@ interface CaseRow {
   recalled_by_first_name?: string | null;
   recalled_by_last_name?: string | null;
   recalled_at?: string | null;
+  /** ช่างปฏิเสธ — assigned_to ถูกล้างทิ้ง จึงต้องมีชุดนี้แยกถึงจะรู้ว่าใครไม่รับและทำไม */
+  declined_first_name?: string | null;
+  declined_last_name?: string | null;
+  declined_code?: string | null;
+  declined_reason?: string | null;
   /** ยกเลิกงาน (23/09/69) — เหตุผล/คน/เวลา โชว์ใต้ป้าย "ยกเลิก" */
   cancel_reason?: string | null;
   cancelled_by_name?: string | null;
@@ -238,7 +243,8 @@ export default function CallcenterCasesPage() {
               <tbody>
                 {cases.map((c) => {
                   const s = STATUS_MAP[c.status] || { label: c.status, color: 'text-gray-700', bg: 'bg-gray-100' };
-                  const isPending = c.status === 'pending';
+                  // ช่างปฏิเสธ = กลับมาให้จ่ายใหม่ (หลังบ้านรับทั้ง pending/declined อยู่แล้ว · เดิมหน้านี้ไม่มีทางไปหน้ามอบหมาย เจอ 24/09/69)
+                  const isPending = c.status === 'pending' || c.status === 'declined';
                   return (
                     <tr
                       key={c.id}
@@ -265,7 +271,14 @@ export default function CallcenterCasesPage() {
                       <td className="px-5 py-3 text-gray-600">{c.claim_ref_no || '-'}</td>
                       <td className="px-5 py-3 text-gray-600 max-w-[180px] truncate">{c.customer_name || '-'}</td>
                       <td className="px-5 py-3 text-gray-600">
-                        {c.surveyor_first_name ? `${c.surveyor_first_name} ${c.surveyor_last_name || ''}` : c.recalled_first_name ? (
+                        {c.surveyor_first_name ? `${c.surveyor_first_name} ${c.surveyor_last_name || ''}` : c.status === 'declined' && c.declined_first_name ? (
+                          /* ช่างปฏิเสธ (24/09/69 ชุดเดียวกับแดชบอร์ด) — ต้องเห็นว่าใครไม่รับ เพราะอะไร ก่อนจ่ายใหม่ ไม่งั้นจ่ายคนเดิมซ้ำ */
+                          <span className="text-red-700">
+                            {c.declined_code ? `${c.declined_code} ` : ''}
+                            {c.declined_first_name} {c.declined_last_name || ''}
+                            <span className="block text-xs text-gray-500">ไม่รับงาน{c.declined_reason ? ` — ${c.declined_reason}` : ''}</span>
+                          </span>
+                        ) : c.recalled_first_name ? (
                           /* ดึงงานกลับแล้ว (22/09/69) — ต้องเห็นว่าดึงจากใคร โดยใคร เมื่อไร ก่อนจ่ายซ้ำ */
                           <span className="text-amber-700">
                             {c.recalled_code ? `${c.recalled_code} ` : ''}
@@ -322,10 +335,10 @@ export default function CallcenterCasesPage() {
                           <Link
                             href={`/callcenter/cases/${c.id}/assign`}
                             onClick={(e) => e.stopPropagation()}
-                            title="มอบหมายช่างสำรวจให้เคสนี้"
-                            className="inline-block px-2.5 py-1 text-xs font-medium bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                            title={c.status === 'declined' ? 'ช่างคนเดิมไม่รับงาน — เลือกช่างคนใหม่' : 'มอบหมายช่างสำรวจให้เคสนี้'}
+                            className="inline-block px-2.5 py-1 text-xs font-medium bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors whitespace-nowrap"
                           >
-                            มอบหมาย
+                            {c.status === 'declined' ? 'มอบหมายใหม่' : 'มอบหมาย'}
                           </Link>
                         ) : c.status === 'assigned' ? (
                           /* ดึงงานกลับ (22/09/69) — งานกลับไปรอมอบหมาย + การ์ดบนเครื่องช่างถูกถอน แล้วจ่ายคนใหม่ได้ทันที */

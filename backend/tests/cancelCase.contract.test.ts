@@ -106,6 +106,14 @@ const ccPages = [
 for (const [name, src] of ccPages) {
   check(`คอลเซ็นเตอร์มีปุ่มยกเลิกงาน: ${name}`, src.includes('<CancelJobButton') && src.includes('canCancelStatus(') && src.includes('cancelNotice('));
 }
+// งานที่ช่างปฏิเสธต้องกลับไปจ่ายใหม่ได้จากหน้าคอลเซ็นเตอร์ (เกณฑ์ความพร้อม 1.5) — เดิมมีแต่ pending ที่กดไปหน้ามอบหมายได้ (เจอ 24/09/69)
+for (const [name, src] of ccPages.slice(0, 2)) {
+  check(`งานที่ช่างปฏิเสธ กด "มอบหมายใหม่" ได้: ${name}`,
+    src.includes("const isPending = c.status === 'pending' || c.status === 'declined';")
+    && src.includes("{c.status === 'declined' ? 'มอบหมายใหม่' : 'มอบหมาย'}"));
+}
+check('หลังบ้าน: จ่ายงานได้ทั้งรอมอบหมายและช่างปฏิเสธ',
+  svc.includes("WHERE id = $2 AND status IN ('pending','declined') RETURNING *"));
 check('หลังบ้าน: มอบหมายเคสที่ยกเลิกแล้วไม่ได้ (บอกตรง ๆ) · รายการ/แดชบอร์ด/หน้าจ่ายงานรู้ชื่อคนยกเลิก',
   svc.includes("if (caseData.status === 'cancelled') {") && (svc.match(/AS cancelled_by_name/g) ?? []).length >= 4);
 

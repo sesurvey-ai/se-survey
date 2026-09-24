@@ -163,7 +163,8 @@ export default function CallcenterDashboard() {
                 <tbody>
                   {recent.map((c) => {
                     const s = STATUS_MAP[c.status] || { label: c.status, color: 'text-gray-700', bg: 'bg-gray-100' };
-                    const isPending = c.status === 'pending';
+                    // ช่างปฏิเสธ = กลับมาให้จ่ายใหม่ (หลังบ้านรับทั้ง pending/declined อยู่แล้ว · เดิมหน้านี้ไม่มีทางไปหน้ามอบหมาย เจอ 24/09/69)
+                    const isPending = c.status === 'pending' || c.status === 'declined';
                     return (
                       <tr
                         key={c.id}
@@ -228,10 +229,10 @@ export default function CallcenterDashboard() {
                             <Link
                               href={`/callcenter/cases/${c.id}/assign`}
                               onClick={(e) => e.stopPropagation()}
-                              title="มอบหมายช่างสำรวจให้เคสนี้"
-                              className="inline-block px-2.5 py-1 text-xs font-medium bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                              title={c.status === 'declined' ? 'ช่างคนเดิมไม่รับงาน — เลือกช่างคนใหม่' : 'มอบหมายช่างสำรวจให้เคสนี้'}
+                              className="inline-block px-2.5 py-1 text-xs font-medium bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors whitespace-nowrap"
                             >
-                              มอบหมาย
+                              {c.status === 'declined' ? 'มอบหมายใหม่' : 'มอบหมาย'}
                             </Link>
                           ) : c.status === 'assigned' ? (
                             /* ดึงงานกลับ (22/09/69) — งานกลับไปรอมอบหมาย + การ์ดบนเครื่องช่างถูกถอน แล้วจ่ายคนใหม่ได้ทันที */

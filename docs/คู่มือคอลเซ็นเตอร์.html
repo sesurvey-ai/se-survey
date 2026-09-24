@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>คู่มือคอลเซ็นเตอร์ — รับแจ้งและมอบหมายงานบนเว็บ SE Survey</title>
+<!-- ต้นฉบับ = ไฟล์นี้ (ไม่มี md คู่) · แก้แล้วสร้าง PDF ใหม่ด้วย Chrome headless --print-to-pdf · เขียนจากหน้าจอจริงในโค้ด 24/09/69 -->
+<style>
+  @page { size: A4; margin: 14mm 13mm 14mm 13mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Leelawadee UI", "Leelawadee", Tahoma, sans-serif; font-size: 10.4pt; line-height: 1.45; color: #111; margin: 0; }
+  h1 { font-size: 19pt; margin: 0 0 2px; color: #0f2a5f; }
+  .sub { color: #555; font-size: 10pt; margin-bottom: 10px; }
+  h2 { font-size: 13pt; color: #fff; background: #0f2a5f; padding: 3px 10px; margin: 11px 0 6px; border-radius: 4px; page-break-after: avoid; }
+  h3 { font-size: 11.8pt; color: #0f2a5f; margin: 9px 0 3px; page-break-after: avoid; }
+  p { margin: 3px 0; }
+  ul, ol { margin: 3px 0 5px 18px; padding: 0; }
+  li { margin: 2px 0; }
+  table { border-collapse: collapse; width: 100%; margin: 5px 0 8px; font-size: 10pt; page-break-inside: avoid; }
+  th, td { border: 1px solid #bbb; padding: 4px 7px; vertical-align: top; text-align: left; }
+  th { background: #e8eef8; color: #0f2a5f; }
+  .box { border: 1px solid #c9d3e6; background: #f5f8fd; border-radius: 4px; padding: 6px 10px; margin: 6px 0; page-break-inside: avoid; }
+  .warn { border-color: #f0c36d; background: #fff8e6; }
+  .danger { border-color: #f3a6a6; background: #fdeeee; }
+  .ok { border-color: #9fd3a8; background: #eefaf0; }
+  .step { display: flex; gap: 10px; margin: 6px 0; }
+  .num { flex: none; width: 24px; height: 24px; border-radius: 50%; background: #0f2a5f; color: #fff; font-weight: 700; text-align: center; line-height: 24px; font-size: 11pt; margin-top: 1px; }
+  .step > div:last-child { flex: 1; }
+  .step b.t { color: #0f2a5f; font-size: 11.3pt; }
+  .btn { display: inline-block; border: 1px solid #0f2a5f; border-radius: 3px; padding: 0 5px; font-size: 9.8pt; color: #0f2a5f; background: #fff; white-space: nowrap; }
+  .btn.red { border-color: #b91c1c; color: #b91c1c; }
+  .btn.amber { border-color: #b45309; color: #b45309; }
+  .btn.green { border-color: #15803d; color: #15803d; }
+  .pill { display: inline-block; padding: 0 7px; border-radius: 10px; font-size: 9.5pt; white-space: nowrap; }
+  .p-gray { background: #f3f4f6; color: #374151; } .p-orange { background: #ffedd5; color: #c2410c; } .p-teal { background: #ccfbf1; color: #0f766e; }
+  .p-blue { background: #dbeafe; color: #1d4ed8; } .p-green { background: #dcfce7; color: #15803d; } .p-red { background: #fee2e2; color: #b91c1c; } .p-cancel { background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5; }
+  .flow { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; font-size: 10pt; margin: 6px 0 2px; }
+  .flow span.s { border: 1px solid #0f2a5f; border-radius: 4px; padding: 2px 7px; background: #fff; }
+  .flow span.a { color: #0f2a5f; font-weight: 700; }
+  .small { font-size: 9.5pt; color: #555; }
+  .foot { margin-top: 12px; border-top: 1px solid #ddd; padding-top: 5px; font-size: 9pt; color: #666; }
+</style>
+</head>
+<body>
+
+<h1>คู่มือคอลเซ็นเตอร์ — รับแจ้งและมอบหมายงาน</h1>
+<div class="sub">ระบบ SE Survey · ฉบับ 24 กันยายน 2569 · เว็บ <b>https://survey.sesurvey.cloud</b> (เปิดใน Chrome) · ล็อกอินด้วยบัญชีคอลเซ็นเตอร์ของตัวเอง</div>
+
+<div class="box">
+  <b>หน้าที่ของคอลเซ็นเตอร์ในระบบ</b> — รับแจ้งเคลม สร้างเคส มอบหมายช่างสำรวจ แล้วติดตามจนช่างส่งงาน จากนั้นหัวหน้าผู้ตรวจรับช่วงตรวจและอนุมัติ
+  <div class="flow">
+    <span class="s">สร้างเคส</span><span class="a">→</span><span class="s">มอบหมายช่าง</span><span class="a">→</span><span class="s">ช่างรับงาน ไปหน้างาน</span><span class="a">→</span><span class="s">ช่างส่งงาน</span><span class="a">→</span><span class="s">หัวหน้าตรวจ + อนุมัติ</span>
+  </div>
+</div>
+
+<h2>เมนูของคอลเซ็นเตอร์</h2>
+<table>
+  <tr><th style="width:30%">เมนู</th><th>ใช้ทำอะไร</th></tr>
+  <tr><td><b>หน้าหลัก</b></td><td>จำนวนงานแต่ละสถานะ + เคสล่าสุด 10 ใบ พร้อมปุ่มจัดการ</td></tr>
+  <tr><td><b>สร้างเคสใหม่</b></td><td>รับแจ้งเคลมใหม่ แล้วมอบหมายช่างต่อในหน้าเดียวกัน</td></tr>
+  <tr><td><b>รายการเคสทั้งหมด</b></td><td>ค้นหา กรองสถานะ ติดตามอายุงาน และปุ่มจัดการทุกเคส</td></tr>
+  <tr><td><b>พนักงานทั้งหมด</b></td><td>แผนที่ตำแหน่งพนักงานสำรวจแบบเรียลไทม์</td></tr>
+  <tr><td><b>ความพร้อมรับแจ้งเตือน</b></td><td>ช่างคนไหนพร้อมรับแจ้งเตือนงาน / ยังไม่พร้อม</td></tr>
+  <tr><td><b>รูปเฟือง (ตั้งค่า)</b> ท้ายแถบเมนู</td><td>ขนาดตัวอักษร · เปลี่ยนรหัสผ่าน</td></tr>
+</table>
+<p class="small">เมนูเวลาเข้างาน · เวลาเข้า–ออกงาน · ตารางเวรประจำจุด เป็นเรื่องลงเวลาและเวร ไม่อยู่ในคู่มือนี้</p>
+
+<h2>1. สร้างเคสใหม่</h2>
+
+<div class="step"><div class="num">1</div><div>
+  <b class="t">เลือกบริษัทประกัน</b> — เมนู <b>สร้างเคสใหม่</b> → กดการ์ด <b>ไทยไพบูลย์ประกันภัย</b> หรือ <b>ไอโออิ กรุงเทพประกันภัย</b>
+</div></div>
+
+<div class="step"><div class="num">2</div><div>
+  <b class="t">อ่านเลขจากรูปใบรับแจ้ง</b> (ไม่บังคับ แต่ช่วยไม่ต้องพิมพ์เอง)
+  <ul>
+    <li><span class="btn">เลือกไฟล์รูป</span> คลิกเลือก หรือลากไฟล์มาวาง · <span class="btn">จับภาพหน้าจอ</span> เลือกหน้าจอ → ลากเมาส์เลือกพื้นที่ (เลือกได้หลายส่วน กด <span class="btn green">+ เพิ่มส่วน</span> / <span class="btn">ย้อน</span>) → <span class="btn">ตกลง</span></li>
+    <li>ระบบเติมให้: เลขเคลม · เลขรับแจ้ง · เลขเซอร์เวย์ (ไทยไพบูลย์) · เลขกรมธรรม์ · เบอร์โทร · สถานที่เกิดเหตุ · วันเวลาลูกค้าแจ้ง</li>
+    <li>ขึ้นเหลือง <b>"ระบบไม่มั่นใจบางเลข — กรุณาตรวจสอบ: ..."</b> = เทียบเลขที่ระบุกับรูปก่อน (รูปแสดงใต้ฟอร์ม คลิกดูขนาดเต็ม)</li>
+    <li><span class="btn green">+ เลือกไฟล์เพิ่ม</span> / <span class="btn green">+ จับภาพเพิ่ม</span> = อ่านรูปที่ 2 เติมเฉพาะช่องที่ยังว่าง · <span class="btn red">เริ่มใหม่</span> = ล้างทั้งหมด</li>
+  </ul>
+</div></div>
+
+<div class="step"><div class="num">3</div><div>
+  <b class="t">ตรวจ / แก้ช่องข้อมูล</b>
+  <table>
+    <tr><th style="width:33%">ช่อง</th><th>หมายเหตุ</th></tr>
+    <tr><td>เลขเคลม · เลขรับแจ้ง · เลขกรมธรรม์</td><td>เลขเคลมซ้ำกับเคสเดิมได้ (เคลมเดียวหลายครั้ง)</td></tr>
+    <tr><td>เลขเรื่องเซอร์เวย์ <span class="small">(เฉพาะไทยไพบูลย์)</span></td><td><b>ห้ามซ้ำกับเคสอื่น</b> — ซ้ำจะขึ้น "เลขเซอร์เวย์ ... ถูกใช้แล้วในเคส #..." · ไอโออิไม่มีเลขนี้บนการ์ด</td></tr>
+    <tr><td>เบอร์โทรผู้แจ้งเหตุ <span class="small">(+ เบอร์โทรผู้ขับขี่ เฉพาะไอโออิ)</span></td><td>ตามใบรับแจ้ง</td></tr>
+    <tr><td><b>ลูกค้าแจ้ง</b> <span style="color:#b91c1c">*</span> (บังคับ)</td><td>วันที่ <b>วว/ดด/พพพพ</b> (พ.ศ.) + เวลา <b>ชช:นน</b> หรือกด <span class="btn">ตอนนี้</span> ถ้าลูกค้าเพิ่งโทรแจ้ง — เป็นจุดเริ่มไทม์ไลน์งานของช่าง</td></tr>
+    <tr><td>สถานที่เกิดเหตุ</td><td>ขึ้นบนการ์ดงานในมือถือช่าง เขียนให้ช่างหาเจอ</td></tr>
+  </table>
+</div></div>
+
+<div class="step"><div class="num">4</div><div>
+  <b class="t">กด <span class="btn">สร้างเคสและมอบหมาย</span></b> — ฟอร์มล็อก แล้วส่วน <b>มอบหมายช่างสำรวจ</b> เปิดต่อในหน้าเดียวกัน
+  (กด <b>ข้ามไปก่อน</b> ถ้ายังไม่จ่าย — เคสอยู่สถานะ <span class="pill p-gray">รอมอบหมาย</span> ไว้จ่ายทีหลัง)
+</div></div>
+
+<h2>2. มอบหมายช่างสำรวจ</h2>
+
+<div class="step"><div class="num">1</div><div>
+  <b class="t">เลือกประเภทเคลม</b> <span style="color:#b91c1c">*</span> — เคลมสด · เคลมแห้ง · งานนัดหมาย · งานติดตาม
+  <span class="small">(ปุ่มมอบหมายกดไม่ได้จนกว่าจะเลือก · งานครั้งแรกปกติเป็นเคลมสดหรือเคลมแห้ง · ช่างแก้บนแอปได้ถ้าหน้างานไม่ตรง)</span>
+</div></div>
+
+<div class="step"><div class="num">2</div><div>
+  <b class="t">เลือกช่างจากรายชื่อ</b> (คอลัมน์ขวา โหลดเองตามพิกัดล่าสุด)
+  <ul>
+    <li>ช่างในจังหวัดที่เกิดเหตุขึ้นก่อน หรือเรียงตามระยะทางโดยประมาณ (วัดจากจุดกลางอำเภอ ไม่ใช่จุดเกิดเหตุจริง) · แต่ละคนบอกรหัส ชื่อ จังหวัด เวลาที่อัปเดตพิกัด และ ~กม.</li>
+    <li>ป้าย <span class="pill p-orange">ถืองาน N ใบ</span> = รับงานไปแล้วยังไม่ส่ง คนกลุ่มนี้ถูกยุบไว้ท้ายรายการ "▸ ช่างที่ถืองานอยู่" กดเปิดแล้วมอบหมายได้ถ้าจำเป็น · "เสร็จงานแล้ว รอส่งรายงาน" และ "ส่งแล้วรอตรวจ" นับว่าว่าง</li>
+    <li>ช่องค้นหาพิมพ์รหัส (เช่น SE225) หรือบางส่วนของชื่อ · <span class="btn green">เรียกพิกัดใหม่</span> = ขอตำแหน่งล่าสุดจากเครื่องช่างทุกคน</li>
+  </ul>
+  <div class="box warn">รายชื่อมาจากตำแหน่งที่แอปมือถือส่งมา <b>ช่างที่ยังไม่เคยเปิดแอป หรือไม่อนุญาตตำแหน่ง จะไม่อยู่ในรายชื่อ</b> — ให้ช่างเปิดแอปแล้วกดเรียกพิกัดใหม่</div>
+</div></div>
+
+<div class="step"><div class="num">3</div><div>
+  <b class="t">กด <span class="btn">มอบหมาย</span> ที่ชื่อช่าง</b> — ระบบรอเครื่องช่างตอบรับไม่เกิน 20 วินาที
+  <table>
+    <tr><th style="width:42%">ที่ขึ้นบนจอ</th><th>ทำอย่างไร</th></tr>
+    <tr><td><span class="pill p-green">✅ แจ้งเตือนถึงเครื่องช่างแล้ว</span></td><td>เรียบร้อย ไม่ต้องทำอะไรต่อ</td></tr>
+    <tr><td><span class="pill p-orange">⚠️ เครื่องช่างยังไม่ตอบรับ</span> หรือ <span class="pill p-orange">⚠️ แจ้งเตือนไปไม่ถึงเครื่องช่าง</span></td><td>งานเข้าระบบแล้ว แต่ช่างอาจไม่รู้ตัว — <b>โทรแจ้งช่าง</b> แล้วกด <span class="btn amber">รับทราบ</span></td></tr>
+  </table>
+</div></div>
+
+<p>เคสที่สร้างไว้แต่ยังไม่จ่าย: หน้าหลักหรือรายการเคส กด <span class="btn">มอบหมาย</span> (หรือคลิกแถว) → หน้ามอบหมายช่างสำรวจ ซึ่งมี <b>ประวัติการจ่ายงาน</b> (มอบหมาย · ดึงงานกลับ · ช่างปฏิเสธ) อยู่ด้านล่าง</p>
+
+<h2>3. ติดตามงาน</h2>
+<table>
+  <tr><th style="width:27%">สถานะ</th><th>ความหมาย</th></tr>
+  <tr><td><span class="pill p-gray">รอมอบหมาย</span></td><td>สร้างเคสแล้ว ยังไม่ได้จ่ายช่าง หรือถูกดึงงานกลับ</td></tr>
+  <tr><td><span class="pill p-orange">มอบหมายแล้ว</span></td><td>ช่างรับงานไปแล้ว ยังไม่เสร็จหน้างาน</td></tr>
+  <tr><td><span class="pill p-teal">เสร็จงานแล้ว</span></td><td>ช่างเสร็จหน้างาน กำลังทำรายงาน (รับงานใหม่ได้แล้ว)</td></tr>
+  <tr><td><span class="pill p-blue">สำรวจแล้ว</span></td><td>ช่างส่งงานแล้ว รอหัวหน้าตรวจ</td></tr>
+  <tr><td><span class="pill p-green">ตรวจสอบแล้ว</span></td><td>หัวหน้าอนุมัติแล้ว</td></tr>
+  <tr><td><span class="pill p-red">ปฏิเสธแล้ว</span></td><td>ช่างไม่รับงาน — ดูชื่อช่างและเหตุผลในคอลัมน์ช่างสำรวจ แล้วมอบหมายใหม่</td></tr>
+  <tr><td><span class="pill p-cancel">ยกเลิก</span></td><td>ยกเลิกงานแล้ว (เหตุผล คนยกเลิก เวลา แสดงใต้ป้าย)</td></tr>
+</table>
+<ul>
+  <li><b>รายการเคสทั้งหมด</b>: ค้นหาเลขเคลม/เลขเซอร์เวย์/เลขรับแจ้ง/ชื่อลูกค้า/สถานที่ · กรองสถานะ</li>
+  <li>ป้ายเวลาในคอลัมน์วันที่ = เวลาที่ผ่านไปนับจากจ่ายงาน (KPI ภายใน 24 ชม.) — <span class="pill p-orange">เหลือง</span> เมื่อครบ 18 ชม. · <span class="pill p-red">แดง</span> เมื่อเกิน 24 ชม. · แถบเหลืองบนสุดบอกจำนวนเคสที่เกิน 24 ชม.</li>
+</ul>
+<table>
+  <tr><th style="width:27%">สถานะของแถว</th><th>ปุ่มในคอลัมน์จัดการ</th></tr>
+  <tr><td>รอมอบหมาย</td><td><span class="btn">มอบหมาย</span></td></tr>
+  <tr><td>ปฏิเสธแล้ว</td><td><span class="btn">มอบหมายใหม่</span></td></tr>
+  <tr><td>มอบหมายแล้ว</td><td><span class="btn amber">↩ ดึงงานกลับ</span></td></tr>
+  <tr><td>สำรวจแล้ว · ตรวจสอบแล้ว</td><td><span class="btn green">⬇ XML</span> (ไฟล์สำรองนำเข้าประกัน) · <span class="btn">+ งานครั้งถัดไป</span></td></tr>
+  <tr><td>ทุกสถานะที่ยังไม่อนุมัติ</td><td><span class="btn red">✕ ยกเลิกงาน</span></td></tr>
+</table>
+
+<h2>4. เปลี่ยนแปลงงานระหว่างทาง</h2>
+<h3>ช่างปฏิเสธงาน</h3>
+<p>ช่างเลือกเหตุผลบนแอป → เคสขึ้น <span class="pill p-red">ปฏิเสธแล้ว</span> พร้อมชื่อช่างและเหตุผล → กด <span class="btn">มอบหมายใหม่</span> แล้วเลือกช่างคนใหม่ (ระวังจ่ายคนเดิมซ้ำ)</p>
+<h3>ดึงงานกลับ (จ่ายผิดคน / ช่างไปไม่ได้)</h3>
+<p>เฉพาะสถานะ <span class="pill p-orange">มอบหมายแล้ว</span> → <span class="btn amber">↩ ดึงงานกลับ</span> → ยืนยัน → งานกลับไป <span class="pill p-gray">รอมอบหมาย</span> และการ์ดรับงานบนเครื่องช่างคนเดิมถูกถอนออก
+ถ้าระบบบอกว่าถอนการ์ดไม่ได้ ให้<b>โทรแจ้งช่าง</b> · ช่างกดเสร็จงานหรือส่งงานแล้ว ดึงกลับไม่ได้</p>
+<h3>ยกเลิกงาน (ลูกค้าไม่ติดใจ ไม่เคลม · แจ้งซ้ำ · ประกันยกเลิกงาน)</h3>
+<p><span class="btn red">✕ ยกเลิกงาน</span> ที่หน้าหลัก รายการเคส หรือหน้ามอบหมาย → พิมพ์เหตุผล → <span class="btn red">ยืนยันยกเลิกงาน</span></p>
+<ul>
+  <li>ทำได้ทุกสถานะที่ยังไม่อนุมัติ · งานที่อยู่กับช่าง ระบบถอนการ์ดบนมือถือให้ (ถอนไม่ได้ ระบบบอกให้โทรแจ้งช่าง)</li>
+  <li>ยกเลิกแล้วมอบหมายต่อไม่ได้ · <b>คืนงานได้เฉพาะแอดมิน</b> — ยกเลิกผิดให้แจ้งแอดมิน</li>
+</ul>
+<div class="box warn">ระบบ<b>ไม่ได้</b>ยกเลิกงานบน ISURVEY ให้ และถ้า ISURVEY ยกเลิกเคลม ก็ไม่ไหลมาเว็บเอง — ต้องทำเองทั้งสองฝั่ง</div>
+<h3>งานครั้งถัดไป (ติดตาม · นัดหมาย · เจรจา)</h3>
+<p>เคสที่ช่างส่งงานแล้ว (สำรวจแล้ว/ตรวจสอบแล้ว) กด <span class="btn">+ งานครั้งถัดไป</span> → ระบบก๊อปเลขเคลม กรมธรรม์ และข้อมูลรถให้ ไม่ต้องพิมพ์ซ้ำ → พาไปหน้ามอบหมาย (ประเภทเคลมปกติเป็นงานนัดหมายหรืองานติดตาม) · มีงานครั้งถัดไปค้างอยู่แล้ว ระบบจะแจ้ง</p>
+
+<h2>ถ้าเจอปัญหา</h2>
+<table>
+  <tr><th style="width:32%">อาการ</th><th>ทำอย่างไร</th></tr>
+  <tr><td><b>ไม่มีชื่อช่างในรายชื่อ</b></td><td>ช่างยังไม่เคยเปิดแอปหรือไม่ส่งตำแหน่ง → ให้ช่างเปิดแอปแล้วกด <span class="btn green">เรียกพิกัดใหม่</span> · ยังไม่มีให้แจ้งแอดมิน</td></tr>
+  <tr><td><b>ปุ่มมอบหมายกดไม่ได้</b></td><td>ยังไม่เลือกประเภทเคลม</td></tr>
+  <tr><td><b>สร้างเคสไม่ผ่าน "ยังไม่ได้กรอก ลูกค้าแจ้ง"</b></td><td>กรอกวันที่ (พ.ศ.) และเวลาให้ครบ หรือกด <span class="btn">ตอนนี้</span></td></tr>
+  <tr><td><b>"เลขเซอร์เวย์ ... ถูกใช้แล้ว"</b></td><td>เคสนี้อาจสร้างไว้แล้ว ค้นเลขในรายการเคสก่อน</td></tr>
+  <tr><td><b>แจ้งเตือนไม่ถึงเครื่องช่าง</b> (แถบเหลือง)</td><td>โทรแจ้งช่าง · ดูเมนู <b>ความพร้อมรับแจ้งเตือน</b> ว่าช่างคนนั้นพร้อมไหม (ไม่พร้อม = ยังไม่เคยเปิดแอปเวอร์ชันใหม่บนเครื่อง)</td></tr>
+  <tr><td><b>จ่ายผิดคน</b></td><td><span class="btn amber">↩ ดึงงานกลับ</span> แล้วมอบหมายใหม่</td></tr>
+  <tr><td><b>ลูกค้าไม่เคลมแล้ว</b></td><td><span class="btn red">✕ ยกเลิกงาน</span> พร้อมเหตุผล</td></tr>
+  <tr><td><b>ติดเรื่องอื่น</b></td><td>จด<b>เลขเคลม</b> + สิ่งที่เห็น แล้วแจ้งแอดมิน</td></tr>
+</table>
+
+<div class="foot">ฉบับ 24/09/69 · ต้นฉบับ <b>docs/คู่มือคอลเซ็นเตอร์.html</b> ใน repo se-survey · คู่มือชุดเดียวกัน: คู่มือผู้ตรวจสอบ · คู่มือพนักงานบอท se-autokey · คู่มือกรอกข้อมูลคู่กรณี/ผู้บาดเจ็บ/ทรัพย์สิน</div>
+
+</body>
+</html>
