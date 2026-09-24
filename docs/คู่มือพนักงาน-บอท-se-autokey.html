@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>คู่มือใช้งาน se-autokey (สำหรับพนักงาน)</title>
+<!-- ต้นฉบับเนื้อหา = se-autokey/README_พนักงาน.txt (ไฟล์นั้นแพ็กไปกับบอท) — แก้เนื้อหาต้องแก้ทั้ง 2 ไฟล์ แล้วสร้าง PDF ใหม่ด้วย Chrome headless --print-to-pdf -->
+<style>
+  @page { size: A4; margin: 14mm 13mm 14mm 13mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Leelawadee UI", "Leelawadee", Tahoma, sans-serif; font-size: 10.8pt; line-height: 1.5; color: #111; margin: 0; }
+  h1 { font-size: 19pt; margin: 0 0 2px; color: #0f2a5f; }
+  .sub { color: #555; font-size: 10pt; margin-bottom: 10px; }
+  h2 { font-size: 13.5pt; color: #fff; background: #0f2a5f; padding: 4px 10px; margin: 14px 0 7px; border-radius: 4px; page-break-after: avoid; }
+  h3 { font-size: 11.8pt; color: #0f2a5f; margin: 9px 0 3px; page-break-after: avoid; }
+  p { margin: 3px 0; }
+  ul, ol { margin: 3px 0 5px 18px; padding: 0; }
+  li { margin: 2px 0; }
+  table { border-collapse: collapse; width: 100%; margin: 5px 0 8px; font-size: 10pt; page-break-inside: avoid; }
+  th, td { border: 1px solid #bbb; padding: 4px 7px; vertical-align: top; text-align: left; }
+  th { background: #e8eef8; color: #0f2a5f; }
+  .box { border: 1px solid #c9d3e6; background: #f5f8fd; border-radius: 4px; padding: 6px 10px; margin: 6px 0; page-break-inside: avoid; }
+  .warn { border-color: #f0c36d; background: #fff8e6; }
+  .danger { border-color: #f3a6a6; background: #fdeeee; }
+  .ok { border-color: #9fd3a8; background: #eefaf0; }
+  .btn { display: inline-block; border: 1px solid #0f2a5f; border-radius: 3px; padding: 0 5px; font-size: 9.8pt; color: #0f2a5f; background: #fff; white-space: nowrap; }
+  .btn.green { border-color: #15803d; color: #15803d; }
+  .btn.amber { border-color: #b45309; color: #b45309; }
+  .file { font-family: Consolas, monospace; background: #eee; padding: 0 4px; border-radius: 3px; font-size: 10pt; }
+  .small { font-size: 9.5pt; color: #555; }
+  .pb { page-break-before: always; }
+  .foot { margin-top: 12px; border-top: 1px solid #ddd; padding-top: 5px; font-size: 9pt; color: #666; }
+</style>
+</head>
+<body>
+
+<h1>คู่มือใช้งาน se-autokey (สำหรับพนักงาน)</h1>
+<div class="sub">บอทกรอกข้อมูลเคลมลง EMCS · ฉบับ 23 กันยายน 2569 · ใช้กับบอท v1.1.37 ขึ้นไป</div>
+
+<div class="box">
+  โปรแกรมนี้กรอกข้อมูลเคลมลง EMCS ให้อัตโนมัติ จาก 2 ต้นทาง แล้วให้คุณ <b>"ตรวจ"</b> และ <b>"กดส่งงาน"</b> ผ่านหน้าเว็บของโปรแกรม
+  <table style="margin:6px 0 4px">
+    <tr><th style="width:55%">ต้นทางของงาน</th><th>ใช้แท็บ</th></tr>
+    <tr><td>งานที่ตรวจจบบน ISURVEY แล้ว</td><td><b>นำเข้า ISURVEY</b></td></tr>
+    <tr><td>งานที่หัวหน้าอนุมัติบนเว็บ SE Survey</td><td><b>นำเข้า SE Survey</b></td></tr>
+  </table>
+  <span class="small">แท็บ "ดึงงานรอตรวจ" เป็นของหัวหน้า — ดึงงาน ISURVEY ที่ยังไม่ตรวจเข้าเว็บ SE Survey ไม่แตะ EMCS</span>
+</div>
+
+<h2>ติดตั้งครั้งแรกจาก USB — ทำครั้งเดียวต่อเครื่อง</h2>
+<ol>
+  <li>ติดตั้ง Google Chrome (ถ้ายังไม่มี)</li>
+  <li>เสียบ USB → ก๊อปโฟลเดอร์ <span class="file">se-autokey-update</span> ทั้งโฟลเดอร์ ไปวางที่หน้าจอ Desktop ของเครื่องคุณ</li>
+  <li>เปลี่ยนชื่อโฟลเดอร์ที่เพิ่งวาง <span class="file">se-autokey-update</span> → <span class="file">se-autokey</span>
+    <div class="box danger"><b>ห้ามกด update-here.bat ตอนติดตั้งครั้งแรก</b> — ตัวนั้นใช้ "อัปเดต" เครื่องที่มีโปรแกรมอยู่แล้วเท่านั้น เครื่องใหม่จะขึ้นว่า "ไม่ใช่ se-autokey" แล้วหยุด</div></li>
+  <li>เปิดโฟลเดอร์ se-autokey → ดับเบิลคลิก <span class="file">start-webui.bat</span> (หน้าเว็บจะเปิดขึ้นเอง)</li>
+  <li>ตั้งบัญชีของคุณ — ที่หน้าเว็บ กดแท็บ <b>ตั้งค่า</b>
+    <ul>
+      <li><b>บัญชี ISURVEY</b> → ใส่ชื่อผู้ใช้ + รหัส → กด <span class="btn">บันทึกและทดสอบเข้าสู่ระบบ</span></li>
+      <li><b>บัญชี EMCS</b> → ใส่ชื่อผู้ใช้ + รหัส → กด <span class="btn">บันทึก</span></li>
+    </ul>
+    <div class="box warn"><b>ใช้บัญชีของตัวเองเท่านั้น ห้ามใช้บัญชีร่วมกับคนอื่น</b> (EMCS ล็อกเรื่องตามชื่อผู้ใช้ — ใช้ซ้ำกันจะแย่งเรื่องกันเอง)<br>
+    ตั้งครั้งเดียวพอ เครื่องจำไว้ให้ · เว้นช่องรหัสว่าง = แก้แค่ชื่อผู้ใช้</div></li>
+  <li>ในแท็บตั้งค่าเดียวกัน เลื่อนลงมาอีก 2 การ์ด → ใส่ค่าที่ผู้ดูแลให้มา (ทุกเครื่องใช้ค่าเดียวกัน ไม่ใช่บัญชีส่วนตัว)
+    <table>
+      <tr><th style="width:34%">การ์ด</th><th>ถ้าไม่ใส่</th></tr>
+      <tr><td><b>รหัสแจ้งกลับ ISURVEY</b></td><td>ส่งงานเข้า EMCS ได้ แต่ ISURVEY ไม่ถูกติ๊กว่าคีย์แล้ว → เสี่ยงคนอื่นมาคีย์ซ้ำ</td></tr>
+      <tr><td><b>ทะเบียนงานคีย์กลาง (se-key)</b></td><td>งานที่ส่งแล้วจะไม่ขึ้นทะเบียนที่ key.sesurvey.cloud · กด <span class="btn">ทดสอบเชื่อมต่อ</span> ได้เลย ปลอดภัย (แค่อ่าน)</td></tr>
+    </table></li>
+</ol>
+<p class="small">ไม่ต้องลง Python (มีมาให้ในโฟลเดอร์แล้ว) · ไม่ต้องรัน setup ใด ๆ — ดับเบิลคลิก start-webui.bat ได้เลย · ครั้งแรกที่รัน โปรแกรมจะโหลดตัวเชื่อม Chrome ให้เองสักครู่ ขอแค่มีเน็ต</p>
+
+<h2>อัปเดตโปรแกรม</h2>
+<h3>ทางปกติ — ผ่านเน็ต ไม่ต้องใช้ USB</h3>
+<ol>
+  <li>หน้าเว็บของโปรแกรม → แท็บ <b>ตั้งค่า</b> → กด <span class="btn">ตรวจอัปเดต</span></li>
+  <li>ถ้ามีเวอร์ชันใหม่ กด <span class="btn">อัปเดตและรีสตาร์ต</span> → รอสักครู่ หน้าเว็บกลับมาเอง</li>
+</ol>
+<div class="box warn"><b>กดตอนไม่มีงานกำลังรันเท่านั้น</b> · ประวัติงาน / รหัสผ่าน / รูปเคส ในเครื่องคุณไม่หาย</div>
+<div style="page-break-inside: avoid">
+<h3>ใช้ USB เฉพาะเครื่องที่ยังไม่มีปุ่ม "ตรวจอัปเดต" (เวอร์ชันเก่ามาก)</h3>
+<ol>
+  <li>เสียบ USB → เปิดโฟลเดอร์ <span class="file">se-autokey-update</span></li>
+  <li>ดับเบิลคลิก <span class="file">update-here.bat</span> → พิมพ์ y แล้วกด Enter</li>
+  <li>ปิดหน้าต่างสีดำของ se-autokey ที่เปิดค้างอยู่ (ถ้ามี) แล้วดับเบิลคลิก <span class="file">start-webui.bat</span> ใหม่ — <b>ไม่ปิด-เปิดใหม่ จะยังเห็นหน้าเว็บเวอร์ชันเก่า</b></li>
+</ol>
+</div>
+
+<h2>ใช้งานทุกวัน — งานที่ตรวจจบบน ISURVEY (แท็บ "นำเข้า ISURVEY")</h2>
+<ol>
+  <li>ดับเบิลคลิก <span class="file">start-webui.bat</span> (หน้าเว็บจะเปิดขึ้นเอง)</li>
+  <li>เลือกงานได้ 2 แบบ
+    <table>
+      <tr><th style="width:30%">แบบ</th><th>ทำอย่างไร</th></tr>
+      <tr><td><b>ก) จากรายการ "งานจบแล้ว (ISURVEY)"</b></td><td>เลือกช่วงวัน (วันนี้ / 3 วัน / 7 วัน) → กด <span class="btn">ดึงข้อมูล</span> → ช่อง "เลขท้าย" ใส่เลขท้ายเลขเคลมที่คุณรับผิดชอบ (เช่น 0,1) → ติ๊กงานที่จะทำ → กด <span class="btn">นำเข้าที่เลือก</span></td></tr>
+      <tr><td><b>ข) พิมพ์เลขเคลมเอง</b></td><td>พิมพ์ลงในช่อง (ใส่หลายเคลมได้ บรรทัดละ 1 เลข) → กด <span class="btn">รันโปรแกรม</span></td></tr>
+    </table></li>
+  <li>รอสักครู่ — หน้าต่าง Chrome จะเปิดขึ้นมากรอกข้อมูลให้เอง</li>
+</ol>
+
+<h2>ใช้งานทุกวัน — งานที่หัวหน้าอนุมัติบนเว็บ SE Survey (แท็บ "นำเข้า SE Survey")</h2>
+<ol>
+  <li>แท็บ <b>นำเข้า SE Survey</b> → กด <span class="btn">โหลดรายการ</span> (เคสที่ยังไม่เข้า EMCS ขึ้นก่อน · ค้นด้วยเลขเคส/เลขเซอร์เวย์ หรือกรองตาม "ผู้ตรวจสอบงาน" ได้)</li>
+  <li>ที่การ์ดเคส เลือกปุ่ม
+    <table>
+      <tr><th style="width:36%">ปุ่ม</th><th>ผล</th></tr>
+      <tr><td><span class="btn">นำเข้า EMCS</span></td><td>กรอก + อัปรูป + บันทึก draft แล้วหยุด ให้คุณตรวจก่อนส่ง <b>(แนะนำ)</b></td></tr>
+      <tr><td><span class="btn amber">นำเข้า EMCS + ส่งงานใหม่</span></td><td>นำเข้าแล้วกดส่งให้ทันที ไม่หยุดให้ตรวจ (ส่งแล้วแก้ไม่ได้ · ตรวจกลับแล้วไม่ตรง = ไม่ส่ง)</td></tr>
+      <tr><td>หลายเคส</td><td>ติ๊กเลือก → <span class="btn">นำเข้าที่เลือก</span> หรือ <span class="btn amber">นำเข้า + ส่งงานใหม่ ที่เลือก</span></td></tr>
+    </table></li>
+  <li>ทางนี้ไม่ถามเลือกรูป — รูปชุดที่หัวหน้าอนุมัติไว้เข้า EMCS ให้ทั้งหมด</li>
+  <li>งานครั้งที่ 2 ขึ้นไป (ติดตาม/เจรจา) บอทเปิดเรื่องเดิมใน EMCS แล้วเพิ่มครั้งใหม่ ไม่สร้างเรื่องซ้ำ</li>
+</ol>
+<div class="box">เคสที่หัวหน้า/คอลเซ็นเตอร์กด <b>"ยกเลิก"</b> (เช่น ลูกค้าไม่เคลม) ไม่ขึ้นในรายการนี้ ไม่ต้องนำเข้า</div>
+
+<h2>เมื่อบอทกรอกเสร็จ → ตรวจ แล้วกดส่ง</h2>
+<ol>
+  <li>การ์ดงานบนหน้าเว็บขึ้น <b>"พร้อมส่งงาน"</b> พร้อมปุ่มสีเขียว <span class="btn green">ส่งงาน + แจ้ง ISURVEY</span></li>
+  <li>สลับไปดูหน้าต่าง Chrome ที่เปิดอยู่ → ตรวจข้อมูลให้ถูกต้อง
+    <div class="box warn">ถ้าความเสียหายเกิน 8 รายการ ให้เติมรายการที่เหลือเองก่อน</div></li>
+  <li>ประเภทงาน (งานต้น / งานตาม / SESV) ระบบเลือกไว้ให้ตามงาน → ตรวจว่าถูก · งานรวมหลาย invoice ให้ติ๊ก "งานรวม" · งานรวม/SESV ต้องใส่เลข invoice (SEABI) อย่างน้อย 1 เลข</li>
+  <li>ตรวจเรียบร้อยแล้ว → กลับมาที่หน้าเว็บ กดปุ่ม <span class="btn green">ส่งงาน + แจ้ง ISURVEY</span> → กดยืนยันอีกครั้ง</li>
+</ol>
+<div class="box ok">ระบบจะกดส่งให้ (งานใหม่ = "ส่งงานใหม่" · งานครั้งที่ 2+ = "ส่งผลงานต่อเนื่อง") + แจ้งกลับ ISURVEY + บันทึกทะเบียน se-key ให้อัตโนมัติ → เสร็จ</div>
+
+<h2>สิ่งที่อาจเจอระหว่างทาง</h2>
+<table>
+  <tr><th style="width:36%">ที่เห็นบนการ์ด</th><th>ความหมาย / ทำอย่างไร</th></tr>
+  <tr><td>กล่องสีเหลือง <b>"ต้องกรอกข้อมูลเอง: ..."</b></td><td>ข้อมูลต้นทางไม่ครบ → ถ้ามีตัวเลือกบนการ์ด เลือกได้เลย · ถ้าไม่มี ไปกรอกช่องนั้นในหน้าต่าง Chrome ให้เรียบร้อย แล้วกดปุ่ม <span class="btn">ดำเนินการต่อ</span> ในกล่องเหลืองนั้น</td></tr>
+  <tr><td>กล่องเลือกรูป <b>"เลือกรูปที่จะอัปโหลดเข้า EMCS"</b> (เฉพาะงานจาก ISURVEY)</td><td>ติ๊กเฉพาะรูปที่ต้องการนำเข้า (เริ่มต้นติ๊กให้ครบทุกรูปแล้ว) → กด <span class="btn">อัปโหลดรูปที่เลือก</span> · รูปที่ไม่ติ๊กจะไม่ถูกอัปโหลด</td></tr>
+  <tr><td><b>"ข้าม: มีเรื่องใน EMCS อยู่แล้ว"</b></td><td>เคลมนี้เคยเปิดเรื่องไว้แล้ว (กันเปิดซ้ำ)</td></tr>
+  <tr><td>ไม่อยากส่งงานเรื่องไหน</td><td>แค่ไม่ต้องกดปุ่มส่ง งานจะถูกเก็บเป็น draft ไว้เฉย ๆ</td></tr>
+  <tr><td>ดูงานที่เคยทำ</td><td>แท็บ <b>สมุดงาน</b></td></tr>
+</table>
+
+<h2>ข้อควรระวัง</h2>
+<div class="box danger">
+<ul style="margin-top:0;margin-bottom:0">
+  <li>ปุ่ม <span class="btn">นำเข้า EMCS</span> / <span class="btn">รันโปรแกรม</span> จะ<b>ไม่กดส่งงานเอง</b>จนกว่าคุณจะกดปุ่มส่ง → ตรวจให้ดีก่อนกด (กดส่งแล้วย้อนกลับไม่ได้)</li>
+  <li>ปุ่มที่มีคำว่า <b>"+ ส่งงานใหม่"</b> = ส่งทันทีโดยไม่หยุดให้ตรวจ ใช้เมื่อมั่นใจเท่านั้น</li>
+  <li>ใส่หลายเคลมได้ = กดปุ่มครั้งเดียว บอทไล่กรอกทีละเคลมจนครบในหน้าต่าง Chrome เดียว (ไม่ได้ทำพร้อมกัน)</li>
+  <li>แท็บนำเข้า ISURVEY: ใส่หลายเคลม จะไม่มีปุ่มส่งงานบนการ์ด — ทุกเคลมเก็บเป็น draft ต้องเข้า EMCS ตรวจแล้วกด "ส่งงานใหม่" เองทีละเรื่อง</li>
+  <li>เลิกใช้งาน: ปิดหน้าต่างสีดำ (start-webui)</li>
+</ul>
+</div>
+<p>มีปัญหา / โปรแกรมค้าง → แจ้งผู้ดูแลระบบ</p>
+
+<div class="foot">ฉบับ 23/09/69 · ต้นฉบับเนื้อหา <b>README_พนักงาน.txt</b> ใน repo se-autokey (ไฟล์นี้อยู่ในโฟลเดอร์บอททุกเครื่องด้วย)</div>
+
+</body>
+</html>

@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>คู่มือผู้ตรวจสอบ — ตรวจงานบนเว็บ SE Survey</title>
+<!-- ต้นฉบับเนื้อหา = docs/คู่มือผู้ตรวจสอบ-1หน้า.md (แก้เนื้อหาต้องแก้ทั้ง 2 ไฟล์ แล้วสร้าง PDF ใหม่ด้วย Chrome headless --print-to-pdf) -->
+<style>
+  @page { size: A4; margin: 14mm 13mm 14mm 13mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Leelawadee UI", "Leelawadee", Tahoma, sans-serif; font-size: 10.8pt; line-height: 1.5; color: #111; margin: 0; }
+  h1 { font-size: 19pt; margin: 0 0 2px; color: #0f2a5f; }
+  .sub { color: #555; font-size: 10pt; margin-bottom: 10px; }
+  h2 { font-size: 13.5pt; color: #fff; background: #0f2a5f; padding: 4px 10px; margin: 14px 0 7px; border-radius: 4px; page-break-after: avoid; }
+  p { margin: 3px 0; }
+  ul, ol { margin: 3px 0 5px 18px; padding: 0; }
+  li { margin: 2px 0; }
+  table { border-collapse: collapse; width: 100%; margin: 5px 0 8px; font-size: 10pt; page-break-inside: avoid; }
+  th, td { border: 1px solid #bbb; padding: 4px 7px; vertical-align: top; text-align: left; }
+  th { background: #e8eef8; color: #0f2a5f; }
+  .box { border: 1px solid #c9d3e6; background: #f5f8fd; border-radius: 4px; padding: 6px 10px; margin: 6px 0; page-break-inside: avoid; }
+  .warn { border-color: #f0c36d; background: #fff8e6; }
+  .ok { border-color: #9fd3a8; background: #eefaf0; }
+  .step { display: flex; gap: 10px; margin: 7px 0; page-break-inside: avoid; }
+  .num { flex: none; width: 24px; height: 24px; border-radius: 50%; background: #0f2a5f; color: #fff; font-weight: 700; text-align: center; line-height: 24px; font-size: 11pt; margin-top: 1px; }
+  .step > div:last-child { flex: 1; }
+  .step b.t { color: #0f2a5f; font-size: 11.3pt; }
+  .btn { display: inline-block; border: 1px solid #0f2a5f; border-radius: 3px; padding: 0 5px; font-size: 9.8pt; color: #0f2a5f; background: #fff; white-space: nowrap; }
+  .orange { color: #b45309; font-weight: 600; }
+  .small { font-size: 9.5pt; color: #555; }
+  .foot { margin-top: 12px; border-top: 1px solid #ddd; padding-top: 5px; font-size: 9pt; color: #666; }
+</style>
+</head>
+<body>
+
+<h1>คู่มือผู้ตรวจสอบ — ตรวจงานบนเว็บ SE Survey</h1>
+<div class="sub">ฉบับ 23 กันยายน 2569 · เว็บ <b>https://survey.sesurvey.cloud</b> (เปิดใน Chrome) · ล็อกอินด้วยบัญชีผู้ตรวจของตัวเอง</div>
+
+<h2>ตั้งค่าครั้งแรก (ครั้งเดียว)</h2>
+<div class="box">ทุกอย่างอยู่ที่ปุ่ม <b>รูปเฟือง (ตั้งค่า)</b> ท้ายแถบเมนูซ้าย</div>
+<ol>
+  <li><b>บัญชี ISURVEY</b> → กรอกชื่อผู้ใช้/รหัสผ่าน ISURVEY ของตัวเอง → บันทึกและทดสอบ<br>
+      <span class="small">ใช้ดึงงาน ดึงรูปเพิ่ม และตอนอนุมัติระบบจะไปกด "ยืนยันการตรวจสอบ" บน ISURVEY แทนคุณด้วยบัญชีนี้</span></li>
+  <li><b>เปลี่ยนรหัสผ่าน</b> ของเว็บจากรหัสตั้งต้น</li>
+  <li><b>ขนาดตัวอักษร</b> (ก− 100% ก+) ปรับได้ 80–140% เครื่องจำไว้ให้ · <b>ลูกทีมของฉัน</b> = รายชื่อช่างในทีม (แอดมินเป็นคนตั้ง)</li>
+  <li><b>ปิด extension se-billing</b> ใน Chrome — ไม่ต้องใช้แล้ว ระบบส่งยอดเข้า se-billing ให้เองตอนอนุมัติ (extension อาจเขียนตัวเลขทับหน้า ISURVEY)</li>
+</ol>
+
+<h2>ขั้นตอนต่อ 1 งาน</h2>
+
+<div class="step"><div class="num">1</div><div>
+  <b class="t">ดึงงาน</b> — เมนู <b>งานรอตรวจ (ISURVEY)</b> → เลือกช่วงวันที่ → <span class="btn">โหลดรายการ</span> → กด <span class="btn">ดึงเข้า</span> ที่งาน
+  (หรือ <span class="btn">ดึงทั้งหมดที่ยังไม่มี</span>) ดึงเสร็จระบบพาไปหน้าเคสเอง
+  <ul>
+    <li>รายการเห็นงาน<b>ทั้งบริษัท</b> · ติ๊ก <b>เฉพาะลูกทีม</b> ถ้าจะดูแค่ทีมตัวเอง (ใบของทีมอื่นมีป้าย "นอกทีม") · กรอง <b>สถานะ</b> และ <b>จังหวัด</b> ได้ · ช่องค้นหาเลขเคลม/เลขเซอร์เวย์/ผู้สำรวจ/จังหวัด ค้นทุกสถานะ</li>
+    <li>ใต้เลขเซอร์เวย์บอก <b>ครั้งที่ N จาก M</b> · ขึ้นส้ม <span class="orange">"ครั้งก่อนหน้ายังไม่ได้ดึง"</span> = ดึงครั้งก่อนหน้ามาตรวจก่อน (ดึงใบหลังก่อน ใบก่อนหน้าจะกลายเป็นเคสอ้างอิง ตรวจ/อนุมัติไม่ได้)</li>
+    <li>ขึ้นส้ม <span class="orange">"ISURVEY มี 30 ได้มา 26"</span> = รูปมาไม่ครบ กด <span class="btn">ดึงรูปเพิ่ม</span> ในแถวนั้นได้เลย</li>
+    <li>งานครั้งที่ 2+ ระบบเอาครั้งก่อนหน้าที่จบงานแล้วมาเป็นเคสอ้างอิงให้เอง · ข้อมูลหลักมาจากครั้งที่ 1 (แก้ที่ครั้งที่ 1)</li>
+    <li><i>งานจากแอปมือถือไม่ต้องดึง จะโผล่ในรายการงานเมื่อช่างส่งงาน</i></li>
+  </ul>
+</div></div>
+
+<div class="step"><div class="num">2</div><div>
+  <b class="t">ตรวจข้อมูล</b> — ช่องที่มี <b style="color:#b91c1c">ดอกจันแดง</b> ต้องไม่ว่างและไม่ขึ้นกรอบแดง · ป้าย <b>"ยังอนุมัติไม่ได้ N ข้อ"</b> บนแถบบนบอกว่าเหลืออะไร (ชี้เมาส์ดูรายการ)
+  <ul>
+    <li>ดูเป็นพิเศษ: ยี่ห้อตรงประเภทรถ · วันที่เป็นวันจริง · เลขบัตรตรงชนิดบัตร (ไทย/ต่างชาติ) · อายุตรงวันเกิด · ที่อยู่ครบ จังหวัด/อำเภอ/ตำบล</li>
+    <li>กติกาคู่กรณี/ผู้บาดเจ็บ/ทรัพย์สิน ดูคู่มือ <b>คู่มือกรอกข้อมูล-คู่กรณี-ผู้บาดเจ็บ-ทรัพย์สิน.pdf</b></li>
+  </ul>
+</div></div>
+
+<div class="step"><div class="num">3</div><div>
+  <b class="t">ความเสียหาย + รูป</b> — รายการความเสียหายและยอดประเมิน · เปิดดูรูป (หมุน/ลบได้ก่อนอนุมัติ) · รายการตรวจสอบ 5 ข้อท้ายหน้า
+  <ul>
+    <li>รูปจาก ISURVEY ไม่ครบ → ปุ่ม <span class="btn">ดึงรูปเพิ่มจาก ISURVEY</span> ในส่วนรูป (ได้เฉพาะรูปที่ยังไม่มี · กดได้จนกว่าเคสจะเข้า EMCS)</li>
+  </ul>
+</div></div>
+
+<div class="step"><div class="num">4</div><div>
+  <b class="t">ค่าบริการ</b> — กรอก <b>ราคาพนักงาน</b> (จ่ายผู้สำรวจ) และ <b>ราคาประกัน</b> (เรียกเก็บประกัน) ระบบแนะนำเรทตามพื้นที่ที่ออกตรวจ ·
+  ติ๊กนอกพื้นที่/นอกเวลาถ้ามี · ค่ารูปเหมา 50 บาทเฉพาะงานครั้งที่ 1
+</div></div>
+
+<div class="step"><div class="num">5</div><div>
+  <b class="t">บันทึก + อนุมัติ</b> — <span class="btn">บันทึกร่าง</span> ระหว่างทำได้ตลอด → เสร็จแล้วกด <span class="btn">อนุมัติ</span>
+  <div class="box ok">อนุมัติแล้วระบบทำให้เอง: ปิดงานบน ISURVEY (จบงาน + ค่าสำรวจ 2 ฝั่ง) · ส่งยอดเข้า se-billing · เคสถูกล็อก</div>
+  ต้องให้ช่างแก้ → <span class="btn">ตีกลับผู้สำรวจ</span> แล้วพิมพ์ว่าให้แก้อะไร
+</div></div>
+
+<div class="step"><div class="num">6</div><div>
+  <b class="t">นำเข้า EMCS</b> — เครื่องที่มีบอท se-autokey: หน้าบอท → แท็บ <b>นำเข้า SE Survey</b> → <span class="btn">โหลดรายการ</span> (ใบที่ยังไม่เข้า EMCS ขึ้นก่อน) → <span class="btn">นำเข้า EMCS</span>
+  <ul>
+    <li>บอทสร้าง draft แล้วหยุด → ตรวจบน EMCS แล้วกดส่งจากการ์ดบนหน้าบอท</li>
+    <li>ปุ่ม <span class="btn">นำเข้า EMCS + ส่งงานใหม่</span> = ส่งทันทีไม่หยุดให้ตรวจ (ส่งแล้วแก้ไม่ได้)</li>
+    <li>งานครั้งที่ 2+ บอทเปิดเรื่องเดิมแล้วเพิ่มครั้งใหม่ ไม่สร้างเรื่องซ้ำ</li>
+  </ul>
+</div></div>
+
+<h2>ยกเลิกงาน (ลูกค้าไม่ติดใจ ไม่เคลม · แจ้งซ้ำ · ประกันยกเลิกงาน)</h2>
+<ul>
+  <li>หน้าเคส → <span class="btn">ยกเลิกงาน</span> (แถบบน) → พิมพ์เหตุผล → <span class="btn">ยืนยันยกเลิกงาน</span> · ได้ทุกสถานะที่ยังไม่อนุมัติ (อนุมัติแล้วให้แอดมินปลดล็อกก่อน)</li>
+  <li>ยกเลิกแล้วเคสอ่านอย่างเดียว ไม่เข้า EMCS ไม่ส่ง se-billing และ<b>หายจากรายการงาน</b> · งานที่อยู่กับช่าง ระบบถอนการ์ดบนมือถือให้</li>
+  <li>คอลเซ็นเตอร์กดยกเลิกได้จากหน้าของเขาเช่นกัน · <b>คืนงานได้เฉพาะแอดมิน</b> (ปุ่ม <span class="btn">เลิกยกเลิก</span> ในหน้าเคส)</li>
+</ul>
+<div class="box warn">
+  ระบบ<b>ไม่ได้</b>ยกเลิกงานบน ISURVEY ให้ และถ้า ISURVEY ยกเลิกเคลม ก็ไม่ไหลมาเว็บเอง — ต้องทำเองทั้งสองฝั่ง<br>
+  ใบที่ยกเลิกไม่มีค่าตอบแทนช่างในระบบ แม้ช่างจะไปหน้างานแล้วก็ตาม
+</div>
+
+<h2>ถ้าเจอปัญหา</h2>
+<table>
+  <tr><th style="width:27%">อาการ</th><th>ทำอย่างไร</th></tr>
+  <tr><td><b>แก้หลังอนุมัติ</b></td><td>ให้แอดมินกด <span class="btn">ปลดล็อก</span> ในหน้าเคส (ยอดถูกถอนจาก se-billing แล้วส่งใหม่ตอนอนุมัติซ้ำ) · เคสอ้างอิงจาก ISURVEY (ครั้งก่อนหน้า) แก้ได้เลยไม่ต้องปลด</td></tr>
+  <tr><td><b>หาเคสที่ยกเลิกแล้วไม่เจอ</b></td><td>ไม่อยู่ในรายการงานแล้ว ดูได้ที่หน้างานรอตรวจ (ISURVEY) ขึ้น "มีแล้ว #เลขเคส · ยกเลิก" หรือให้แอดมิน/คอลเซ็นเตอร์ค้นให้</td></tr>
+  <tr><td><b>บอทหยุดรอ</b></td><td>บอทเจอช่องที่ EMCS บังคับแต่ไม่มีข้อมูล จะเปิดหน้าต่างให้เลือก/กรอกแล้วไปต่อ · ช่องข้อความที่ไม่มีข้อมูลบอทใส่ "-" ให้แก้ตอนตรวจบน EMCS</td></tr>
+  <tr><td><b>ปุ่มนำเข้า EMCS ไม่ขึ้น</b></td><td>เครื่องนั้นไม่มีบอท ให้ใช้เครื่องที่มีบอท หรือรอผู้นำเข้า EMCS</td></tr>
+  <tr><td><b>บอทเวอร์ชันเก่า</b></td><td>หน้าบอท → แท็บ <b>ตั้งค่า</b> → <span class="btn">ตรวจอัปเดต</span> → <span class="btn">อัปเดตและรีสตาร์ต</span> (กดตอนไม่มีงานรัน)</td></tr>
+  <tr><td><b>ติดเรื่องอื่น</b></td><td>จด<b>เลขเคลม</b> + สิ่งที่เห็น แล้วแจ้งแอดมิน</td></tr>
+</table>
+
+<div class="foot">ฉบับ 23/09/69 (เดิม 16/09/69) · ต้นฉบับเนื้อหา <b>docs/คู่มือผู้ตรวจสอบ-1หน้า.md</b> ใน repo se-survey</div>
+
+</body>
+</html>
