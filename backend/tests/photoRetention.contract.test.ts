@@ -1,10 +1,9 @@
 /**
- * Contract test — อายุเก็บรูปลงเวลา 2 ปี เท่ารูปเคส (utils/photoRetention.ts)
- * 24/09/69 user เคาะ 1 เดือนก่อน แล้วเปลี่ยนเป็น 2 ปี — ต้องการให้รูปพนักงานตอนลงเวลายังแสดงย้อนหลัง
+ * Contract test — รูปลงเวลาใช้แสดงวันต่อวัน ไม่เก็บย้อนหลัง (utils/photoRetention.ts, user เคาะ 25/09/69)
  *
  * ล็อกกติกา:
  *  1) ค่าเริ่มต้น = รายงานอย่างเดียว · ลบจริงเมื่อ PHOTO_RETENTION_ENABLED === '1' เท่านั้น (ลบถาวร กู้ไม่ได้ — user เปิดเอง)
- *  2) เกณฑ์ 2 ปี เทียบกับเวลาไทย (check_in_at เป็น naive เวลาไทย) · รูปอายุเดือนเดียว/ปีเดียวต้องไม่โดนลบ
+ *  2) ลบเมื่อพ้นวันที่ลงเวลา (วันไทย) และลงเวลาออกแล้ว — เวรดึกที่ยังเปิดอยู่ไม่เกิน STALE_OPEN_HOURS ห้ามแตะ · รันทุกชั่วโมง
  *  3) ลบไฟล์ผ่าน storage.del แล้วล้าง check_in_photo = NULL เฉพาะแถวที่ยังชี้ไฟล์เดิม · ไม่แตะ fs ตรง ๆ
  *  4) ไฟล์ att_* ที่ไม่มีแถวอ้างถึง ลบตามเวลาในชื่อไฟล์ — ไฟล์ที่ยังมีแถวอ้างถึง/ยังไม่ถึงอายุ/ชื่อแปลก ห้ามแตะ
  *  5) เริ่มทำงานตอนเปิดเซิร์ฟเวอร์ (index.ts)
@@ -23,8 +22,12 @@ function check(name: string, cond: boolean, detail = '') {
 const read = (p: string) => fs.readFileSync(path.join(__dirname, '..', p), 'utf8');
 
 const src = read('src/utils/photoRetention.ts');
-check('เกณฑ์ 2 ปี เท่ารูปเคส (user เปลี่ยนจาก 1 เดือน 24/09/69)', /export const ATTENDANCE_PHOTO_YEARS = 2;/.test(src)
-  && /INTERVAL '\$\{ATTENDANCE_PHOTO_YEARS\} years'/.test(src) && !/ATTENDANCE_PHOTO_DAYS/.test(src));
+check('วันต่อวัน: ลบเมื่อพ้นวันที่ลงเวลา (วันไทย) + ลงเวลาออกแล้ว หรือรอบค้างเกิน STALE_OPEN_HOURS',
+  /AND work_date < \$\{BKK_DATE\}/.test(src)
+  && /AND \(check_out_at IS NOT NULL OR check_in_at < \$\{BKK\} - INTERVAL '\$\{STALE_OPEN_HOURS\} hours'\)/.test(src)
+  && /import \{ STALE_OPEN_HOURS \} from '\.\.\/services\/attendance\.service'/.test(src)
+  && !/ATTENDANCE_PHOTO_(DAYS|YEARS)/.test(src));
+check('รันทุกชั่วโมง (พ้นเที่ยงคืน/ลงเวลาออกแล้วลบภายใน 1 ชม.)', /const RUN_EVERY_MS = 60 \* 60 \* 1000;/.test(src));
 check('เปิดลบจริงได้ทางเดียว: PHOTO_RETENTION_ENABLED === \'1\'', /process\.env\.PHOTO_RETENTION_ENABLED === '1'/.test(src)
   && /const apply = retentionEnabled\(\);/.test(src) && /purgeAttendancePhotos\(\{ apply \}\)/.test(src));
 check('โหมดรายงาน: นับเสร็จแล้ว return ก่อนถึงคำสั่งลบ', src.indexOf('if (!opts.apply) return stats;') > 0
@@ -41,18 +44,16 @@ check('index.ts เริ่มตัวลบตามอายุตอนเ�
 async function functional() {
   process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://x:y@localhost/z';
   process.env.JWT_SECRET = process.env.JWT_SECRET || 'contract-test-secret-0123456789';
-  const { expiredOrphans, retentionEnabled, attendanceCutoffMs } = await import('../src/utils/photoRetention');
+  const { expiredOrphans, retentionEnabled, orphanCutoffMs } = await import('../src/utils/photoRetention');
   const now = Date.now();
-  const day = 24 * 60 * 60 * 1000;
-  const cut = attendanceCutoffMs(Date.parse('2026-09-24T12:00:00Z'));
-  check('เส้นตัด = ย้อนหลัง 2 ปีพอดี', cut === Date.parse('2024-09-24T12:00:00Z'), new Date(cut).toISOString());
-  const old = `att_${now - 800 * day}_aaaa1111.jpg`;
-  const oldRef = `att_${now - 800 * day}_bbbb2222.jpg`;
-  const oneYear = `att_${now - 400 * day}_cccc3333.jpg`;
-  const oneMonth = `att_${now - 40 * day}_dddd4444.jpg`;
-  const got = expiredOrphans([old, oldRef, oneYear, oneMonth, 'att_x.jpg', 'up_1.jpg', `att_${now - 800 * day}_dd/ee.jpg`],
-    new Set([oldRef]), attendanceCutoffMs(now));
-  check('ไฟล์ไม่มีแถวอ้างถึง: ลบเฉพาะที่เก่ากว่า 2 ปี · อายุ 40 วัน/400 วันไม่แตะ · ไม่แตะไฟล์ที่ยังมีแถว/ชื่อไม่ตรงแบบ',
+  const hour = 60 * 60 * 1000;
+  check('ไฟล์ไม่มีแถวอ้างถึง: เส้นตัด 24 ชม.', orphanCutoffMs(now) === now - 24 * hour);
+  const old = `att_${now - 30 * hour}_aaaa1111.jpg`;
+  const oldRef = `att_${now - 30 * hour}_bbbb2222.jpg`;
+  const fresh = `att_${now - 2 * hour}_cccc3333.jpg`;
+  const got = expiredOrphans([old, oldRef, fresh, 'att_x.jpg', 'up_1.jpg', `att_${now - 30 * hour}_dd/ee.jpg`],
+    new Set([oldRef]), orphanCutoffMs(now));
+  check('ไฟล์ไม่มีแถวอ้างถึง: ลบเฉพาะที่เกิน 24 ชม. · ไฟล์ 2 ชม. (อาจกำลังลงเวลา) ไม่แตะ · ไม่แตะไฟล์ที่ยังมีแถว/ชื่อไม่ตรงแบบ',
     JSON.stringify(got) === JSON.stringify([old]), JSON.stringify(got));
   const keep = process.env.PHOTO_RETENTION_ENABLED;
   delete process.env.PHOTO_RETENTION_ENABLED;
