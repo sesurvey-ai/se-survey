@@ -19,24 +19,33 @@ import { db } from '../config/database';
 //   - error ทุกชนิดกลืนทิ้ง (แล้วลบ cache เพื่อให้ลองใหม่รอบหน้า)
 const lastSeen = new Map<number, string>();
 
-// แอป Flutter ที่ "ไม่ส่ง" X-App-Version = APK ก่อน 1.0.40 (11/08/69) — users.app_version ไม่ถูกแตะ
-// จึงค้างเป็นเวอร์ชันของการติดตั้ง/เครื่องก่อนหน้าได้ (25/09/69: ฐานบอก SE259 = 1.0.53 แต่เครื่องโหลดรูปลงเวลา
-// ไม่แนบ token = อาการของ APK ก่อน 1.0.11 · 11/07/69) → log ครั้งเดียวต่อคนต่อรอบเปิดเซิร์ฟเวอร์ ให้เห็นว่าใครยังใช้ APK เก่า
-// เฉพาะ UA "Dart/…" (แอป Flutter) — ตัวตอบพิกัด native (LocationHelper.kt, UA Dalvik) ไม่ส่ง header นี้อยู่แล้ว
-const noVersionLogged = new Set<number>();
+// log ว่าใครใช้แอปเวอร์ชันไหนจริง (25/09/69 ตามเรื่อง SE259: ฐานบอก 1.0.53 แต่เครื่องโหลดรูปลงเวลาไม่แนบ token)
+// users.app_version เขียนเฉพาะคำขอที่มี X-App-Version (แอป 1.0.40+ · 11/08/69) — เครื่องที่กลับไปใช้ APK เก่า
+// หรือใช้หลายเครื่อง ค่าในฐานจึงค้างได้ → log คนละครั้งต่อรอบเปิดเซิร์ฟเวอร์:
+//   - ส่งเวอร์ชันมา: ครั้งแรกที่เห็นเวอร์ชันนั้นของคนนั้น
+//   - ไม่ส่ง: ครั้งแรกต่อหมวด API (/api/consult, /api/attendance …) — แยกงานเบื้องหลังออกจากหน้าจอที่ใช้อยู่
+//     เฉพาะ UA "Dart/…" (แอป Flutter) — ตัวตอบพิกัด native (LocationHelper.kt, UA Dalvik) ไม่ส่ง header นี้อยู่แล้ว
+const diagLogged = new Set<string>();
+function logOnce(key: string, line: string): void {
+  if (diagLogged.has(key)) return;
+  if (diagLogged.size > 5000) diagLogged.clear();
+  diagLogged.add(key);
+  console.log(line);
+}
 
 export function recordAppVersion(req: Request, userId: number): void {
   const raw = req.headers['x-app-version'];
   const version = (Array.isArray(raw) ? raw[0] : raw || '').toString().trim().slice(0, 30);
+  const ua = String(req.headers['user-agent'] || '');
+  const who = req.user?.username ?? `id ${userId}`;
+  const where = `${req.method} ${req.baseUrl}${req.path}`;
   if (!version) {
-    const ua = String(req.headers['user-agent'] || '');
-    if (ua.startsWith('Dart/') && !noVersionLogged.has(userId)) {
-      noVersionLogged.add(userId);
-      if (noVersionLogged.size > 5000) noVersionLogged.clear();
-      console.log(`[appVersion] แอปไม่ส่งเวอร์ชัน (APK ก่อน 1.0.40): ${req.user?.username ?? `id ${userId}`} · ${ua} · ${req.method} ${req.baseUrl}${req.path}`);
+    if (ua.startsWith('Dart/')) {
+      logOnce(`${userId}|-|${req.baseUrl}`, `[appVersion] แอปไม่ส่งเวอร์ชัน (APK ก่อน 1.0.40 หรืองานเบื้องหลัง): ${who} · ${ua} · ${where}`);
     }
     return;
   }
+  logOnce(`${userId}|${version}`, `[appVersion] ${who} ใช้แอป ${version} · ${ua} · ${where}`);
   if (lastSeen.get(userId) === version) return;
 
   lastSeen.set(userId, version);
