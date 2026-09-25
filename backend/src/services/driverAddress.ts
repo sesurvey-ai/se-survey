@@ -274,9 +274,11 @@ export function normalizeDriverAddressFields(data: Record<string, unknown>): voi
   normalizeAddressRecord(data, DRIVER_KEYS);
 }
 
-/** อย่างเดียวกันสำหรับคู่กรณี 1 คัน (opposing_parties[].address → moo · ตัด ต./อ./จ. ที่พิมพ์ปน) */
+/** อย่างเดียวกันสำหรับคู่กรณี 1 คัน (opposing_parties[].address → moo · ตัด ต./อ./จ. ที่พิมพ์ปน)
+ *  + ที่อยู่เจ้าของรถ owner_* (แยก 5 ช่องตั้งแต่ 25/09/69 — คีย์ชุดเดียวกับเจ้าของทรัพย์สิน) */
 export function normalizeOpponentAddressFields(o: Record<string, unknown>): void {
   normalizeAddressRecord(o, CARD_KEYS);
+  normalizeAddressRecord(o, OWNER_KEYS);
 }
 
 /** ผู้บาดเจ็บ (injured_persons[] คีย์ชุดเดียวกับคู่กรณี) + เจ้าของทรัพย์สิน (damaged_property[] owner_*) — 21/09/69 */

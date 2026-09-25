@@ -496,7 +496,7 @@ const OPPONENT_FIELDS: FieldDef[] = [
   //   แถว 2 ยี่ห้อ · รุ่น · สีรถ · ปีจดทะเบียน
   //   แถว 3 เลขตัวถัง · เลขไมล์ · ประเภทรถไฟฟ้า · เลขเคลมคู่กรณี
   //   แถว 4 มีประกันภัยที่ · เลขกรมธรรม์ · ประเภทประกัน (ช่องที่ 4 ว่าง)
-  //   แถว 5 ที่อยู่เจ้าของรถ เต็มแถว — ที่เหลือลำดับเดิม
+  //   แถว 5 ที่อยู่เจ้าของรถ (25/09/69 แยก บ้านเลขที่+หมู่ · จังหวัด · เขต/อำเภอ · ตำบล — เดิมช่องเดียวเต็มแถว) — ที่เหลือลำดับเดิม
   // ⛔ user ตัดสินไม่เพิ่มช่องที่แอปมีแต่เว็บไม่มี (ชนิดบัตร · รายละเอียดความเสียหาย · รอตรวจสอบ) เพราะ EMCS ไม่มีช่องรับ
   // 16/09/69 (user สั่ง): คำนำหน้าเจ้าของรถ (ไม่บังคับ — เจ้าของเป็นบริษัทได้) วาดรวมในช่องเดียวกับชื่อ (OwnerNameCell)
   // → EMCS/XML รวมเป็น "นาย บุญเลี้ยง ชงสุวรรณ" (backend services/driverAddress.ts withTitle · บอท with_title)
@@ -530,7 +530,15 @@ const OPPONENT_FIELDS: FieldDef[] = [
   // (ตัว renderer เลือกตาม value ตรงตัว ค่าที่ไม่อยู่ในลิสต์จะกลายเป็นช่องว่างแล้วหายตอนบันทึก)
   { k: 'policy_type', label: 'ประเภทประกัน',
     optionsFrom: (r) => withCurrentOption(POLICY_TYPE_OPTIONS, r.policy_type) },
-  { k: 'owner_address', label: 'ที่อยู่เจ้าของรถ', wide: true },
+  // ที่อยู่เจ้าของรถแยก 5 ช่อง (user สั่ง 25/09/69 — แอปมีติ๊ก "ที่อยู่เดียวกับเจ้าของรถคู่กรณี" คัดลอกไปที่อยู่ผู้ขับขี่ จึงต้องมีช่องตรงกัน)
+  // บ้านเลขที่+หมู่ (AddressMooCell) · จังหวัด · เขต/อำเภอ · ตำบล/แขวง แถวเดียวกัน · ไม่บังคับ (งานจาก ISURVEY มีเป็นข้อความเดียว)
+  // EMCS มีช่องข้อความเดียว (txtOpo_Address) → XML OPO_ADDRESS / บอทใช้ข้อความที่ประกอบแล้ว (addressLineOrDash)
+  { k: 'owner_address', label: 'ที่อยู่เจ้าของรถ (บ้านเลขที่ / ถนน)' },
+  { k: 'owner_moo', label: 'หมู่' },
+  { k: 'owner_province', label: 'จังหวัด (ที่อยู่เจ้าของรถ)', options: PROVINCE_OPTIONS },
+  { k: 'owner_district', label: 'เขต/อำเภอ (ที่อยู่เจ้าของรถ)',
+    optionsFrom: (r) => districtOptions(String(r.owner_province ?? ''), String(r.owner_district ?? '')) },
+  { k: 'owner_subdistrict', label: 'ตำบล/แขวง (ที่อยู่เจ้าของรถ)' },   // ตัวเลือกจาก useTumbonOptions (ownerTumbonOptions ใน OpponentEditor)
   // ชื่อเดียวกับช่องของรถประกันและ EMCS — user หาช่องนี้ไม่เจอตอนชื่อ "ค่าเสียหายประมาณ" (04/09/69)
   // ยอด = Σ(ค่าแรง+ค่าอะไหล่) จากตารางความเสียหายของคู่กรณี (ตัวแปลง ISURVEY คำนวณให้เหมือนรถประกัน)
   // (วาดแยกเหนือปุ่ม "ข้อมูลความเสียหาย" ไม่อยู่ในกริด — ดู OPPONENT_COST_FIELD)
@@ -702,6 +710,9 @@ export function OpponentEditor({ items, onChange }: {
       // ที่อยู่ผู้ขับขี่: เปลี่ยนจังหวัด → ล้างอำเภอ+ตำบล · เปลี่ยนอำเภอ → ล้างตำบล (รายการตำบลผูกกับคู่จังหวัด/อำเภอ)
       if (k === 'home_province' && v !== String(it.home_province ?? '')) { next.district = ''; next.subdistrict = ''; }
       if (k === 'district' && v !== String(it.district ?? '')) next.subdistrict = '';
+      // ที่อยู่เจ้าของรถ (25/09/69) กติกาเดียวกัน
+      if (k === 'owner_province' && v !== String(it.owner_province ?? '')) { next.owner_district = ''; next.owner_subdistrict = ''; }
+      if (k === 'owner_district' && v !== String(it.owner_district ?? '')) next.owner_subdistrict = '';
       // แก้วันเกิด → คำนวณอายุใหม่ (ปีเต็ม ณ วันนี้ สูตรเดียวกับแอป) เฉพาะตอนหัวหน้าแก้บนเว็บ — ข้อมูลจากแอปมาพร้อมอายุแล้ว
       // ไม่คำนวณซ้ำตอนโหลด · ช่องอายุยังพิมพ์ทับได้ (user สั่ง 19/09/69)
       if (k === 'birthdate' && v !== String(it.birthdate ?? '')) { const a = ageFromSeDate(v); if (a) next.age = a; }
@@ -757,6 +768,8 @@ export function OpponentEditor({ items, onChange }: {
   /** ตำบล/แขวง ตามจังหวัด+อำเภอของที่อยู่ผู้ขับขี่ (useTumbonOptions — ใช้ร่วมกับผู้บาดเจ็บ/ทรัพย์สินตั้งแต่ 21/09/69)
    *  จังหวัดใช้ home_province (เคสเก่าไม่มี → จังหวัดป้ายทะเบียน ตามที่ลิสต์อำเภอใช้) */
   const tumbonOptions = useTumbonOptions(items, (it) => String(it.home_province || it.province || ''), 'district', 'subdistrict');
+  /** ตำบล/แขวง ของที่อยู่เจ้าของรถ (25/09/69) */
+  const ownerTumbonOptions = useTumbonOptions(items, (it) => String(it.owner_province ?? ''), 'owner_district', 'owner_subdistrict');
 
   /** หน้าต่าง "ข้อมูลความเสียหาย" ของคู่กรณีคันที่เปิดอยู่ (null = ปิด)
    *  เดิมความเสียหายคู่กรณีแก้ได้เฉพาะในแอป หน้าตรวจเห็นแค่ตัวเลข → หัวหน้าตรวจไม่ได้
@@ -797,16 +810,19 @@ export function OpponentEditor({ items, onChange }: {
             <div className="p-3 grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-2">
               {OPPONENT_FIELDS.filter((f) => f.k !== OPPONENT_COST_FIELD.k).map((f) => {
                 // คำนำหน้าเจ้าของรถ / หมู่ วาดรวมในช่องของ ชื่อเจ้าของรถ / ที่อยู่ (16/09/69)
-                if (f.k === 'owner_title' || f.k === 'moo') return null;
+                if (f.k === 'owner_title' || f.k === 'moo' || f.k === 'owner_moo') return null;
                 if (f.k === 'owner_name') return <OwnerNameCell key={f.k} it={it} set={(k, v) => set(i, k, v)} />;
                 if (f.k === 'address') return <AddressMooCell key={f.k} it={it} set={(k, v) => set(i, k, v)} />;
+                if (f.k === 'owner_address') return <AddressMooCell key={f.k} it={it} set={(k, v) => set(i, k, v)} addrKey="owner_address" mooKey="owner_moo" label="ที่อยู่เจ้าของรถ (บ้านเลขที่ / ถนน)" />;
                 // ยี่ห้อ ↔ ประเภทรถ ตามลิสต์ EMCS (15/09/69) — เตือนใต้ช่องยี่ห้อ + ปุ่มเปลี่ยนประเภทให้เมื่อชี้ได้แน่
                 const issue = f.k === 'car_brand' ? brandTypeIssue(it.car_type, it.car_brand) : null;
                 // อายุไม่ตรงกับวันเกิด (20/09/69) — เตือนใต้ช่องอายุ + ปุ่มใช้ค่าที่คำนวณได้
                 const ageExp = f.k === 'age' ? opponentAgeMismatch(it) : '';
                 // อายุ 0 / วันเกิดปีปัจจุบัน (21/09/69 เคส #433) → ปุ่ม "ใช้วันเกิด 01/01/2500" (set() คำนวณอายุ 69 ให้เอง)
                 const useBirthPh = (f.k === 'age' && String(it.age ?? '').trim() === '0') || (f.k === 'birthdate' && isCurrentYearSeDate(String(it.birthdate ?? '')));
-                const options = f.k === 'subdistrict' ? tumbonOptions(it) : (f.optionsFrom ? f.optionsFrom(it) : f.options);
+                const options = f.k === 'subdistrict' ? tumbonOptions(it)
+                  : f.k === 'owner_subdistrict' ? ownerTumbonOptions(it)
+                  : (f.optionsFrom ? f.optionsFrom(it) : f.options);
                 return (
                   <Field
                     key={f.k}

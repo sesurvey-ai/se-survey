@@ -411,6 +411,7 @@ router.post('/cases/:id/emcs-status', integrationAuth, asyncHandler(async (req: 
 // (fuzzy_select ต้องการชื่อไทย เช่น จังหวัด/ยี่ห้อ/ประเภทรถ — ต่างจาก XML ที่เป็นรหัส EMCS)
 // ค่าที่ประกอบแล้วสำหรับกรอก EMCS (สูตรอยู่ที่ services/driverAddress.ts ที่เดียว):
 // คู่กรณี (16/09/69): owner_name_emcs = "นาย บุญเลี้ยง ชงสุวรรณ" · address_emcs = "46/23 ม.7 ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ"
+//   · owner_address_emcs (25/09/69) = ที่อยู่เจ้าของรถ 5 ช่องประกอบสูตรเดียวกัน
 // ผู้บาดเจ็บ/ทรัพย์สิน (21/09/69): name_emcs / owner_name_emcs = คำนำหน้า+ชื่อ · address_emcs = ที่อยู่ 5 ช่องประกอบ — บอทกรอกช่องข้อความเดียวของ EMCS ตรง ๆ
 const emcsRecordViews = (r: Record<string, unknown>) => {
   const arr = (v: unknown) => (Array.isArray(v) ? (v as Record<string, unknown>[]) : null);
@@ -420,6 +421,8 @@ const emcsRecordViews = (r: Record<string, unknown>) => {
   return {
     opposing: map(r.opposing_parties, (o) => ({ ...o,
       owner_name_emcs: withTitle(o.owner_title, o.owner_name),
+      // ที่อยู่เจ้าของรถแยก 5 ช่อง (25/09/69) → ข้อความเดียวให้ txtOpo_Address · ว่าง = บอทใช้ที่อยู่ผู้ขับขี่แทน (พฤติกรรมเดิม)
+      owner_address_emcs: addressLineOrDash(o.owner_address, o.owner_moo, o.owner_subdistrict, o.owner_district, o.owner_province),
       address_emcs: opponentAddressLine(o.address, o.moo, o.subdistrict, o.district, o.home_province) })),
     injured: map(r.injured_persons, (p) => ({ ...p,
       name_emcs: nameOrUnknown(withTitle(p.title, p.name)),

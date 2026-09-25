@@ -214,7 +214,7 @@ const read = (p: string) => fs.readFileSync(path.join(ROOT, p), 'utf8');
     (form.match(/tumbonsData: _tumbonsData/g) ?? []).length === 6 && form.includes("'owner_name': 'เจ้าของรถคู่กรณี'"));
   check('เว็บ+มือถือ: จังหวัด/อำเภอ/ตำบล ของที่อยู่ผู้ขับขี่คู่กรณี บังคับเมื่อมีข้อมูลที่อยู่ (opponentHasAddress / addrHasData) · "รอตรวจสอบ"/ว่างทั้งหมด ยกเว้น (user เคาะ 16/09/69)',
     (web.match(/reqWhen: opponentHasAddress/g) ?? []).length === 3 && web.includes("a !== 'รอตรวจสอบ'") && web.includes('if (r.pending === true) return false')
-    && opp.includes('static bool addrHasData(') && opp.includes("if (_hasAddr && _subdistrict.isEmpty) 'ตำบล/แขวง (ที่อยู่ผู้ขับขี่)'") && (opp.match(/req: _hasAddr/g) ?? []).length === 3
+    && opp.includes('static bool addrHasData(') && opp.includes("if (_hasAddr && _subdistrict.isEmpty) 'ตำบล/แขวง ($_addrWho)'") && opp.includes(": 'ที่อยู่ผู้ขับขี่';")   /* 25/09/69: ติ๊กที่อยู่เดียวกับเจ้าของรถ → ชื่อในรายการ "ขาด" ชี้ไปที่อยู่เจ้าของรถ */ && (opp.match(/req: _hasAddr/g) ?? []).length === 3
     && form.includes("OpponentEditor.addrHasData(s('address'), s('moo'), s('home_province'), s('district'), s('subdistrict'))") && form.includes("if (it['pending'] == true) return [if (cidBad.isNotEmpty) 'เลขบัตรประชาชนไม่ถูกต้อง'];"));   // 21/09/69: คันที่รอตรวจสอบยังตรวจเลขบัตรตามชนิดบัตร
   check('เว็บ: ติ๊ก "รอตรวจสอบ" + ป้ายที่หัวการ์ดคู่กรณี (pending เดียวกับแอป) · เลขบัตร "รอตรวจสอบ" (ชุดเก่า) ไม่เตือน (user สั่ง 16/09/69)',
     web.includes('setPending(i, e.target.checked)') && web.includes('{it.pending === true && (') && web.includes("const badCid = def.k === 'cid' && cidBad(v, rec?.id_type, injuredRec);"));   // 21/09/69 cidBad (ต่างชาติไม่ตรวจ checksum · ยาวเกิน 13 · ผู้บาดเจ็บกติกา EMCS)

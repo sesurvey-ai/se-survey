@@ -34,6 +34,11 @@ class _OpponentEditorState extends State<OpponentEditor> {
   String _evType = '';
   String _carType = '', _carBrand = '', _carColor = '', _province = '', _homeProvince = '', _district = '', _gender = '', _title = '', _relation = '', _insurer = '', _licenseType = '', _policyType = '';
   String _ownerTitle = '', _subdistrict = '';   // คำนำหน้าเจ้าของรถ · ตำบล/แขวงที่อยู่ผู้ขับขี่คู่กรณี (16/09/69)
+  // ที่อยู่เจ้าของรถแยกช่อง (user สั่ง 25/09/69) — จังหวัด/อำเภอ/ตำบล (บ้านเลขที่/ถนน + หมู่ อยู่ใน _c owner_address/owner_moo)
+  String _ownerProvince = '', _ownerDistrict = '', _ownerSubdistrict = '';
+  // ติ๊ก "ที่อยู่เดียวกับเจ้าของรถคู่กรณี" — คัดลอกที่อยู่เจ้าของรถ 5 ช่องไปที่อยู่ผู้ขับขี่ และตามไปตลอดที่ยังติ๊ก
+  // ⛔ ไม่มีคีย์เก็บ — อนุมานตอนเปิดจากค่าที่ตรงกันครบ 5 ช่อง (แบบเดียวกับติ๊กสถานที่ออกตรวจสอบในฟอร์มหลัก)
+  bool _drvSameAsOwner = false;
   bool _pending = false;  // "รอตรวจสอบ" — คู่กรณีหลบหนี / ยังไม่มีรายละเอียด
   bool _cidThai = true;   // true = คนไทย (13 หลัก+checksum) / false = ต่างชาติ
   bool _hasLicense = false; // สวิตช์ "มีใบขับขี่" — ค่าเริ่มต้น=ปิด (=ไม่มีใบขับขี่); สแกนใบขับขี่ = เปิดอัตโนมัติ; ปิด = ซ่อน+เคลียร์
@@ -46,7 +51,7 @@ class _OpponentEditorState extends State<OpponentEditor> {
     _c = {};
     for (final k in ['owner_name', 'owner_address', 'car_model', 'plate', 'reg_year', 'mileage', 'vin',
       'first_name', 'last_name', 'birthdate', 'age', 'phone', 'address', 'cid', 'license_no', 'license_place', 'license_start', 'license_end',
-      'policy_no', 'claim_no', 'estimated_cost', 'moo']) {
+      'policy_no', 'claim_no', 'estimated_cost', 'moo', 'owner_moo']) {
       _c[k] = TextEditingController(text: (widget.data[k] ?? '').toString());
     }
     _policyType = (widget.data['policy_type'] ?? '').toString();
@@ -58,6 +63,14 @@ class _OpponentEditorState extends State<OpponentEditor> {
     _district = (widget.data['district'] ?? '').toString();
     _subdistrict = (widget.data['subdistrict'] ?? '').toString();
     _ownerTitle = (widget.data['owner_title'] ?? '').toString();
+    _ownerProvince = (widget.data['owner_province'] ?? '').toString();
+    _ownerDistrict = (widget.data['owner_district'] ?? '').toString();
+    _ownerSubdistrict = (widget.data['owner_subdistrict'] ?? '').toString();
+    // ติ๊ก "ที่อยู่เดียวกับเจ้าของรถคู่กรณี": เจ้าของรถมีที่อยู่ และตรงกับที่อยู่ผู้ขับขี่ครบ 5 ช่อง
+    _drvSameAsOwner = OpponentEditor.addrHasData(_ctl('owner_address').text, _ctl('owner_moo').text, _ownerProvince, _ownerDistrict, _ownerSubdistrict)
+        && _ctl('owner_address').text.trim() == _ctl('address').text.trim()
+        && _ctl('owner_moo').text.trim() == _ctl('moo').text.trim()
+        && _ownerProvince == _homeProvince && _ownerDistrict == _district && _ownerSubdistrict == _subdistrict;
     _evType = (widget.data['ev_type'] ?? '').toString();
     _gender = (widget.data['gender'] ?? '').toString();
     _title = (widget.data['title'] ?? '').toString();
@@ -87,6 +100,21 @@ class _OpponentEditorState extends State<OpponentEditor> {
   // → จังหวัด/อำเภอ/ตำบล ต้องครบ (user เคาะ 16/09/69 "ถ้ามีก็ต้องกรอก") · ไม่มีข้อมูลเลย = เว้นว่างทั้งหมด บอทใส่ "-" ให้ EMCS
   // · "รอตรวจสอบ" = ยกเว้น · กติกาเดียวกับเว็บ (RecordEditors.tsx opponentHasAddress) และ alsoMissing หมวด 6 ของฟอร์มหลัก
   bool get _hasAddr => !_pending && OpponentEditor.addrHasData(_ctl('address').text, _ctl('moo').text, _homeProvince, _district, _subdistrict);
+
+  // ── ที่อยู่เจ้าของรถ → ที่อยู่ผู้ขับขี่ (ติ๊ก "ที่อยู่เดียวกับเจ้าของรถคู่กรณี" — user สั่ง 25/09/69) ──
+  /// ติ๊กอยู่ = คัดลอกที่อยู่เจ้าของรถ 5 ช่อง (บ้านเลขที่/ถนน · หมู่ · จังหวัด · อำเภอ · ตำบล) ไปที่อยู่ผู้ขับขี่
+  /// เรียกทุกครั้งที่ที่อยู่เจ้าของรถเปลี่ยน · เอาติ๊กออก = ค่าที่คัดลอกไว้คงอยู่ แก้ต่อได้
+  void _syncDrvFromOwner() {
+    if (!_drvSameAsOwner) return;
+    _ctl('address').text = _ctl('owner_address').text;
+    _ctl('moo').text = _ctl('owner_moo').text;
+    _homeProvince = _ownerProvince;
+    _district = _ownerDistrict;
+    _subdistrict = _ownerSubdistrict;
+  }
+  /// ติ๊กอยู่ ช่องผู้ขับขี่ล็อก → จังหวัด/อำเภอ/ตำบลที่ยังขาดต้องไปเติมที่ที่อยู่เจ้าของรถ (จุดแดง + ชื่อในรายการ "ขาด" ย้ายตาม)
+  bool get _ownerAddrReq => _drvSameAsOwner && _hasAddr;
+  String get _addrWho => _drvSameAsOwner ? 'ที่อยู่เจ้าของรถ' : 'ที่อยู่ผู้ขับขี่';
 
   // จับคู่ชื่อจังหวัด/อำเภอที่ OCR อ่านจากบัตร → ตัวเลือกใน dropdown (ชุดเดียวกับผู้ขับขี่รถประกันในฟอร์มหลัก)
   static String _normTh(String s) => s.replaceAll(RegExp(r'\s+'), '').replaceAll('ฯ', '');
@@ -138,6 +166,12 @@ class _OpponentEditorState extends State<OpponentEditor> {
         'owner_title': _ownerTitle,   // คำนำหน้าเจ้าของรถ (16/09/69) → บอทรวมเป็น "นาย บุญเลี้ยง ชงสุวรรณ" บน EMCS
         'owner_name': _ctl('owner_name').text.trim(),
         'owner_address': _ctl('owner_address').text.trim(),
+        // ที่อยู่เจ้าของรถแยก 5 ช่อง (user สั่ง 25/09/69) — EMCS มีช่องข้อความเดียว (txtOpo_Address · dropdown ซ่อน)
+        // → backend/บอทประกอบ "46/23 ม.7 ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ" สูตรเดียวกับที่อยู่ผู้ขับขี่
+        'owner_moo': _ctl('owner_moo').text.trim(),
+        'owner_province': _ownerProvince,
+        'owner_district': _ownerDistrict,
+        'owner_subdistrict': _ownerSubdistrict,
         'car_type': _carType,
         'car_brand': _carBrand,
         'car_model': _ctl('car_model').text.trim(),
@@ -241,9 +275,10 @@ class _OpponentEditorState extends State<OpponentEditor> {
         if (_ctl('age').text.trim().isEmpty) 'อายุ',
         if (_insurer.trim().isEmpty) 'มีประกันภัยที่',
         // ที่อยู่ผู้ขับขี่ (16/09/69): มีข้อมูลส่วนใดส่วนหนึ่ง → จังหวัด/อำเภอ/ตำบล ต้องครบ · ว่างทั้งหมด/"รอตรวจสอบ" = ไม่บังคับ
-        if (_hasAddr && _homeProvince.isEmpty) 'จังหวัด (ที่อยู่ผู้ขับขี่)',
-        if (_hasAddr && _district.isEmpty) 'เขต/อำเภอ (ที่อยู่ผู้ขับขี่)',
-        if (_hasAddr && _subdistrict.isEmpty) 'ตำบล/แขวง (ที่อยู่ผู้ขับขี่)',
+        // ติ๊กที่อยู่เดียวกับเจ้าของรถ = ช่องผู้ขับขี่ล็อก ต้องไปเติมที่ที่อยู่เจ้าของรถ (_addrWho บอกให้ถูกที่)
+        if (_hasAddr && _homeProvince.isEmpty) 'จังหวัด ($_addrWho)',
+        if (_hasAddr && _district.isEmpty) 'เขต/อำเภอ ($_addrWho)',
+        if (_hasAddr && _subdistrict.isEmpty) 'ตำบล/แขวง ($_addrWho)',
       ];
 
   Future<void> _save() async {
@@ -295,6 +330,8 @@ class _OpponentEditorState extends State<OpponentEditor> {
         if (f('last_name').isNotEmpty) _ctl('last_name').text = f('last_name');
         if (f('cid').isNotEmpty) _ctl('cid').text = f('cid');
         if (f('birthdate').isNotEmpty) _ctl('birthdate').text = kNormThaiDateEra(f('birthdate'));
+        // บัตรนี้คือของผู้ขับขี่ — มีที่อยู่บนบัตร = เลิกคัดลอกจากเจ้าของรถ (เอาติ๊กออก) ไม่งั้นที่อยู่จากบัตรถูกทับกลับ
+        if (f('address').isNotEmpty || _matchProvince(f('province')) != null) _drvSameAsOwner = false;
         if (f('address').isNotEmpty) _ctl('address').text = f('address');
         // จังหวัด/อำเภอ(/ตำบล) ของที่อยู่บนบัตร → เลือก dropdown ให้ (16/09/69 — ช่องพวกนี้บังคับเมื่อมีที่อยู่) เหมือนผู้ขับขี่รถประกัน
         final prov = _matchProvince(f('province'));
@@ -361,6 +398,15 @@ class _OpponentEditorState extends State<OpponentEditor> {
         ),
       );
 
+  Widget _sameAsOwnerTile() => CheckboxListTile(
+        contentPadding: EdgeInsets.zero,
+        dense: true,
+        controlAffinity: ListTileControlAffinity.leading,
+        title: const Text('ที่อยู่เดียวกับเจ้าของรถคู่กรณี', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
+        value: _drvSameAsOwner,
+        onChanged: (v) => setState(() { _drvSameAsOwner = v ?? false; _syncDrvFromOwner(); }),
+      );
+
   Widget _scanBtns() {
     if (widget.onScan == null) return const SizedBox.shrink();
     Widget b(IconData i, String l, String kind) => Expanded(
@@ -400,7 +446,20 @@ class _OpponentEditorState extends State<OpponentEditor> {
           const SizedBox(width: 10),
           Expanded(child: kText(_ctl('owner_name'), 'เจ้าของรถคู่กรณี', req: true)),
         ]),
-        kText(_ctl('owner_address'), 'ที่อยู่เจ้าของรถ', maxLines: 2),
+        // ที่อยู่เจ้าของรถแยก 5 ช่องแบบเดียวกับที่อยู่ผู้ขับขี่ (user สั่ง 25/09/69) — ไม่บังคับ (งานจาก ISURVEY มีเป็นข้อความเดียว)
+        // EMCS มีช่องข้อความเดียว → ระบบประกอบ "46/23 ม.7 ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ" · แก้ช่องไหน = ตามไปที่อยู่ผู้ขับขี่ถ้าติ๊กอยู่
+        kText(_ctl('owner_address'), 'ที่อยู่เจ้าของรถ (บ้านเลขที่ / ถนน)', maxLines: 2, onChanged: (_) => setState(_syncDrvFromOwner)),
+        kRow2(
+          kText(_ctl('owner_moo'), 'หมู่', keyboardType: TextInputType.number, onChanged: (_) => setState(_syncDrvFromOwner)),
+          KPickerField(label: 'จังหวัด (ที่อยู่เจ้าของ)', value: _ownerProvince, options: widget.provinces, req: _ownerAddrReq,
+              onSelected: (v) => setState(() { if (v != _ownerProvince) { _ownerDistrict = ''; _ownerSubdistrict = ''; } _ownerProvince = v; _syncDrvFromOwner(); })),
+        ),
+        kRow2(
+          KPickerField(label: 'เขต / อำเภอ', value: _ownerDistrict, options: widget.provincesData[_ownerProvince] ?? const <String>[], req: _ownerAddrReq,
+              onSelected: (v) => setState(() { if (v != _ownerDistrict) _ownerSubdistrict = ''; _ownerDistrict = v; _syncDrvFromOwner(); })),
+          KPickerField(label: 'ตำบล / แขวง', value: _ownerSubdistrict, options: widget.tumbonsData[_ownerProvince]?[_ownerDistrict] ?? const <String>[], req: _ownerAddrReq,
+              onSelected: (v) => setState(() { _ownerSubdistrict = v; _syncDrvFromOwner(); })),
+        ),
         kRow2(
           // เปลี่ยนประเภทรถ → ล้างยี่ห้อ (ลิสต์ยี่ห้อของ EMCS ผูกกับประเภทรถ)
           KPickerField(label: 'ประเภทรถ', value: _carType, options: kOpoCarTypes, req: true,
@@ -458,17 +517,30 @@ class _OpponentEditorState extends State<OpponentEditor> {
         // ที่อยู่ปัจจุบันผู้ขับขี่คู่กรณี (16/09/69 user สั่ง): บ้านเลขที่/ถนน + หมู่ · จังหวัด · เขต/อำเภอ · ตำบล/แขวง
         // EMCS มีช่องข้อความเดียว → บอทประกอบ "46/23 ม.7 ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ"
         // มีที่อยู่ส่วนใดส่วนหนึ่ง → จังหวัด/อำเภอ/ตำบล บังคับ (จุดแดงขึ้นเอง · นับใน "ขาด") · ไม่มีข้อมูลเลยเว้นว่างทั้งหมด (user เคาะ 16/09/69)
-        kText(_ctl('address'), 'ที่อยู่ปัจจุบัน (บ้านเลขที่ / ถนน)', req: true, maxLines: 2, onChanged: (_) => setState(() {})),
-        kRow2(
-          kText(_ctl('moo'), 'หมู่', keyboardType: TextInputType.number, onChanged: (_) => setState(() {})),
-          KPickerField(label: 'จังหวัด (ที่อยู่)', value: _homeProvince, options: widget.provinces, req: _hasAddr,
-              onSelected: (v) => setState(() { if (v != _homeProvince) { _district = ''; _subdistrict = ''; } _homeProvince = v; })),
-        ),
-        kRow2(
-          KPickerField(label: 'เขต / อำเภอ', value: _district, options: widget.provincesData[_homeProvince] ?? const <String>[], req: _hasAddr,
-              onSelected: (v) => setState(() { if (v != _district) _subdistrict = ''; _district = v; })),
-          KPickerField(label: 'ตำบล / แขวง', value: _subdistrict, options: widget.tumbonsData[_homeProvince]?[_district] ?? const <String>[], req: _hasAddr,
-              onSelected: (v) => setState(() => _subdistrict = v)),
+        // ติ๊ก "ที่อยู่เดียวกับเจ้าของรถคู่กรณี" (user สั่ง 25/09/69 แบบเดียวกับสถานที่เกิดเหตุ → สถานที่ออกตรวจสอบ)
+        // = คัดลอกที่อยู่เจ้าของรถครบ 5 ช่อง และตามไปตลอดที่ยังติ๊ก · ระหว่างติ๊ก ช่องล็อก (จาง) กันแก้แล้วงงว่าทำไมถูกทับกลับ
+        _sameAsOwnerTile(),
+        IgnorePointer(
+          ignoring: _drvSameAsOwner,
+          child: Opacity(
+            opacity: _drvSameAsOwner ? 0.6 : 1,
+            child: Column(children: [
+              kText(_ctl('address'), 'ที่อยู่ปัจจุบัน (บ้านเลขที่ / ถนน)', req: true, maxLines: 2, onChanged: (_) => setState(() {})),
+              const SizedBox(height: 10),   // ระยะเดียวกับ EditorScaffold (อยู่ใน Column ซ้อน เลยไม่ได้ช่องว่างอัตโนมัติ)
+              kRow2(
+                kText(_ctl('moo'), 'หมู่', keyboardType: TextInputType.number, onChanged: (_) => setState(() {})),
+                KPickerField(label: 'จังหวัด (ที่อยู่)', value: _homeProvince, options: widget.provinces, req: _hasAddr,
+                    onSelected: (v) => setState(() { if (v != _homeProvince) { _district = ''; _subdistrict = ''; } _homeProvince = v; })),
+              ),
+              const SizedBox(height: 10),
+              kRow2(
+                KPickerField(label: 'เขต / อำเภอ', value: _district, options: widget.provincesData[_homeProvince] ?? const <String>[], req: _hasAddr,
+                    onSelected: (v) => setState(() { if (v != _district) _subdistrict = ''; _district = v; })),
+                KPickerField(label: 'ตำบล / แขวง', value: _subdistrict, options: widget.tumbonsData[_homeProvince]?[_district] ?? const <String>[], req: _hasAddr,
+                    onSelected: (v) => setState(() => _subdistrict = v)),
+              ),
+            ]),
+          ),
         ),
         _cidField(),
         // ── ใบขับขี่ (เปิด/ปิด — บางเคสไม่มีใบขับขี่) ──

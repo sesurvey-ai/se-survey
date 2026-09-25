@@ -456,7 +456,8 @@ function buildCar(c: Row, type: number, insured: boolean): string {
     el('TYPE', type) +
     // เจ้าของรถคู่กรณี: คำนำหน้า + ชื่อ "นาย บุญเลี้ยง ชงสุวรรณ" (16/09/69) — เคสเก่าไม่มี owner_title = ชื่อตามเดิม
     el('OPO_NAME', insured ? '' : withTitle(c.owner_title, c.owner_name)) +
-    el('OPO_ADDRESS', insured ? '' : c.owner_address) +
+    // ที่อยู่เจ้าของรถแยก 5 ช่อง (25/09/69) → "46/23 ม.7 ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ" · เคสเก่า (ข้อความเดียว) = ข้อความเดิม · รอตรวจสอบ/ขีด = "-"
+    el('OPO_ADDRESS', insured ? '' : addressLineOrDash(c.owner_address, c.owner_moo, c.owner_subdistrict, c.owner_district, c.owner_province)) +
     el('OPO_TYPE', insured ? 'รถประกัน' : 'รถคู่กรณี') +
     // EMCS ไม่รับขีด/เครื่องหมาย (20/09/69) · คู่กรณีไม่มีทะเบียน/"--" → 00 ตามชุดรอตรวจสอบ (user เคาะ 20/09/69)
     el('CAR_REGNO', insured ? emcsPlate(c.license_plate) : (emcsPlate(c.plate) || '00')) +

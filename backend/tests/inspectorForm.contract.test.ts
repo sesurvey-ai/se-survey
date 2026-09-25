@@ -605,10 +605,10 @@ check('การ์ดทรัพย์สิน: คำนำหน้าเ�
       && rec.includes("{ k: 'owner_province', label: 'จังหวัด (ที่อยู่เจ้าของ)', options: PROVINCE_OPTIONS, reqWhen: propertyHasAddress }")
       && rec.includes("{ k: 'owner_subdistrict', label: 'ตำบล/แขวง (ที่อยู่เจ้าของ)', reqWhen: propertyHasAddress }")
       && rec.includes('addrKey="owner_address" mooKey="owner_moo"'));
-check('ประตูอนุมัติ: ผู้บาดเจ็บ/ทรัพย์สินนับด้วย injuredMissing/propertyMissing (รวมช่องบังคับแบบมีเงื่อนไข) · ตำบลโหลดผ่าน useTumbonOptions ร่วมกัน 3 การ์ด',
+check('ประตูอนุมัติ: ผู้บาดเจ็บ/ทรัพย์สินนับด้วย injuredMissing/propertyMissing (รวมช่องบังคับแบบมีเงื่อนไข) · ตำบลโหลดผ่าน useTumbonOptions ร่วมกัน 4 จุด (3 การ์ด + ที่อยู่เจ้าของรถคู่กรณี 25/09/69)',
       src.includes('n + injuredMissing(it).length') && src.includes('n + propertyMissing(it).length')
       && rec.includes('export const injuredMissing = (rec: LooseRecord): string[] =>')
-      && (rec.match(/useTumbonOptions\(items,/g) || []).length === 3);
+      && (rec.match(/useTumbonOptions\(items,/g) || []).length === 4);
 // backend: ไฟล์ XML + report ให้บอท ประกอบชื่อ/ที่อยู่ผู้บาดเจ็บ-เจ้าของทรัพย์สินสูตรเดียวกับคู่กรณี · ทะเบียนผู้บาดเจ็บไม่มี → ตามประเภท/00
 check('XML/report: NAME=withTitle(title,name) · ADDRESS=opponentAddressLine(5 ช่อง) ทั้งผู้บาดเจ็บและทรัพย์สิน · CAR_REGNO ผู้บาดเจ็บผ่าน injuredPlate (00)',
       xml2.includes("el('NAME', nameOrUnknown(withTitle(p.title, p.name)))")
