@@ -999,7 +999,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
       _driverMooCtl: 'driver_moo', _driverSubdistrictCtl: 'driver_subdistrict',
       _damageDescCtl: 'damage_description', _estimatedCostCtl: 'estimated_cost',
       _accDateCtl: 'acc_date', _accTimeCtl: 'acc_time', _accPlaceCtl: 'acc_place',
-      _accProvinceCtl: 'acc_province', _accDistrictCtl: 'acc_district',
+      _accProvinceCtl: 'acc_province', _accDistrictCtl: 'acc_district', _accSubdistrictCtl: 'acc_subdistrict',
       _survPlaceCtl: 'survey_place', _survProvinceCtl: 'survey_province', _survDistrictCtl: 'survey_district',
       _survSubdistrictCtl: 'survey_subdistrict',
       _accCauseCtl: 'acc_cause', _accDamageTypeCtl: 'acc_damage_type', _accDetailCtl: 'acc_detail',
@@ -1035,11 +1035,12 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
         entry.key.text = '';
       }
     }
-    // ติ๊ก "สถานที่เดียวกับที่เกิดเหตุ" ไม่มีคอลัมน์ — อนุมานจากค่า: กรอกแล้วและตรงกับสถานที่เกิดเหตุครบ 3 ช่อง
+    // ติ๊ก "สถานที่เดียวกับที่เกิดเหตุ" ไม่มีคอลัมน์ — อนุมานจากค่า: กรอกแล้วและตรงกับสถานที่เกิดเหตุครบ 4 ช่อง (รวมตำบล 25/09/69)
     _survSameAsAcc = _survPlaceCtl.text.trim().isNotEmpty
         && _survPlaceCtl.text.trim() == _accPlaceCtl.text.trim()
         && _survProvinceCtl.text.trim() == _accProvinceCtl.text.trim()
-        && _survDistrictCtl.text.trim() == _accDistrictCtl.text.trim();
+        && _survDistrictCtl.text.trim() == _accDistrictCtl.text.trim()
+        && _survSubdistrictCtl.text.trim() == _accSubdistrictCtl.text.trim();
 
     // restore ข้อมูลหลายรายการ + แผนภาพความเสียหาย (จาก server report หรือ draft)
     setState(() {
@@ -1278,6 +1279,9 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
   final _accPlaceCtl = TextEditingController();
   final _accProvinceCtl = TextEditingController();
   final _accDistrictCtl = TextEditingController();
+  // ตำบลที่เกิดเหตุ (user ขอ 25/09/69 — ติ๊ก "สถานที่เดียวกับที่เกิดเหตุ" ต้องได้ตำบลไปด้วย ข้อมูลถึงจะครบ) → acc_subdistrict
+  // (คอลัมน์มีตั้งแต่ migration 007 · เว็บ/OCR ใช้อยู่แล้ว · ใช้คิดเรทเมื่อไม่มีสถานที่ออกตรวจสอบ) — EMCS ไม่มีช่องตำบล
+  final _accSubdistrictCtl = TextEditingController();
   // สถานที่ออกตรวจสอบ (10/09/69) — เว็บ se-survey ใช้คิดเรทค่าบริการจากชุดนี้ก่อนสถานที่เกิดเหตุ
   // (survey_place/survey_province/survey_district, migration 058) จึงบังคับกรอกทั้ง 3 ช่อง
   // ติ๊ก "สถานที่เดียวกับที่เกิดเหตุ" = คัดลอกจากสถานที่เกิดเหตุ และตามไปตลอดที่ยังติ๊กอยู่
@@ -1286,7 +1290,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
   final _survProvinceCtl = TextEditingController();
   final _survDistrictCtl = TextEditingController();
   // ตำบลที่ตรวจสอบ (user ขอ 25/09/69 — เว็บ/ISURVEY มีช่องนี้ · เรทบางตำบลคิดพิเศษ) → survey_subdistrict
-  // ที่เกิดเหตุไม่มีช่องตำบล → ติ๊ก "สถานที่เดียวกับที่เกิดเหตุ" แล้วยังต้องเลือกเอง (ช่องนี้จึงอยู่นอกส่วนที่ถูกล็อก)
+  // ติ๊ก "สถานที่เดียวกับที่เกิดเหตุ" = คัดลอกตำบลที่เกิดเหตุมาด้วย (ครบ 4 ช่อง)
   final _survSubdistrictCtl = TextEditingController();
   bool _survSameAsAcc = false;
   final _accCauseCtl = TextEditingController();
@@ -1356,7 +1360,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
       _driverLicenseTypeCtl, _driverLicensePlaceCtl, _driverLicenseStartCtl, _driverLicenseEndCtl,
       _driverRelationCtl, _driverProvinceCtl, _driverDistrictCtl, _driverMooCtl, _driverSubdistrictCtl,
       _damageDescCtl, _estimatedCostCtl,
-      _accDateCtl, _accTimeCtl, _accPlaceCtl, _accProvinceCtl, _accDistrictCtl,
+      _accDateCtl, _accTimeCtl, _accPlaceCtl, _accProvinceCtl, _accDistrictCtl, _accSubdistrictCtl,
       _survPlaceCtl, _survProvinceCtl, _survDistrictCtl, _survSubdistrictCtl,
       _accCauseCtl, _accDamageTypeCtl, _accDetailCtl, _accReporterCtl, _accSurveyorCtl,
       _accCustomerReportDateCtl, _accInsNotifyDateCtl, _accSurveyArriveDateCtl, _accSurveyCompleteDateCtl,
@@ -2234,6 +2238,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
       'acc_place': _accPlaceCtl.text.trim(),
       'acc_province': _accProvinceCtl.text.trim(),
       'acc_district': _accDistrictCtl.text.trim(),
+      'acc_subdistrict': _accSubdistrictCtl.text.trim(),
       'survey_place': _survPlaceCtl.text.trim(),
       'survey_province': _survProvinceCtl.text.trim(),
       'survey_district': _survDistrictCtl.text.trim(),
@@ -2908,6 +2913,8 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
           // จังหวัด/เขต-อำเภอ/ลักษณะความเสียหาย = * บังคับฝั่ง EMCS เหมือนกัน
           ['จังหวัดที่เกิดเหตุ', has(_accProvinceCtl)],
           ['เขต/อำเภอที่เกิดเหตุ', has(_accDistrictCtl)],
+          // ตำบลที่เกิดเหตุ (25/09/69) บังคับเมื่ออำเภอนั้นมีรายชื่อตำบลในแอป — ไม่มีรายชื่อ = เลือกไม่ได้ ห้ามขวางการส่งงาน
+          ['ตำบลที่เกิดเหตุ', has(_accSubdistrictCtl) || _accTumbons().isEmpty],
           // สถานที่ออกตรวจสอบ บังคับทั้ง 3 ช่อง — เว็บใช้คิดเรทค่าบริการ (10/09/69)
           ['สถานที่ออกตรวจสอบ', has(_survPlaceCtl)],
           ['จังหวัดที่ตรวจสอบ', has(_survProvinceCtl)],
@@ -3503,6 +3510,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
         // กับหน้าผู้ขับขี่ ซึ่งตรง master EMCS 79 จังหวัดอยู่แล้ว; เดิมพิมพ์เอง ทำให้
         // 'กทม.' ไปเข้า 'ปทุมธานี' ตอนบอทกรอก EMCS (fuzzy 45 คะแนน) แบบไม่มีใครรู้
         _row2(_accProvinceDropdown(), _accDistrictDropdown()),
+        _accTumbonDropdown(),   // ตำบลที่เกิดเหตุ (25/09/69)
         // ── สถานที่ออกตรวจสอบ ── (user ขอ 10/09/69) เว็บคิดเรทค่าบริการจากชุดนี้ก่อนสถานที่เกิดเหตุ
         // จึงบังคับกรอกทั้ง 3 ช่อง · ส่วนใหญ่ออกตรวจที่เดียวกับที่เกิดเหตุ → ติ๊กแล้วคัดลอกให้และตามไปตลอด
         // ระหว่างติ๊กอยู่ ช่องแก้ไม่ได้ (จาง) กันแก้แล้วงงว่าทำไมถูกทับกลับ
@@ -3515,11 +3523,11 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
               _txt(_survPlaceCtl, 'สถานที่ออกตรวจสอบ', req: true),
               const SizedBox(height: 14),   // ระยะเดียวกับ _withGaps ของการ์ด (อยู่ใน Column ซ้อน เลยไม่ได้ช่องว่างอัตโนมัติ)
               _row2(_survProvinceDropdown(), _survDistrictDropdown()),
+              const SizedBox(height: 14),
+              _survTumbonDropdown(),   // ตำบลที่ตรวจสอบ (25/09/69) — ติ๊กอยู่ = คัดลอกตำบลที่เกิดเหตุ
             ]),
           ),
         ),
-        // ตำบลที่ตรวจสอบ (25/09/69) — นอกส่วนที่ล็อกตอนติ๊ก เพราะที่เกิดเหตุไม่มีตำบลให้คัดลอก
-        _survTumbonDropdown(),
         _dd('ลักษณะการเกิดเหตุ', _accCauseCtl.text, _accCauseOptions,
             (v) => setState(() => _accCauseCtl.text = v ?? ''), req: true, key: ValueKey('ac_${_accCauseCtl.text}')),
         // ลักษณะความเสียหาย = * บังคับใน EMCS (ว่าง → บอทหยุดรอคนกรอกบนหน้า EMCS)
@@ -4511,28 +4519,40 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
   // จังหวัด/เขต-อำเภอ "ที่เกิดเหตุ" — คู่เดียวกับหน้าผู้ขับขี่ (asset thai_provinces.json
   // ตรง master EMCS verbatim) เปลี่ยนจังหวัดแล้วล้างอำเภอ กันคู่ที่ไม่เข้ากัน
   Widget _accProvinceDropdown() => _dd('จังหวัด', _accProvinceCtl.text, _provinceNames,
-      (v) => setState(() { _accProvinceCtl.text = v ?? ''; _accDistrictCtl.text = ''; _syncSurveyFromAcc(); }),
+      (v) => setState(() { _accProvinceCtl.text = v ?? ''; _accDistrictCtl.text = ''; _accSubdistrictCtl.text = ''; _syncSurveyFromAcc(); }),
       hint: 'เลือกจังหวัด', req: true, key: ValueKey('ap_${_accProvinceCtl.text}'));
 
   Widget _accDistrictDropdown() {
     final districts = _provincesData[_accProvinceCtl.text] ?? const <String>[];
     return _dd('เขต/อำเภอ', _accDistrictCtl.text, districts,
-        (v) => setState(() { _accDistrictCtl.text = v ?? ''; _syncSurveyFromAcc(); }),
+        (v) => setState(() { _accDistrictCtl.text = v ?? ''; _accSubdistrictCtl.text = ''; _syncSurveyFromAcc(); }),
         hint: 'เลือกเขต/อำเภอ', req: true,
         key: ValueKey('ad2_${_accProvinceCtl.text}_${_accDistrictCtl.text}'));
   }
 
+  /// รายชื่อตำบลของจังหวัด+อำเภอที่เกิดเหตุ (assets/thai_tumbons.json ชุดเดียวกับที่อยู่ผู้ขับขี่)
+  List<String> _accTumbons() => _tumbonsData[_accProvinceCtl.text]?[_accDistrictCtl.text] ?? const <String>[];
+
+  /// ตำบลที่เกิดเหตุ (25/09/69) — แบบเดียวกับตำบลผู้ขับขี่: ค่าที่บันทึกไว้แต่ไม่อยู่ในรายการ (OCR/เคสเก่า/สะกดต่าง) ยังโชว์ ไม่ล้างทิ้ง
+  /// บังคับเมื่ออำเภอนั้นมีรายชื่อตำบล · เปลี่ยนแล้วตามไปที่ตำบลที่ตรวจสอบถ้าติ๊ก "สถานที่เดียวกับที่เกิดเหตุ"
+  Widget _accTumbonDropdown() {
+    final tumbons = _accTumbons();
+    final cur = _accSubdistrictCtl.text;
+    final items = (cur.isNotEmpty && !tumbons.contains(cur)) ? <String>[cur, ...tumbons] : tumbons;
+    return _dd('ตำบล/แขวง', cur, items,
+        (v) => setState(() { _accSubdistrictCtl.text = v ?? ''; _syncSurveyFromAcc(); }),
+        hint: _accDistrictCtl.text.isEmpty ? 'เลือกอำเภอก่อน' : 'เลือกตำบล/แขวง', req: tumbons.isNotEmpty,
+        key: ValueKey('at_${_accProvinceCtl.text}_${_accDistrictCtl.text}_$cur'));
+  }
+
   // ── สถานที่ออกตรวจสอบ (10/09/69) ──
-  /// ติ๊กอยู่ = คัดลอกสถานที่/จังหวัด/เขต-อำเภอ ที่เกิดเหตุ มาใส่ชุดตรวจสอบ (เรียกทุกครั้งที่ชุดเกิดเหตุเปลี่ยน)
+  /// ติ๊กอยู่ = คัดลอกสถานที่/จังหวัด/เขต-อำเภอ/ตำบล ที่เกิดเหตุ มาใส่ชุดตรวจสอบ (เรียกทุกครั้งที่ชุดเกิดเหตุเปลี่ยน)
   void _syncSurveyFromAcc() {
     if (!_survSameAsAcc) return;
-    // อำเภอเปลี่ยน = ตำบลที่เลือกไว้เป็นของอำเภอเก่า → ล้าง (ให้เลือกใหม่ในอำเภอใหม่)
-    if (_survProvinceCtl.text != _accProvinceCtl.text || _survDistrictCtl.text != _accDistrictCtl.text) {
-      _survSubdistrictCtl.text = '';
-    }
     _survPlaceCtl.text = _accPlaceCtl.text;
     _survProvinceCtl.text = _accProvinceCtl.text;
     _survDistrictCtl.text = _accDistrictCtl.text;
+    _survSubdistrictCtl.text = _accSubdistrictCtl.text;   // ตำบล (25/09/69) — ครบ 4 ช่อง
   }
 
   Widget _sameAsAccTile() => CheckboxListTile(

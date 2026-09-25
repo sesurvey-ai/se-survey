@@ -3146,6 +3146,11 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
                   *    ในฐานข้อมูลตลอดไป (ล้างไม่ได้) · ช่องซ่อนส่ง "" ไปแทนจึงล้างได้จริง
                   *    และยังทำให้ย้ายอำเภอไปที่ที่ไม่มีตำบล แล้วตำบลเดิมถูกล้างตามด้วย
                   */}
+                {/* ตำบลที่ไม่ใช่ตำบลคิดเรทพิเศษ (ไม่มีช่องติ๊ก) — แอป 1.0.125+ ให้ช่างเลือกตำบลได้ทุกตำบล (25/09/69) · OCR ก็เติมได้
+                    โชว์ให้รู้ว่ามีค่า ไม่งั้นมองไม่เห็นบนหน้าเว็บ (ค่ายังอยู่ในช่องซ่อน ไม่ถูกล้าง) */}
+                {accTumbon && !tumbonChoices.includes(accTumbon) && (
+                  <div className="mt-1 text-xs text-gray-500">ตำบล{accTumbon}</div>
+                )}
                 <input type="hidden" disabled={d} name="acc_subdistrict" value={accTumbon} />
               </F>
 
@@ -3177,9 +3182,9 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
                     ))}
                   </div>
                 )}
-                {/* ตำบลที่ ISURVEY ระบุมาแต่ไม่ใช่ตำบลพิเศษ (ไม่มีช่องติ๊ก) — โชว์ให้รู้ว่ามีค่า ไม่งั้นหายไปเงียบ ๆ ทั้งที่ยังถูกบันทึกอยู่ */}
+                {/* ตำบลที่ ISURVEY/แอป (1.0.124+) ระบุมาแต่ไม่ใช่ตำบลคิดเรทพิเศษ (ไม่มีช่องติ๊ก) — โชว์ให้รู้ว่ามีค่า ไม่งั้นมองไม่เห็น */}
                 {survTumbon && !survTumbonChoices.includes(survTumbon) && (
-                  <div className="mt-1 text-xs text-gray-500">ตำบล{survTumbon} (จาก ISURVEY)</div>
+                  <div className="mt-1 text-xs text-gray-500">ตำบล{survTumbon}</div>
                 )}
                 {/* ช่องซ่อนส่ง "" เมื่อเอาติ๊กออก — เหตุผลเดียวกับ acc_subdistrict ข้างบน */}
                 <input type="hidden" disabled={d} name="survey_subdistrict" value={survTumbon} />
