@@ -10,7 +10,7 @@
 import fs from 'fs';
 import path from 'path';
 import {
-  flattenBacklog, matchSupervisor, normPersonName, snapshotBacklog, visibleRows, UNKNOWN_SUPERVISOR,
+  flattenBacklog, matchSupervisor, normPersonName, resolveViewer, snapshotBacklog, visibleRows, UNKNOWN_SUPERVISOR,
 } from '../src/services/emcsBacklogCore';
 
 let failed = 0;
@@ -93,16 +93,33 @@ check('ศุภชัยเห็นแค่งานของศุภชั�
   && visibleRows(allRows, false, 'นาย ศุภชัย เศรษฐชัยชาญ').every((x) => x.supervisor === 'นาย ศุภชัย เศรษฐชัยชาญ'));
 check('หัวหน้าที่จับชื่อไม่ได้ ไม่เห็นอะไรเลย (ไม่ใช่เห็นทั้งหมด)', visibleRows(allRows, false, null).length === 0);
 
+// ── แอดมิน = บทบาท admin ของเว็บเรา หรือรายชื่อ admins ของ se-billing (user บอก 25/09/69: นพดล · น้ำมนต์) ──
+const billingCfg = { admins: ['นพดล สมบูรณ์กุล', 'น้ำมนต์ เถื่อนใย'], aliases: { 'สันติ หรินทรสุทธิ': 'นาย ธนัช หรินทรสุทธิ' } };
+const sups = ['นาย ศุภชัย เศรษฐชัยชาญ', 'นาย ธนัช หรินทรสุทธิ'];
+const v = (role: string, username: string, name: string) => resolveViewer({ role, username, name }, billingCfg, sups);
+check('บทบาท admin เว็บเรา = เห็นทุกคน', v('admin', 'admin01', 'ผู้ดูแล ระบบ').seeAll && v('admin', 'admin01', 'ผู้ดูแล ระบบ').via === 'role');
+check('นพดล/น้ำมนต์ (บัญชี checker ชื่ออังกฤษ) = แอดมินของ se-billing → เห็นทุกคน',
+  v('checker', 'noppadols', 'Noppadol Somboonkul').seeAll && v('checker', 'noppadols', 'Noppadol Somboonkul').via === 'billing-admin'
+  && v('checker', 'nammont', 'Nammon Thaenyai').seeAll);
+check('หัวหน้าทั่วไปเห็นเฉพาะของตัวเอง · aliases ของ se-billing ใช้ความหมายเดียวกับ extension (ชื่อ login → ชื่อใน snapshot)',
+  !v('checker', 'suphachais', 'ศุภชัย เศรษฐชัยชาญ').seeAll && v('checker', 'suphachais', 'ศุภชัย เศรษฐชัยชาญ').mySupervisor === 'นาย ศุภชัย เศรษฐชัยชาญ'
+  && v('checker', 'x', 'สันติ หรินทรสุทธิ').mySupervisor === 'นาย ธนัช หรินทรสุทธิ');
+check('จารุมน (ยังไม่กำหนดงาน — user เอาไว้ก่อน) = จับชื่อไม่ได้ → ไม่เห็นอะไร',
+  !v('checker', 'jarumonm', 'จารุมน มิ่งขุนทด').seeAll && v('checker', 'jarumonm', 'จารุมน มิ่งขุนทด').via === 'none');
+check('ไม่มี admins ใน snapshot = ใช้ค่าเริ่มต้นเดียวกับ extension (นพดล)',
+  resolveViewer({ role: 'checker', username: 'noppadols', name: 'Noppadol Somboonkul' }, {}, sups).seeAll
+  && !resolveViewer({ role: 'checker', username: 'nammont', name: 'Nammon Thaenyai' }, {}, sups).seeAll);
+
 // ── API: เฉพาะ checker/admin · กรองที่ server · ต้นทางคือ se-billing ไม่ใช่ EMCS ──
 const index = read('backend', 'src', 'routes', 'index.ts');
 const route = read('backend', 'src', 'routes', 'emcsBacklog.routes.ts');
 const svc = read('backend', 'src', 'services', 'emcsBacklog.service.ts');
 check('ลงทะเบียน /api/emcs-backlog', index.includes("router.use('/emcs-backlog', emcsBacklogRoutes);"));
-check('API เฉพาะ checker/admin มีแค่ GET และส่ง role ของคนเรียกให้ service กรอง',
+check('API เฉพาะ checker/admin มีแค่ GET และส่ง role/username ของคนเรียกให้ service กรอง',
   route.includes("router.get('/', auth, requireRole('checker', 'admin'),") && !/router\.(post|put|patch|delete)\(/.test(route)
-  && route.includes('getEmcsBacklog({ id: req.user!.id, role: req.user!.role })'));
-check('service กรองก่อนส่ง: แอดมิน = ทุกแถว · อื่น ๆ = เฉพาะหัวหน้าที่ชื่อตรงบัญชี (ไม่จับกับ "ไม่พบหัวหน้า")',
-  svc.includes("const seeAll = viewer.role === 'admin';")
+  && route.includes('getEmcsBacklog({ id: req.user!.id, role: req.user!.role, username: req.user!.username })'));
+check('service กรองก่อนส่งตาม resolveViewer (แอดมินเว็บเรา/แอดมิน se-billing = ทุกแถว · อื่น ๆ เฉพาะของตัวเอง · ไม่จับกับ "ไม่พบหัวหน้า")',
+  svc.includes('resolveViewer({ role: viewer.role, username: viewer.username, name: myName }, snap,')
   && svc.includes('visibleRows(b.lists.edit, seeAll, mySupervisor)') && svc.includes('visibleRows(b.lists.continuous, seeAll, mySupervisor)')
   && svc.includes('names.filter((n) => n !== UNKNOWN_SUPERVISOR)'));
 check('อ่านจาก se-billing /api/dashboard (ท่อเดียวกับ captures) ไม่เข้า EMCS เอง · cache 5 นาที',

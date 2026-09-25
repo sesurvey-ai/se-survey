@@ -6,6 +6,7 @@
  *  - scraper รุ่น 25/09/69 ส่ง `emcs_inbox` = ทุกแถวของ 2 กล่อง (เกิน 2 ปีติดธง ไม่ตัด) — รุ่นก่อนหน้าตัดเกิน 2 ปี/ไม่มีเลขเคลม
  *  - หัวหน้า = ผู้ปิดงานเคลมนั้นบน ISURVEY (ดัชนีของ scraper) · "sesurvey" = หาไม่เจอ
  *  - **กรองฝั่ง server**: หัวหน้าผู้ตรวจได้เฉพาะแถวของตัวเอง (จับชื่อบัญชีกับชื่อหัวหน้าในข้อมูล) · แอดมินได้ทุกแถว
+ *    แอดมิน = บทบาท admin ของเว็บเรา หรือชื่ออยู่ใน admins ของ se-billing (นพดล · น้ำมนต์ — user บอก 25/09/69) ดู resolveViewer
  *  - จับคู่เคสในเว็บเราด้วยเลขเคลม (ส่วนใหญ่ไม่มี — เป็นงานที่คีย์บน EMCS มาก่อนมีเว็บนี้)
  * cache 5 นาที (ข้อมูลเปลี่ยนวันละครั้ง) · se-billing ล่ม = บอกเหตุผล ไม่ล้มทั้งหน้า
  */
@@ -13,7 +14,7 @@ import { db } from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { billingEnabled, billingFetch } from './sebilling.service';
 import {
-  matchSupervisor, snapshotBacklog, visibleRows, UNKNOWN_SUPERVISOR, type BacklogItem, type DashboardPayload,
+  resolveViewer, snapshotBacklog, visibleRows, UNKNOWN_SUPERVISOR, type BacklogItem, type DashboardPayload,
 } from './emcsBacklogCore';
 
 const CACHE_MS = 5 * 60 * 1000;
@@ -46,7 +47,7 @@ export type BacklogRow = BacklogItem & {
   case_count: number;
 };
 
-export async function getEmcsBacklog(viewer: { id: number; role: string }) {
+export async function getEmcsBacklog(viewer: { id: number; role: string; username: string }) {
   const snap = await loadSnapshot();
   const b = snapshotBacklog(snap);
   const all = [...b.lists.edit, ...b.lists.continuous];
@@ -59,8 +60,10 @@ export async function getEmcsBacklog(viewer: { id: number; role: string }) {
   const me = (await db.query(`SELECT first_name, last_name FROM users WHERE id = $1`, [viewer.id])).rows[0] as
     { first_name?: string; last_name?: string } | undefined;
   const myName = `${me?.first_name ?? ''} ${me?.last_name ?? ''}`.trim();
-  const mySupervisor = matchSupervisor(names.filter((n) => n !== UNKNOWN_SUPERVISOR), myName);
-  const seeAll = viewer.role === 'admin';
+  const access = resolveViewer({ role: viewer.role, username: viewer.username, name: myName }, snap,
+    names.filter((n) => n !== UNKNOWN_SUPERVISOR));
+  const seeAll = access.seeAll;
+  const mySupervisor = access.mySupervisor;
   const edit = visibleRows(b.lists.edit, seeAll, mySupervisor);
   const continuous = visibleRows(b.lists.continuous, seeAll, mySupervisor);
 
@@ -96,7 +99,9 @@ export async function getEmcsBacklog(viewer: { id: number; role: string }) {
     inbox_ok: b.ok,
     max_age_years: b.max_age_years,
     scope: seeAll ? 'all' : 'mine',
-    my_name: myName,
+    /** role = แอดมินเว็บเรา · billing-admin = แอดมินของ se-billing · supervisor/none = เฉพาะของตัวเอง */
+    access: access.via,
+    my_name: access.name,
     my_supervisor: mySupervisor,
     edit: edit.map(enrich),
     continuous: continuous.map(enrich),

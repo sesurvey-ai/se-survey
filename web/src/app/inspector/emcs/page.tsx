@@ -6,6 +6,7 @@
  * ข้อมูลมาจาก se-billing: scraper ดึงจาก EMCS วันละครั้ง ~06:00 (ชุดเดียวกับแดชบอร์ดงานค้างใน extension บน ISURVEY)
  * หน้านี้อ่านอย่างเดียว ไม่เข้า EMCS · หัวหน้า = ผู้ปิดงานของเคลมนั้นบน ISURVEY
  * ใครเห็นอะไร (user สั่ง 25/09/69 · กรองที่ server): หัวหน้าผู้ตรวจเห็นเฉพาะงานของตัวเอง · แอดมินเห็นทุกคน + ปุ่มเลือกดูรายหัวหน้า
+ *   (แอดมิน = บทบาท admin ของเว็บเรา หรือรายชื่อแอดมินในแดชบอร์ด se-billing เช่น นพดล · น้ำมนต์)
  * เรื่องที่อยู่ในกล่องเกิน 2 ปี = ป้ายเล็ก "เกิน 2 ปี" (แดชบอร์ดเดิมของ se-billing ตัดทิ้ง หน้านี้แสดงครบ)
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -23,6 +24,8 @@ type Data = {
   generated_at: string | null; date: string | null;
   complete: boolean; inbox_ok: boolean; max_age_years: number;
   scope: 'all' | 'mine'; my_name: string; my_supervisor: string | null;
+  /** role = แอดมินเว็บเรา · billing-admin = อยู่ในรายชื่อแอดมินของ se-billing (เช่น นพดล · น้ำมนต์) */
+  access: 'role' | 'billing-admin' | 'supervisor' | 'none';
   edit: Row[]; continuous: Row[];
   supervisors: { name: string; edit: number; continuous: number }[];
   unknown_supervisor: string;
@@ -111,7 +114,9 @@ export default function EmcsBacklogPage() {
         เรื่องที่ค้างในกล่อง INBOX &quot;รายงานแก้ไข&quot; และ &quot;งานต่อเนื่อง&quot; บน EMCS
         {data && <> · ข้อมูล ณ <span className="font-medium text-gray-800">{fmtBkk(data.generated_at)}</span></>}
         {' '}(se-billing ดึงจาก EMCS วันละครั้ง ~06:00)
-        {data && (isAll ? ' · แอดมินเห็นงานของทุกหัวหน้า' : ' · แสดงเฉพาะงานของคุณ')}
+        {data && (isAll
+          ? (data.access === 'billing-admin' ? ' · เห็นงานของทุกหัวหน้า (สิทธิ์แอดมินใน se-billing)' : ' · แอดมินเห็นงานของทุกหัวหน้า')
+          : ' · แสดงเฉพาะงานของคุณ')}
       </p>
 
       {error && <div className="mb-3 bg-red-50 border border-red-200 text-red-800 text-sm px-4 py-2">{error}</div>}

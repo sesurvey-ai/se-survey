@@ -8,6 +8,9 @@
  *  - snapshot รุ่นเก่า (ไม่มี emcs_inbox) → ใช้ supervisors[].emcs_*_items แบบเดิม (ตัดเกิน 2 ปี/ไม่มีเลขเคลมไปแล้ว)
  *  - หัวหน้า = ผู้ปิดงานของเคลมนั้นบน ISURVEY · "sesurvey" = หาไม่เจอ
  * ใครเห็นอะไร (user สั่ง 25/09/69): หัวหน้าผู้ตรวจเห็นเฉพาะงานของตัวเอง (จับจากชื่อบัญชี) · แอดมินเห็นทุกคน
+ *  - "แอดมิน" = บทบาท admin ในเว็บเรา **หรือ** ชื่ออยู่ในรายชื่อ admins ของแดชบอร์ด se-billing (แก้ที่ se-billing /admin)
+ *    user บอก 25/09/69: นพดล · น้ำมนต์ ได้สิทธิ์แอดมินใน se-billing แล้ว → เห็นทุกคนเหมือน extension
+ *  - aliases ของ se-billing ({ "ชื่อตอน login": "ชื่อใน snapshot" }) ใช้ความหมายเดียวกับ extension
  */
 
 export type BacklogKind = 'edit' | 'continuous';
@@ -23,6 +26,9 @@ export type DashboardPayload = {
   generated_at?: string;
   date?: string;
   supervisors?: ItemsSupervisor[];
+  /** se-billing GET /api/dashboard ใส่มาให้ (config ที่ /admin) — ชื่อที่เห็นทั้งบริษัท + ชื่อ login → ชื่อใน snapshot */
+  admins?: unknown;
+  aliases?: unknown;
   emcs_inbox?: {
     ok?: boolean; max_age_years?: number; totals?: Partial<Record<BacklogKind, number>>;
     edit?: unknown[]; continuous?: unknown[];
@@ -41,7 +47,19 @@ export type SnapshotBacklog = {
 export const UNKNOWN_SUPERVISOR = 'sesurvey';
 const DEFAULT_MAX_AGE_YEARS = 2;
 
-const TITLE_PREFIX = /^(?:นางสาว|นาง|นาย|น\.ส\.|mrs\.?|mr\.?|ms\.?|miss)\s*/iu;
+const TITLE_PREFIX = /^(?:นางสาว|นาง|นาย|น\.ส\.|คุณ|mrs\.?|mr\.?|ms\.?|miss)\s*/iu;
+/** extension ของ se-billing ใช้ค่านี้เมื่อยังไม่เคยตั้ง admins — ตามให้เหมือนกัน */
+const DEFAULT_BILLING_ADMINS = ['นพดล สมบูรณ์กุล'];
+
+/**
+ * บัญชีเว็บเราที่ตั้งชื่อเป็นภาษาอังกฤษ → ชื่อเดียวกับที่ se-billing ใช้ (รายชื่อ admins/หัวหน้าเป็นภาษาไทย)
+ * user บอก 25/09/69: นพดล · น้ำมนต์ เป็นแอดมินใน se-billing เห็นทุกคน — บัญชีเว็บเราชื่อ Noppadol/Nammon จับชื่อตรงไม่ได้
+ * (จารุมน: user จะให้ตรวจงานที่มีการเรียกร้อง "เอาไว้ก่อน" — ยังไม่ทำ)
+ */
+export const SE_ACCOUNT_NAME_BRIDGE: Record<string, string> = {
+  noppadols: 'นพดล สมบูรณ์กุล',
+  nammont: 'น้ำมนต์ เถื่อนใย',
+};
 
 /** ชื่อคนสำหรับเทียบ: ตัดคำนำหน้า + ช่องว่างทั้งหมด ("นาย ศุภชัย  เศรษฐชัยชาญ" = "ศุภชัย เศรษฐชัยชาญ" = "นายศุภชัย เศรษฐชัยชาญ") */
 export function normPersonName(s: unknown): string {
@@ -107,6 +125,36 @@ export function matchSupervisor(names: string[], person: string): string | null 
   const key = normPersonName(person);
   if (!key) return null;
   return names.find((n) => normPersonName(n) === key) ?? null;
+}
+
+export type ViewerAccess = {
+  seeAll: boolean;
+  mySupervisor: string | null;
+  /** ชื่อที่ใช้เทียบ (หลังแปลงชื่อบัญชีอังกฤษ) */
+  name: string;
+  /** role = แอดมินเว็บเรา · billing-admin = อยู่ในรายชื่อ admins ของ se-billing · supervisor = เห็นเฉพาะของตัวเอง · none = จับชื่อไม่ได้ */
+  via: 'role' | 'billing-admin' | 'supervisor' | 'none';
+};
+
+/** ใครเห็นอะไร — แอดมินเว็บเรา/แอดมินของ se-billing เห็นทุกคน · นอกนั้นเห็นเฉพาะหัวหน้าที่ชื่อตรงบัญชี (ผ่าน aliases ได้) */
+export function resolveViewer(
+  viewer: { role: string; username: string; name: string },
+  cfg: { admins?: unknown; aliases?: unknown },
+  supervisorNames: string[],
+): ViewerAccess {
+  const name = SE_ACCOUNT_NAME_BRIDGE[viewer.username] ?? viewer.name;
+  if (viewer.role === 'admin') return { seeAll: true, mySupervisor: null, name, via: 'role' };
+  const key = normPersonName(name);
+  const aliases = cfg.aliases && typeof cfg.aliases === 'object' && !Array.isArray(cfg.aliases)
+    ? (cfg.aliases as Record<string, unknown>) : {};
+  const aliasTo = key ? Object.entries(aliases).find(([k]) => normPersonName(k) === key)?.[1] : undefined;
+  const eff = aliasTo ? String(aliasTo) : name;
+  const admins = (Array.isArray(cfg.admins) ? cfg.admins : DEFAULT_BILLING_ADMINS).map(normPersonName).filter(Boolean);
+  if (key && (admins.includes(key) || admins.includes(normPersonName(eff)))) {
+    return { seeAll: true, mySupervisor: null, name, via: 'billing-admin' };
+  }
+  const mine = matchSupervisor(supervisorNames, eff);
+  return { seeAll: false, mySupervisor: mine, name, via: mine ? 'supervisor' : 'none' };
 }
 
 /** แอดมินเห็นทุกแถว · หัวหน้าผู้ตรวจเห็นเฉพาะแถวของตัวเอง · จับชื่อไม่ได้ = ไม่เห็นเลย (ไม่ใช่ทั้งหมด) */
