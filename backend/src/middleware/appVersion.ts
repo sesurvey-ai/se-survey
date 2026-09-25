@@ -19,10 +19,25 @@ import { db } from '../config/database';
 //   - error ทุกชนิดกลืนทิ้ง (แล้วลบ cache เพื่อให้ลองใหม่รอบหน้า)
 const lastSeen = new Map<number, string>();
 
+// แอป Flutter ที่ "ไม่ส่ง" X-App-Version = APK ก่อน 1.0.40 (11/08/69) — users.app_version ไม่ถูกแตะ
+// จึงค้างเป็นเวอร์ชันของการติดตั้ง/เครื่องก่อนหน้าได้ (25/09/69: ฐานบอก SE259 = 1.0.53 แต่เครื่องโหลดรูปลงเวลา
+// ไม่แนบ token = อาการของ APK ก่อน 1.0.11 · 11/07/69) → log ครั้งเดียวต่อคนต่อรอบเปิดเซิร์ฟเวอร์ ให้เห็นว่าใครยังใช้ APK เก่า
+// เฉพาะ UA "Dart/…" (แอป Flutter) — ตัวตอบพิกัด native (LocationHelper.kt, UA Dalvik) ไม่ส่ง header นี้อยู่แล้ว
+const noVersionLogged = new Set<number>();
+
 export function recordAppVersion(req: Request, userId: number): void {
   const raw = req.headers['x-app-version'];
   const version = (Array.isArray(raw) ? raw[0] : raw || '').toString().trim().slice(0, 30);
-  if (!version || lastSeen.get(userId) === version) return;
+  if (!version) {
+    const ua = String(req.headers['user-agent'] || '');
+    if (ua.startsWith('Dart/') && !noVersionLogged.has(userId)) {
+      noVersionLogged.add(userId);
+      if (noVersionLogged.size > 5000) noVersionLogged.clear();
+      console.log(`[appVersion] แอปไม่ส่งเวอร์ชัน (APK ก่อน 1.0.40): ${req.user?.username ?? `id ${userId}`} · ${ua} · ${req.method} ${req.baseUrl}${req.path}`);
+    }
+    return;
+  }
+  if (lastSeen.get(userId) === version) return;
 
   lastSeen.set(userId, version);
   if (lastSeen.size > 5000) lastSeen.clear();

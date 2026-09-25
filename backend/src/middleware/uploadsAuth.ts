@@ -91,6 +91,19 @@ export function invalidateCaseOwner(caseId: number): void {
   caseOwnerCache.del(String(caseId));
 }
 
+// ขอรูปโดยไม่แนบ token เลย = ส่วนใหญ่คือแอป APK ก่อน 1.0.11 (11/07/69) ที่โหลดรูปลงเวลาไม่ขึ้น
+// log UA (บอกเวอร์ชัน Dart ของแอปที่ build) ชั่วโมงละครั้งต่อ UA — ไว้จับคู่กับ log [appVersion] (25/09/69)
+const noTokenLoggedAt = new Map<string, number>();
+function logNoToken(req: Request): void {
+  const ua = String(req.headers['user-agent'] || '-').slice(0, 120);
+  const now = Date.now();
+  if ((noTokenLoggedAt.get(ua) ?? 0) > now - 60 * 60 * 1000) return;
+  if (noTokenLoggedAt.size > 500) noTokenLoggedAt.clear();
+  noTokenLoggedAt.set(ua, now);
+  const kind = /^\/?att_/.test(req.path) ? 'รูปลงเวลา' : /^\/?case_/.test(req.path) ? 'รูปเคส' : 'ไฟล์อื่น';
+  console.log(`[uploadsAuth] ขอ${kind}โดยไม่แนบ token (แอปเก่า?): ${ua}`);
+}
+
 /** ชื่อไฟล์ที่ขอมา → รูปแบบมาตรฐาน; คืน null ถ้าน่าสงสัย (path traversal) */
 function normalizePath(raw: string): string | null {
   let p: string;
@@ -107,6 +120,7 @@ export const uploadsAuth = async (req: Request, res: Response, next: NextFunctio
   const token = headerToken || queryToken;
 
   if (!token) {
+    logNoToken(req);
     res.status(401).json({ success: false, message: 'No token provided' });
     return;
   }
