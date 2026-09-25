@@ -24,6 +24,8 @@ import { useSocket } from '@/hooks/useSocket';
 
 type Row = {
   claim_no: string; survey_no: string; surveyor_name: string; acc_province: string;
+  /** จังหวัด/อำเภอที่ออกตรวจสอบ — รายงาน ISURVEY แยกจากที่เกิดเหตุ (เกิดเหตุ กทม. ออกตรวจ ชลบุรี ได้) user ขอ 25/09/69 */
+  survey_province?: string; survey_amphur?: string;
   plate_no: string; finish_dt: string; status: string; emcs_sent: boolean;
   dispatch_dt?: string; send_report_dt?: string;   // จ่ายงานเวลา / ส่งรายงานเวลา (user ขอ 07/09/69)
   imported_case_id?: number | null; imported_status?: string | null;
@@ -54,7 +56,7 @@ const NO_STATUS = '(ไม่ระบุ)';
  * จำรายการที่โหลดล่าสุดไว้ในแท็บนี้ (sessionStorage) — เปลี่ยนเมนู/เด้งไปหน้าเคสแล้วกลับมาไม่ต้องโหลดใหม่
  * (โหลดครั้งหนึ่ง 10 กว่าวินาที) · ปิดแท็บ = หาย · กด "โหลดรายการ" = ดึงสดทับ
  */
-const CACHE_KEY = 'isurvey-pending-cache-v5';   // v5: + ธง in_team/ติ๊ก "ทีมพนักงาน" 22/09/69 · v4 ตัวกรองจังหวัด · v3 สถานะหลายค่า · v2 ค่าเดียว
+const CACHE_KEY = 'isurvey-pending-cache-v6';   // v6: + จังหวัดที่ออกตรวจสอบ 25/09/69 · v5 ธง in_team/ติ๊ก "ทีมพนักงาน" 22/09/69 · v4 ตัวกรองจังหวัด · v3 สถานะหลายค่า · v2 ค่าเดียว
 type Cache = { from: string; to: string; statuses: string[]; provinces?: string[]; team_only?: boolean; rows: Row[]; filter: Filter | null; loadedAt: string };
 const readCache = (): Cache | null => {
   try { const raw = sessionStorage.getItem(CACHE_KEY); return raw ? (JSON.parse(raw) as Cache) : null; } catch { return null; }
@@ -228,7 +230,7 @@ export default function IsurveyPendingPage() {
   const visible = useMemo(() => {
     if (!searching) return afterHide;
     return (rows ?? []).filter((r) =>
-      [r.claim_no, r.survey_no, r.surveyor_name, r.acc_province].some((v) => String(v ?? '').toLowerCase().includes(needle)));
+      [r.claim_no, r.survey_no, r.surveyor_name, r.acc_province, r.survey_province].some((v) => String(v ?? '').toLowerCase().includes(needle)));
   }, [afterHide, rows, searching, needle]);
   /**
    * "ครั้งที่ N จาก M" ของแถวที่มองเห็น (user ขอ 22/09/69) — ถามทีหลังจากโหลดรายการ ทีละชุด เฉพาะแถวที่ยังไม่รู้
@@ -500,7 +502,8 @@ export default function IsurveyPendingPage() {
                 <th className="px-2 py-2 text-left">เลขเคลม</th>
                 <th className="px-2 py-2 text-left">เลขเซอร์เวย์</th>
                 <th className="px-2 py-2 text-left">ผู้สำรวจ</th>
-                <th className="px-2 py-2 text-left">จังหวัด</th>
+                <th className="px-2 py-2 text-left">จังหวัดที่เกิดเหตุ</th>
+                <th className="px-2 py-2 text-left">จังหวัดที่ออกตรวจสอบ</th>
                 <th className="px-2 py-2 text-left">ทะเบียน</th>
                 <th className="px-2 py-2 text-left">สถานะ ISURVEY</th>
                 <th className="px-2 py-2 text-left">ในระบบเรา</th>
@@ -509,7 +512,7 @@ export default function IsurveyPendingPage() {
             </thead>
             <tbody>
               {visible.length === 0 && (
-                <tr><td colSpan={10} className="px-3 py-6 text-center text-gray-500">
+                <tr><td colSpan={11} className="px-3 py-6 text-center text-gray-500">
                   {rows.length === 0 ? 'ไม่มีงานในช่วงวันที่นี้'
                     : teamScoped && teamRows.length === 0 ? 'ไม่มีงานของลูกทีมในช่วงวันที่นี้ — ติ๊ก "ทีมพนักงาน" ออกเพื่อดูทั้งบริษัท'
                     : hiddenApproved > 0 ? 'งานในสถานะที่เลือกอนุมัติแล้วทั้งหมด — กด "แสดง" ด้านบนถ้าต้องการดู'
@@ -550,6 +553,7 @@ export default function IsurveyPendingPage() {
                       )}
                     </td>
                     <td className="px-2 py-2 whitespace-nowrap">{r.acc_province}</td>
+                    <td className="px-2 py-2 whitespace-nowrap" title={r.survey_amphur ? `อำเภอที่ออกตรวจสอบ: ${r.survey_amphur}` : undefined}>{r.survey_province || '-'}</td>
                     <td className="px-2 py-2 whitespace-nowrap">{r.plate_no}</td>
                     <td className="px-2 py-2 whitespace-nowrap">
                       <span className={r.status === PENDING ? 'text-amber-700' : 'text-gray-700'}>{r.status || '-'}</span>

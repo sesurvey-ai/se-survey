@@ -192,9 +192,10 @@ check('เคสอ้างอิง: locked = approved && !isReference · แ�
   && /const actionBar = approved && isReference \? \(/.test(cd));
 const pull = read('..', 'web', 'src', 'app', 'inspector', 'isurvey', 'page.tsx');
 check('หน้าดึงงานบอกจำนวนรูปของแต่ละครั้งก่อนหน้า', pull.includes('refPhotos(x)'));
-/** ค้นหาข้ามสถานะ (user ขอ 15/09/69): เลขเคลม/เลขเซอร์เวย์/ผู้สำรวจ/จังหวัด · พิมพ์แล้วตัวกรองสถานะพักไว้ */
-check('หน้าดึงงาน: ค้นหาจากรายการที่โหลดมาทุกสถานะ (4 ช่อง ไม่สนตัวพิมพ์) และพักตัวกรองสถานะระหว่างค้น',
-  /if \(!searching\) return afterHide;\s*return \(rows \?\? \[\]\)\.filter\(\(r\) =>\s*\[r\.claim_no, r\.survey_no, r\.surveyor_name, r\.acc_province\]\.some\(\(v\) => String\(v \?\? ''\)\.toLowerCase\(\)\.includes\(needle\)\)\);/.test(pull)
+/** ค้นหาข้ามสถานะ (user ขอ 15/09/69): เลขเคลม/เลขเซอร์เวย์/ผู้สำรวจ/จังหวัด · พิมพ์แล้วตัวกรองสถานะพักไว้
+ *  25/09/69: "จังหวัด" ค้นได้ทั้งจังหวัดที่เกิดเหตุและจังหวัดที่ออกตรวจสอบ (5 ช่อง) */
+check('หน้าดึงงาน: ค้นหาจากรายการที่โหลดมาทุกสถานะ (5 ช่อง ไม่สนตัวพิมพ์) และพักตัวกรองสถานะระหว่างค้น',
+  /if \(!searching\) return afterHide;\s*return \(rows \?\? \[\]\)\.filter\(\(r\) =>\s*\[r\.claim_no, r\.survey_no, r\.surveyor_name, r\.acc_province, r\.survey_province\]\.some\(\(v\) => String\(v \?\? ''\)\.toLowerCase\(\)\.includes\(needle\)\)\);/.test(pull)
   && pull.includes('placeholder="เลขเคลม / เลขเซอร์เวย์ / ผู้สำรวจ / จังหวัด"') && /onClick=\{\(\) => setStatusOpen\(\(o\) => !o\)\} disabled=\{searching\}/.test(pull)
   && pull.includes('ตัวกรองสถานะพักไว้ระหว่างค้นหา'));
 
@@ -228,9 +229,9 @@ check('รายการเคสสำหรับบอทส่ง opponent_
   check('backend: listPending ติดธง in_team ให้ทุกแถวจากรายชื่อลูกทีม แต่ไม่ตัดแถวทิ้ง (applied ยัง false)',
     /const team = await staffGroupService\.filterFor\(userId, role\);/.test(pullSvc) && pullSvc.includes('in_team: inTeam(r)')
     && !/rows = rows\.filter\(\(r\) => team\.match/.test(pullSvc) && pullSvc.includes('in_team?: boolean | null;') && pullSvc.includes('applied: false, group_name: team?.group.name'));
-  check('เว็บ: checkbox "ทีมพนักงาน" = ขอบเขต in_team === true ก่อนตัวกรองสถานะ/จังหวัด · ติ๊กไม่ได้ถ้าไม่ผูกทีม · จำไว้ในแท็บ (cache v5)',
+  check('เว็บ: checkbox "ทีมพนักงาน" = ขอบเขต in_team === true ก่อนตัวกรองสถานะ/จังหวัด · ติ๊กไม่ได้ถ้าไม่ผูกทีม · จำไว้ในแท็บ (cache v6 — 25/09/69 เพิ่มจังหวัดที่ออกตรวจสอบ)',
     pull.includes('(rows ?? []).filter((r) => r.in_team === true)') && pull.includes('const base = useMemo(() => (teamScoped ? teamRows : (rows ?? [])), [teamScoped, teamRows, rows]);')
-    && pull.includes('disabled={!hasTeam || searching}') && pull.includes('team_only: teamOnly') && pull.includes("'isurvey-pending-cache-v5'")
+    && pull.includes('disabled={!hasTeam || searching}') && pull.includes('team_only: teamOnly') && pull.includes("'isurvey-pending-cache-v6'")
     && pull.includes('เฉพาะลูกทีม') && pull.includes('>นอกทีม</span>'));
 }
 

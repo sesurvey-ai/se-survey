@@ -16,6 +16,8 @@ import { notifyCaseChanged } from './caseEvents';
 
 export interface PendingRow {
   claim_no: string; survey_no: string; surveyor_name: string; acc_province: string;
+  /** จังหวัด/อำเภอที่ออกตรวจสอบ (รายงาน ISURVEY แยกจากที่เกิดเหตุ) — หน้ารอตรวจโชว์ต่อจากจังหวัดที่เกิดเหตุ (25/09/69) */
+  survey_province?: string; survey_amphur?: string;
   plate_no: string; finish_dt: string; status: string; emcs_sent: boolean;
   /** เวลาจ่ายงาน / ส่งรายงาน จากรายงาน ISURVEY (dispatch_dt / sendReport_dt) — หน้าเว็บโชว์ 2 คอลัมน์แรก (07/09/69) */
   dispatch_dt?: string; send_report_dt?: string;
