@@ -1001,6 +1001,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
       _accDateCtl: 'acc_date', _accTimeCtl: 'acc_time', _accPlaceCtl: 'acc_place',
       _accProvinceCtl: 'acc_province', _accDistrictCtl: 'acc_district',
       _survPlaceCtl: 'survey_place', _survProvinceCtl: 'survey_province', _survDistrictCtl: 'survey_district',
+      _survSubdistrictCtl: 'survey_subdistrict',
       _accCauseCtl: 'acc_cause', _accDamageTypeCtl: 'acc_damage_type', _accDetailCtl: 'acc_detail',
       _accReporterCtl: 'acc_reporter', _accSurveyorCtl: 'acc_surveyor',
       _accSurveyorBranchCtl: 'acc_surveyor_branch', _accSurveyorPhoneCtl: 'acc_surveyor_phone',
@@ -1284,6 +1285,9 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
   final _survPlaceCtl = TextEditingController();
   final _survProvinceCtl = TextEditingController();
   final _survDistrictCtl = TextEditingController();
+  // ตำบลที่ตรวจสอบ (user ขอ 25/09/69 — เว็บ/ISURVEY มีช่องนี้ · เรทบางตำบลคิดพิเศษ) → survey_subdistrict
+  // ที่เกิดเหตุไม่มีช่องตำบล → ติ๊ก "สถานที่เดียวกับที่เกิดเหตุ" แล้วยังต้องเลือกเอง (ช่องนี้จึงอยู่นอกส่วนที่ถูกล็อก)
+  final _survSubdistrictCtl = TextEditingController();
   bool _survSameAsAcc = false;
   final _accCauseCtl = TextEditingController();
   final _accDamageTypeCtl = TextEditingController();
@@ -1353,7 +1357,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
       _driverRelationCtl, _driverProvinceCtl, _driverDistrictCtl, _driverMooCtl, _driverSubdistrictCtl,
       _damageDescCtl, _estimatedCostCtl,
       _accDateCtl, _accTimeCtl, _accPlaceCtl, _accProvinceCtl, _accDistrictCtl,
-      _survPlaceCtl, _survProvinceCtl, _survDistrictCtl,
+      _survPlaceCtl, _survProvinceCtl, _survDistrictCtl, _survSubdistrictCtl,
       _accCauseCtl, _accDamageTypeCtl, _accDetailCtl, _accReporterCtl, _accSurveyorCtl,
       _accCustomerReportDateCtl, _accInsNotifyDateCtl, _accSurveyArriveDateCtl, _accSurveyCompleteDateCtl,
       _accCustomerReportTimeCtl, _accInsNotifyTimeCtl, _accSurveyArriveTimeCtl, _accSurveyCompleteTimeCtl,
@@ -2233,6 +2237,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
       'survey_place': _survPlaceCtl.text.trim(),
       'survey_province': _survProvinceCtl.text.trim(),
       'survey_district': _survDistrictCtl.text.trim(),
+      'survey_subdistrict': _survSubdistrictCtl.text.trim(),
       'acc_cause': _accCauseCtl.text.trim(),
       'acc_damage_type': _accDamageTypeCtl.text.trim(),
       'acc_detail': _accDetailCtl.text.trim(),
@@ -2907,6 +2912,8 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
           ['สถานที่ออกตรวจสอบ', has(_survPlaceCtl)],
           ['จังหวัดที่ตรวจสอบ', has(_survProvinceCtl)],
           ['เขต/อำเภอที่ตรวจสอบ', has(_survDistrictCtl)],
+          // ตำบลที่ตรวจสอบ (25/09/69) บังคับเมื่ออำเภอนั้นมีรายชื่อตำบลในแอป — ไม่มีรายชื่อ = เลือกไม่ได้ ห้ามขวางการส่งงาน
+          ['ตำบลที่ตรวจสอบ', has(_survSubdistrictCtl) || _survTumbons().isEmpty],
           ['ลักษณะการเกิดเหตุ', has(_accCauseCtl)],
           ['ลักษณะความเสียหาย', has(_accDamageTypeCtl)],
           // EMCS บังคับ rdoAcc_Cause0 — เดิมไม่ได้ตรวจ ส่งไปทั้งที่ยัง '-- ระบุ --' ได้
@@ -3511,6 +3518,8 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
             ]),
           ),
         ),
+        // ตำบลที่ตรวจสอบ (25/09/69) — นอกส่วนที่ล็อกตอนติ๊ก เพราะที่เกิดเหตุไม่มีตำบลให้คัดลอก
+        _survTumbonDropdown(),
         _dd('ลักษณะการเกิดเหตุ', _accCauseCtl.text, _accCauseOptions,
             (v) => setState(() => _accCauseCtl.text = v ?? ''), req: true, key: ValueKey('ac_${_accCauseCtl.text}')),
         // ลักษณะความเสียหาย = * บังคับใน EMCS (ว่าง → บอทหยุดรอคนกรอกบนหน้า EMCS)
@@ -4517,6 +4526,10 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
   /// ติ๊กอยู่ = คัดลอกสถานที่/จังหวัด/เขต-อำเภอ ที่เกิดเหตุ มาใส่ชุดตรวจสอบ (เรียกทุกครั้งที่ชุดเกิดเหตุเปลี่ยน)
   void _syncSurveyFromAcc() {
     if (!_survSameAsAcc) return;
+    // อำเภอเปลี่ยน = ตำบลที่เลือกไว้เป็นของอำเภอเก่า → ล้าง (ให้เลือกใหม่ในอำเภอใหม่)
+    if (_survProvinceCtl.text != _accProvinceCtl.text || _survDistrictCtl.text != _accDistrictCtl.text) {
+      _survSubdistrictCtl.text = '';
+    }
     _survPlaceCtl.text = _accPlaceCtl.text;
     _survProvinceCtl.text = _accProvinceCtl.text;
     _survDistrictCtl.text = _accDistrictCtl.text;
@@ -4533,15 +4546,30 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
       );
 
   Widget _survProvinceDropdown() => _dd('จังหวัดที่ตรวจสอบ', _survProvinceCtl.text, _provinceNames,
-      (v) => setState(() { _survProvinceCtl.text = v ?? ''; _survDistrictCtl.text = ''; }),
+      (v) => setState(() { _survProvinceCtl.text = v ?? ''; _survDistrictCtl.text = ''; _survSubdistrictCtl.text = ''; }),
       hint: 'เลือกจังหวัด', req: true, key: ValueKey('sp_${_survProvinceCtl.text}'));
 
   Widget _survDistrictDropdown() {
     final districts = _provincesData[_survProvinceCtl.text] ?? const <String>[];
     return _dd('อำเภอที่ตรวจสอบ', _survDistrictCtl.text, districts,   // 'เขต/อำเภอ…' ยาวจนจุดแดงตกบรรทัดในครึ่งจอ
-        (v) => setState(() => _survDistrictCtl.text = v ?? ''),
+        (v) => setState(() { _survDistrictCtl.text = v ?? ''; _survSubdistrictCtl.text = ''; }),
         hint: 'เลือกเขต/อำเภอ', req: true,
         key: ValueKey('sd_${_survProvinceCtl.text}_${_survDistrictCtl.text}'));
+  }
+
+  /// รายชื่อตำบลของจังหวัด+อำเภอที่ตรวจสอบ (assets/thai_tumbons.json ชุดเดียวกับที่อยู่ผู้ขับขี่)
+  List<String> _survTumbons() => _tumbonsData[_survProvinceCtl.text]?[_survDistrictCtl.text] ?? const <String>[];
+
+  /// ตำบลที่ตรวจสอบ (25/09/69) — แบบเดียวกับตำบลผู้ขับขี่: ค่าที่บันทึกไว้แต่ไม่อยู่ในรายการ (เคสเก่า/สะกดต่าง) ยังโชว์ ไม่ล้างทิ้ง
+  /// บังคับเมื่ออำเภอนั้นมีรายชื่อตำบล (ดู _missingFor s5)
+  Widget _survTumbonDropdown() {
+    final tumbons = _survTumbons();
+    final cur = _survSubdistrictCtl.text;
+    final items = (cur.isNotEmpty && !tumbons.contains(cur)) ? <String>[cur, ...tumbons] : tumbons;
+    return _dd('ตำบลที่ตรวจสอบ', cur, items,
+        (v) => setState(() { _survSubdistrictCtl.text = v ?? ''; }),
+        hint: _survDistrictCtl.text.isEmpty ? 'เลือกอำเภอก่อน' : 'เลือกตำบล/แขวง', req: tumbons.isNotEmpty,
+        key: ValueKey('st_${_survProvinceCtl.text}_${_survDistrictCtl.text}_$cur'));
   }
 
   Widget _districtDropdown() {

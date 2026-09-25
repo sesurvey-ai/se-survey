@@ -25,6 +25,52 @@ export interface PendingRow {
   imported_case_id?: number | null; imported_status?: string | null;
   /** ช่างของใบนี้อยู่ในรายชื่อลูกทีมของบัญชีที่โหลดไหม (22/09/69: หน้าเว็บมี checkbox "ทีมพนักงาน" กรองเอง — server ไม่ตัดแถว) · null = บัญชีไม่ผูกทีม/แอดมิน */
   in_team?: boolean | null;
+  /** "ครั้งที่" จากที่จำไว้ (isurvey_claim_rounds · 25/09/69) — ไม่มี = หน้าเว็บถามเองทีหลังตามเดิม */
+  visit_no?: number | null; visit_total?: number; earlier_missing?: string[];
+}
+
+/** รายการครั้งของเคลมตามที่ตัวดึงงานตอบ (se-autokey pull_core.claim_rounds) */
+type RoundRow = { survey_no: string; round: number; status_name?: string };
+export type RoundInfo = { visit_no: number | null; visit_total: number; earlier_missing: string[]; error?: string };
+/** จำครั้งที่ไว้นานสุดกี่วัน — ครั้งเก่าของเคลมไม่เปลี่ยน ใบใหม่ถูกจับได้จากเลขเซอร์เวย์ที่ไม่อยู่ในรายการ · อายุไว้กันกรณี ISURVEY แก้/ยกเลิกใบ */
+const ROUNDS_TTL_DAYS = 7;
+const normNo = (v: unknown) => String(v ?? '').trim().toUpperCase();
+
+/** ครั้งที่ของใบนี้ + ครั้งก่อนหน้าที่ยังไม่มีในระบบเรา (have = `${เลขเคลม}|${เลขเซอร์เวย์ตัวใหญ่}` ของใบที่มีในระบบ) */
+export function roundOf(claim: string, surveyNo: string, info: RoundRow[], have: Set<string>): RoundInfo {
+  const mine = info.find((x) => normNo(x.survey_no) === normNo(surveyNo));
+  const visitNo = mine ? Number(mine.round) : null;
+  const earlierMissing = visitNo
+    ? info.filter((x) => Number(x.round) < visitNo && !have.has(`${claim}|${normNo(x.survey_no)}`)).map((x) => String(x.survey_no))
+    : [];
+  return { visit_no: visitNo, visit_total: info.length, earlier_missing: earlierMissing };
+}
+
+/**
+ * ใส่ครั้งที่จากที่จำไว้ให้แถวรายการรอตรวจ (user ขอ 25/09/69 ให้ขึ้นพร้อมตาราง)
+ * ใช้ได้เฉพาะเคลมที่ "เลขเซอร์เวย์ทุกใบของเคลมนั้นในรายงาน" อยู่ในรายการที่จำไว้ — มีใบใหม่ = รายการล้าสมัย (จำนวนครั้งเปลี่ยน)
+ * → ไม่ใส่ทั้งเคลม ปล่อยให้หน้าเว็บถาม ISURVEY ใหม่ตามเดิม
+ */
+export function applyCachedRounds<T extends { claim_no: string; survey_no: string }>(
+  rows: T[], cache: Map<string, RoundRow[]>, have: Set<string>): (T & Partial<RoundInfo>)[] {
+  const nosByClaim = new Map<string, Set<string>>();
+  for (const r of rows) {
+    const claim = String(r.claim_no ?? '').trim();
+    if (!claim) continue;
+    if (!nosByClaim.has(claim)) nosByClaim.set(claim, new Set());
+    nosByClaim.get(claim)!.add(normNo(r.survey_no));
+  }
+  const usable = new Set<string>();
+  for (const [claim, nos] of nosByClaim) {
+    const info = cache.get(claim);
+    if (!Array.isArray(info) || info.length === 0) continue;
+    const known = new Set(info.map((x) => normNo(x.survey_no)));
+    if ([...nos].every((n) => known.has(n))) usable.add(claim);
+  }
+  return rows.map((r) => {
+    const claim = String(r.claim_no ?? '').trim();
+    return usable.has(claim) ? { ...r, ...roundOf(claim, r.survey_no, cache.get(claim)!, have) } : r;
+  });
 }
 
 async function callService<T>(path: string, body: Record<string, unknown>, timeoutMs: number): Promise<T> {
@@ -152,7 +198,45 @@ export const isurveyPullService = {
       const hit = hits[`${r.claim_no}|${r.survey_no}`];
       return { ...r, imported_case_id: hit?.id ?? null, imported_status: hit?.status ?? null };
     });
-    return { cases, filter };
+    return { cases: await this.withCachedRounds(cases), filter };
+  },
+
+  /** ครั้งที่จากที่จำไว้ (อ่าน DB อย่างเดียว ไม่แตะ ISURVEY) — พังหรือยังไม่รัน migration 068 = คืนแถวเดิม หน้าเว็บถามเองตามเดิม */
+  async withCachedRounds<T extends { claim_no: string; survey_no: string }>(rows: T[]): Promise<T[]> {
+    const claims = [...new Set(rows.map((r) => String(r.claim_no ?? '').trim()).filter(Boolean))];
+    if (claims.length === 0) return rows;
+    try {
+      const c = await db.query(
+        `SELECT claim_no, rounds FROM isurvey_claim_rounds
+          WHERE claim_no = ANY($1) AND fetched_at > NOW() - INTERVAL '${ROUNDS_TTL_DAYS} days'`, [claims]);
+      if (c.rows.length === 0) return rows;
+      const cache = new Map<string, RoundRow[]>((c.rows as { claim_no: string; rounds: RoundRow[] }[]).map((x) => [x.claim_no, x.rounds]));
+      const ex = await db.query(
+        `SELECT sr.claim_no, sr.survey_job_no FROM survey_reports sr JOIN cases c ON c.id = sr.case_id WHERE sr.claim_no = ANY($1)`,
+        [[...cache.keys()]]);
+      const have = new Set((ex.rows as { claim_no: string; survey_job_no: string | null }[]).map((x) => `${x.claim_no}|${normNo(x.survey_job_no)}`));
+      return applyCachedRounds(rows, cache, have);
+    } catch (e) {
+      console.warn('[isurveyPull] อ่านครั้งที่ที่จำไว้ไม่ได้:', (e as Error).message);
+      return rows;
+    }
+  },
+
+  /** จำคำตอบ "ครั้งที่" ของแต่ละเคลม (เฉพาะที่ได้รายการจริง ไม่จำ error) — พัง = ข้าม ไม่กระทบคำตอบ */
+  async rememberRounds(rounds: Record<string, RoundRow[] | { error: string }> | undefined): Promise<void> {
+    const items = Object.entries(rounds ?? {})
+      .filter(([claim, v]) => claim.trim() && Array.isArray(v) && v.length > 0)
+      .map(([claim, v]) => ({ claim_no: claim.trim(), rounds: v }));
+    if (items.length === 0) return;
+    try {
+      await db.query(
+        `INSERT INTO isurvey_claim_rounds (claim_no, rounds, fetched_at)
+         SELECT x.claim_no, x.rounds, NOW() FROM jsonb_to_recordset($1::jsonb) AS x(claim_no text, rounds jsonb)
+         ON CONFLICT (claim_no) DO UPDATE SET rounds = EXCLUDED.rounds, fetched_at = NOW()`,
+        [JSON.stringify(items)]);
+    } catch (e) {
+      console.warn('[isurveyPull] จำครั้งที่ไม่ได้:', (e as Error).message);
+    }
   },
   /**
    * งานเหล่านี้ "มีในระบบเราแล้วหรือยัง / สถานะอะไร" — อ่านจาก DB เราอย่างเดียว ไม่แตะ ISURVEY (เร็ว)
@@ -193,26 +277,20 @@ export const isurveyPullService = {
     const claims = [...new Set(rows.map((r) => String(r.claim_no ?? '').trim()).filter(Boolean))].slice(0, 200);
     if (claims.length === 0) return {};
     const creds = await isurveyCredService.getPlain(userId);
-    type RoundRow = { survey_no: string; round: number; status_name?: string };
     const r = await callService<{ rounds: Record<string, RoundRow[] | { error: string }> }>('/rounds', { ...creds, claims }, 150000);
+    await this.rememberRounds(r.rounds);   // โหลดรายการครั้งหน้า ครั้งที่ขึ้นพร้อมตาราง (25/09/69)
     const ex = await db.query(
       `SELECT sr.claim_no, sr.survey_job_no FROM survey_reports sr JOIN cases c ON c.id = sr.case_id WHERE sr.claim_no = ANY($1)`,
       [claims]);
-    const norm = (v: unknown) => String(v ?? '').trim().toUpperCase();
-    const have = new Set((ex.rows as { claim_no: string; survey_job_no: string | null }[]).map((x) => `${x.claim_no}|${norm(x.survey_job_no)}`));
-    const out: Record<string, { visit_no: number | null; visit_total: number; earlier_missing: string[]; error?: string }> = {};
+    const have = new Set((ex.rows as { claim_no: string; survey_job_no: string | null }[]).map((x) => `${x.claim_no}|${normNo(x.survey_job_no)}`));
+    const out: Record<string, RoundInfo> = {};
     for (const row of rows) {
       const claim = String(row.claim_no ?? '').trim();
       const info = r.rounds?.[claim];
       if (!info) continue;
       const key = `${claim}|${row.survey_no}`;
       if (!Array.isArray(info)) { out[key] = { visit_no: null, visit_total: 0, earlier_missing: [], error: info.error }; continue; }
-      const mine = info.find((x) => norm(x.survey_no) === norm(row.survey_no));
-      const visitNo = mine ? Number(mine.round) : null;
-      const earlierMissing = visitNo
-        ? info.filter((x) => Number(x.round) < visitNo && !have.has(`${claim}|${norm(x.survey_no)}`)).map((x) => String(x.survey_no))
-        : [];
-      out[key] = { visit_no: visitNo, visit_total: info.length, earlier_missing: earlierMissing };
+      out[key] = roundOf(claim, row.survey_no, info, have);
     }
     return out;
   },

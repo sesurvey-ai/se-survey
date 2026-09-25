@@ -196,6 +196,7 @@ const submitSurveySchema = z.object({
   survey_place: optStr,
   survey_province: optStr,
   survey_district: optStr,
+  survey_subdistrict: optStr,   // ตำบลที่ตรวจสอบ (มือถือ APK 1.0.124, 25/09/69)
   acc_cause: optStr,
   acc_damage_type: optStr,
   acc_detail: optStr,
