@@ -14,6 +14,7 @@ import integrationRoutes from './integration.routes';
 import isurveyRoutes from './isurvey.routes';
 import staffGroupRoutes from './staffGroup.routes';
 import emcsQueueRoutes from './emcsQueue.routes';
+import emcsBacklogRoutes from './emcsBacklog.routes';
 import geoRoutes from './geo.routes';
 
 const router = Router();
@@ -32,6 +33,7 @@ router.use('/duty', dutyRoutes);
 router.use('/isurvey', isurveyRoutes);
 router.use('/staff-groups', staffGroupRoutes);
 router.use('/emcs-queue', emcsQueueRoutes);        // คิวนำเข้า EMCS (สถานีนำเข้า) — checker/admin
+router.use('/emcs-backlog', emcsBacklogRoutes);    // งานแก้ไข/ต่อเนื่องบน EMCS (snapshot จาก se-billing) — checker/admin
 router.use('/geo', geoRoutes);                     // รายชื่อตำบลตามอำเภอ (dropdown ที่อยู่ผู้ขับขี่, 16/09/69)
 router.use('/integrations', integrationRoutes); // เครื่องมือภายใน (se-autokey) — service token
 

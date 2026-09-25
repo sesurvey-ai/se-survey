@@ -74,10 +74,14 @@ check('ตัวกรองสถานะคอลเซ็นเตอร์/
 
 // ── แอดมินเปิดหน้าตรวจเคสได้ (user สั่ง 23/09/69) — เดิม layout ให้เฉพาะ checker ปุ่มเลิกยกเลิก/ปลดล็อกจึงไม่มีใครกดได้จริง ──
 const layout = web('app', 'inspector', 'layout.tsx');
-check('layout หน้าหัวหน้า: แอดมินเข้าได้เฉพาะหน้าเคสรายใบ (รายการงาน/งานรอตรวจ ISURVEY ยังเฉพาะ checker)',
-  layout.includes('const ADMIN_CASE_PAGE = /^\\/inspector\\/cases\\/\\d+\\/?$/;')
-  && layout.includes("user?.role === 'admin' && ADMIN_CASE_PAGE.test(pathname)")
-  && layout.includes("user?.role !== 'checker' && !adminCasePage"));
+// 25/09/69: + หน้า "งานแก้ไข/ต่อเนื่อง (EMCS)" ที่แอดมินเข้าได้ด้วย — เทสด้วย regex ตัวจริงจาก layout
+const adminPagesSrc = /const ADMIN_PAGES = (\/.+\/);/.exec(layout)?.[1];
+const adminPages = adminPagesSrc ? new RegExp(adminPagesSrc.slice(1, -1)) : null;
+check('layout หน้าหัวหน้า: แอดมินเข้าได้เฉพาะหน้าเคสรายใบ + หน้างานแก้ไข/ต่อเนื่อง EMCS (รายการงาน/งานรอตรวจ ISURVEY/นำเข้า XML ยังเฉพาะ checker)',
+  !!adminPages && adminPages.test('/inspector/cases/123') && adminPages.test('/inspector/emcs')
+  && !adminPages.test('/inspector') && !adminPages.test('/inspector/isurvey') && !adminPages.test('/inspector/cases/import-xml')
+  && layout.includes("user?.role === 'admin' && ADMIN_PAGES.test(pathname)")
+  && layout.includes("user?.role !== 'checker' && !adminAllowed"));
 check('API รายละเอียดเคสรับแอดมิน (ไม่งั้นหน้าเคสโหลดไม่ขึ้น)',
   /router\.get\('\/:id\/detail', auth, requireRole\('checker', 'surveyor', 'admin'\), caseController\.getDetail\)/.test(routes));
 check('หน้าเคสของแอดมิน: อ่านอย่างเดียว · แถบปุ่มแอดมิน (แก้เลขระบุเคส/ยกเลิกงาน) แทนบันทึก/ตีกลับ/อนุมัติ · ไม่มีปุ่มดึงรูป ISURVEY',

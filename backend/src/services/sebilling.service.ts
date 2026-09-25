@@ -57,7 +57,8 @@ function bkkStamp(v: unknown): string | null {
     + `${p(b.getUTCHours())}:${p(b.getUTCMinutes())}`;
 }
 
-async function billingFetch(path: string, init: { method: string; body?: string }) {
+/** เรียก se-billing ด้วย URL/โทเค็นชุดเดียวกับท่อ captures — หน้า "งานแก้ไข/ต่อเนื่อง (EMCS)" ใช้อ่าน /api/dashboard ด้วย */
+export async function billingFetch(path: string, init: { method: string; body?: string }) {
   const base = String(env.SEBILLING_URL).replace(/\/+$/, '');
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);

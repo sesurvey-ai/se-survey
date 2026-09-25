@@ -14,6 +14,8 @@ const NAV_ITEMS: Record<string, { label: string; href: string }[]> = {
     { label: 'จัดการทีมผู้ตรวจ', href: '/admin/staff-groups' },
     { label: 'จัดการเคส', href: '/admin/cases' },
     { label: 'จัดการรีวิว', href: '/admin/reviews' },
+    // หน้าเดียวกับของหัวหน้าผู้ตรวจ (อยู่ใต้ /inspector — layout เปิดให้แอดมินเฉพาะหน้านี้กับหน้าเคส) 25/09/69
+    { label: 'งานแก้ไข/ต่อเนื่อง (EMCS)', href: '/inspector/emcs' },
     { label: 'รายงานการโทร', href: '/admin/call-consult' },
     { label: 'ใบลาพนักงาน', href: '/admin/leave' },
     { label: 'เวลาเข้างานพนักงาน · ประจำจุด', href: '/admin/checkin-board' },
@@ -37,6 +39,8 @@ const NAV_ITEMS: Record<string, { label: string; href: string }[]> = {
     // ⛔ ซ่อนเมนูไว้ก่อน (user สั่ง 15/09/69) — หน้า /inspector/cases/import-xml ยังเปิดตรง ๆ ได้ ทางดึงสดจาก ISURVEY ใช้แทน
     // { label: 'นำเข้าจากไฟล์ XML', href: '/inspector/cases/import-xml' },
     { label: 'งานรอตรวจ (ISURVEY)', href: '/inspector/isurvey' },
+    // กล่อง "รายงานแก้ไข" + "งานต่อเนื่อง" บน EMCS — snapshot วันละครั้งจาก se-billing (user สั่ง 25/09/69)
+    { label: 'งานแก้ไข/ต่อเนื่อง (EMCS)', href: '/inspector/emcs' },
     // "บัญชี ISURVEY" + "ลูกทีมของฉัน" ย้ายไปเมนู "ตั้งค่า" (รูปเฟืองท้ายแถบ) — user สั่ง 22/09/69 ดู SettingsMenu.tsx
   ],
 };
