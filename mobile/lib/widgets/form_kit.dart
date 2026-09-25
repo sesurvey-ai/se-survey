@@ -363,6 +363,10 @@ class KPickerField extends StatelessWidget {
 }
 
 Future<String?> showKPicker(BuildContext context, String title, List<String> options, {String? current}) {
+  // ปล่อย focus ของช่องข้อความที่ค้างอยู่ก่อนเปิดรายการ (user สั่ง 25/09/69 หลังทดสอบที่อยู่ 6 จุด) —
+  // เดิมพิมพ์ช่อง (เช่น หมู่) แล้วเปิดรายการ พอเลือกเสร็จ แอปคืน focus ให้ช่องเดิม คีย์บอร์ดเด้งกลับมาบังแถวถัดไป/ปุ่มบันทึก
+  // แบบเดียวกับ showKDate · _dd / _showBuddhistDatePicker ของฟอร์มหลัก (ทำไว้ก่อนแล้ว)
+  FocusManager.instance.primaryFocus?.unfocus();
   // ระยะเผื่อแถบปุ่มล่างของเครื่อง — ต้องอ่านจาก context ของ "หน้า" ไม่ใช่ของ sheet
   // (ข้างใน showModalBottomSheet ค่า viewPadding.bottom ถูกหักเป็น 0 ตัวเลือกท้ายลิสต์
   //  เลยไปนอนอยู่ใต้แถบปุ่ม กดไม่โดน — เจอจริงกับ "บริษัท ไอโออิ กรุงเทพ ประกันภัย"
