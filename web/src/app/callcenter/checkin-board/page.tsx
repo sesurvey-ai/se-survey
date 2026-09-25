@@ -127,9 +127,12 @@ type Person = {
   c: string; n: string; p: string; centerId: string; s: string; region: string;
   sh: Band; status: Status; t: string; tOut: string; tags: string[]; jobs: number; photo: string | null; leaveType?: string;
   off?: boolean; // วันหยุดตามตารางเวร (ไม่มีเวร + ไม่ได้เช็คอิน) → โชว์ในกลุ่ม "หยุดวันนี้" ไม่นับเป็นทำงาน/ยังไม่มา
+  photoAt?: string; // photo เป็นรูปจากการลงเวลาครั้งก่อน (วันที่ดูยังไม่มีรูปของคนนี้) → ข้อความบอกว่าถ่ายเมื่อไร
 };
 
 type AttRow = { user_id: number; username?: string; user_name?: string; code?: string | null; check_in_time?: string | null; check_out_time?: string | null; check_in_photo?: string | null; work_date?: string };
+// รูปลงเวลาล่าสุดของแต่ละคน (GET /api/attendance/latest-photos) — ตัวลบรูปเก็บรูปนี้ไว้เสมอ จึงโชว์ค้างได้จนกว่าจะถ่ายใหม่
+type LatestPhotoRow = { user_id: number; username?: string; user_name?: string; code?: string | null; check_in_photo: string; work_date: string; check_in_time?: string | null };
 type ZoneData = { staff: { id: string; code: string; name: string }[]; schedule: Record<string, Record<number, string>> };
 
 const p2 = (n: number) => String(n).padStart(2, '0');
@@ -146,11 +149,12 @@ const ST_PILL: Record<Status, { cls: string; label: string }> = {
   pending: { cls: 'wait', label: 'ยังไม่มา' },
   leave: { cls: 'leave', label: 'ลา' },
 };
-// avatar = รูปเช็คอินจริง (check_in_photo) ถ้ามี; ไม่มี/โหลดไม่ได้ → อักษรย่อจากชื่อ
+// avatar = รูปเช็คอินจริง (check_in_photo) ถ้ามี · ยังไม่ลงเวลาในวันที่ดู → รูปล่าสุดของคนนั้น; ไม่มี/โหลดไม่ได้ → อักษรย่อจากชื่อ
 const nameInitials = (n: string) => (n || '').trim().slice(0, 2) || '—';
-function AttAvatar({ photo, name, mini = false }: { photo: string | null; name: string; mini?: boolean }) {
-  const [err, setErr] = useState(false);
-  if (photo && !err) return <img className="lpc-av-img" src={getPhotoUrl(photo)} alt={name} onError={() => setErr(true)} />;
+function AttAvatar({ photo, name, mini = false, title }: { photo: string | null; name: string; mini?: boolean; title?: string }) {
+  // จำว่า "ไฟล์ไหน" โหลดพัง — รูปเปลี่ยน (ลงเวลาใหม่ระหว่างเปิดบอร์ด) ต้องลองโหลดรูปใหม่ ไม่ติดอักษรย่อค้าง
+  const [errFor, setErrFor] = useState<string | null>(null);
+  if (photo && errFor !== photo) return <img className="lpc-av-img" src={getPhotoUrl(photo)} alt={name} title={title} onError={() => setErrFor(photo)} />;
   return mini ? <>{nameInitials(name)}</> : <span className="lpc-av-in">{nameInitials(name)}</span>;
 }
 // ── ป้าย/ชิ้นเล็ก ──
@@ -239,7 +243,7 @@ function LpcPerson({ p, onOpen, onToast, active }: { p: Person; onOpen: (p: Pers
   return (
     <div className={`lpc-person ${p.status} ${active ? 'active' : ''}`} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} onClick={() => onOpen(p)} role="button" tabIndex={0}>
       <span className="lpc-av">
-        <span className="lpc-av-ring"><AttAvatar photo={p.photo} name={p.n} /></span>
+        <span className="lpc-av-ring"><AttAvatar photo={p.photo} name={p.n} title={p.photoAt} /></span>
         {arrived(p.status) && <span className="lpc-av-badge">✓</span>}
       </span>
       <span className="lpc-main">
@@ -424,7 +428,7 @@ function LpcDetail({ p, onClose, onToast, serverEpoch }: { p: Person; onClose: (
     <div className="lpc-modal" onClick={onClose}>
       <div className="lpc-card" onClick={(e) => e.stopPropagation()}>
         <div className="lpc-mhead">
-          <span className={`lpc-mav ${p.status}`}><AttAvatar photo={p.photo} name={p.n} mini /></span>
+          <span className={`lpc-mav ${p.status}`}><AttAvatar photo={p.photo} name={p.n} mini title={p.photoAt} /></span>
           <div className="lpc-mid">
             <div className="lpc-mname">{p.n}</div>
             <div className="lpc-mse">{p.s} · <span className="mono">{p.c.replace(/\s+/g, '')}</span></div>
@@ -489,6 +493,7 @@ export default function CallcenterAttendancePage() {
   const [dbByCenter, setDbByCenter] = useState<Record<string, ZoneData>>({});
   const [dbPrevByCenter, setDbPrevByCenter] = useState<Record<string, ZoneData>>({}); // เดือนของ "เมื่อวาน" (ใช้หาเวรรอบค้างข้ามคืน)
   const [att, setAtt] = useState<AttRow[]>([]); // 2 วัน: เมื่อวาน + วันที่เลือก
+  const [latest, setLatest] = useState<LatestPhotoRow[]>([]); // รูปลงเวลาล่าสุดของแต่ละคน (คนที่ยังไม่ลงเวลาในวันที่ดู)
   const [leaves, setLeaves] = useState<{ code?: string | null; leave_type?: string; start_date?: string; end_date?: string }[]>([]); // ใบลาอนุมัติแล้วครอบคลุมวันที่เลือก
   const [jobsByCode, setJobsByCode] = useState<Record<string, number>>({}); // รหัส(เลข) -> จำนวนงานที่ถืออยู่
   const [loading, setLoading] = useState(true);
@@ -530,12 +535,15 @@ export default function CallcenterAttendancePage() {
         ? Promise.resolve(null)
         : api.get(`/api/duty/schedules?y=${PY}&m=${PM}`).then((r) => r.data?.data?.schedules ?? {}).catch(() => ({})),
       api.get(`/api/leave/active?date=${date}`).then((r) => r.data?.data?.requests ?? []).catch(() => []),
-    ]).then(([sched, rows, workload, prevSched, leaveRows]) => {
+      // ดึงพลาด = null → คงรูปชุดเดิมไว้ (ไม่ให้รูปหายวูบเป็นอักษรย่อตอนเน็ตสะดุดรอบเดียว)
+      api.get('/api/attendance/latest-photos').then((r) => r.data?.data?.rows ?? null).catch(() => null),
+    ]).then(([sched, rows, workload, prevSched, leaveRows, latestRows]) => {
       if (seq !== loadSeq.current) return; // มี load ใหม่กว่า (เปลี่ยนวัน/refresh) → ทิ้งผลเก่า กันข้อมูลวันอื่นทับ
       setSchedError(!schedOk);
       setDbByCenter(sched as Record<string, ZoneData>);
       setDbPrevByCenter((prevSched ?? sched) as Record<string, ZoneData>);
       setAtt(rows as AttRow[]);
+      if (latestRows) setLatest(latestRows as LatestPhotoRow[]);
       setLeaves(leaveRows as { code?: string | null; leave_type?: string; start_date?: string; end_date?: string }[]);
       const jmap: Record<string, number> = {};
       (workload as { code?: string | null; active?: number }[]).forEach((w) => { const k = onlyDigits(w.code || ''); if (k) jmap[k] = Number(w.active) || 0; });
@@ -597,6 +605,21 @@ export default function CallcenterAttendancePage() {
     });
     return { byCode, byName };
   }, [att, date]);
+
+  // รูปลงเวลาล่าสุดของแต่ละคน: รหัส(ตัวเลข)/ชื่อ → { รูป, ข้อความบอกว่าถ่ายเมื่อไร }
+  // ใช้กับคนที่ "วันที่ดู" ยังไม่มีรูปของตัวเอง (ยังไม่ลงเวลา/ลา/หยุด) — รูปค้างไว้จนกว่าจะลงเวลาใหม่ (user เคาะ 25/09/69)
+  const latestIndex = useMemo(() => {
+    type LRec = { photo: string; at: string };
+    const byCode: Record<string, LRec> = {}, byName: Record<string, LRec> = {};
+    latest.forEach((r) => {
+      const rec = { photo: r.check_in_photo, at: `รูปจากการลงเวลาครั้งล่าสุด ${fmtThaiShort(r.work_date)} ${r.check_in_time || ''} น.` };
+      const k = onlyDigits(r.code || r.username || '');
+      if (k && !byCode[k]) byCode[k] = rec;
+      const n = (r.user_name || '').trim();
+      if (n && !byName[n]) byName[n] = rec;
+    });
+    return { byCode, byName };
+  }, [latest]);
 
   // รอบค้างข้ามคืนจาก "เมื่อวาน" (เช็คอินแล้วยังไม่เช็คเอาท์ เช่น เวรดึก 23.00–08.00) → ถือว่ายังทำงานอยู่บนบอร์ดวันนี้
   const carryIndex = useMemo(() => {
@@ -663,13 +686,14 @@ export default function CallcenterAttendancePage() {
         const rec = attIndex.byCode[codeDigits] ?? attIndex.byName[r.name.trim()];
         // รอบค้างข้ามคืนจากเมื่อวาน (ยังไม่เช็คเอาท์) — ใช้เมื่อวันนี้ยังไม่มีรอบของตัวเอง
         const carry = !rec ? (carryIndex.byCode[codeDigits] ?? carryIndex.byName[r.name.trim()]) : undefined;
+        const last = latestIndex.byCode[codeDigits] ?? latestIndex.byName[r.name.trim()]; // รูปล่าสุด (ครั้งก่อน)
         let band = RAW_TO_BAND[r.raw];
         if (!band) {
           if (!rec && !carry) {
             // วันหยุด/ไม่มีเวร และไม่ได้เช็คอิน → โชว์ในกลุ่ม "หยุดวันนี้" (ครบตามตารางเวร) ไม่นับเป็นทำงาน/ยังไม่มา
             out.push({
               c: r.code, n: r.name, p: '', centerId: c.id, s: c.name, region: c.region,
-              sh: 'offday', status: 'pending', t: '', tOut: '', tags: [], jobs: 0, photo: null, off: true,
+              sh: 'offday', status: 'pending', t: '', tOut: '', tags: [], jobs: 0, photo: last?.photo ?? null, photoAt: last?.at, off: true,
             });
             return;
           }
@@ -687,13 +711,15 @@ export default function CallcenterAttendancePage() {
           sh: band, status, t: carry?.t ?? rec?.in ?? '', tOut: rec && !rec.open ? (rec.out || '') : '',
           tags: [...(carry ? ['ข้ามคืน'] : []), ...(isFix(band) ? [SH_META[band].short] : []), ...(isVolNow ? ['อาสา'] : [])],
           jobs: jobsByCode[codeDigits] ?? 0,
-          photo: carry?.photo ?? rec?.photo ?? null,
+          // รูปของวันที่ดูก่อน (รอบข้ามคืน/วันนี้) · ยังไม่มี → รูปล่าสุดที่ค้างไว้จนกว่าจะลงเวลาใหม่
+          photo: carry?.photo ?? rec?.photo ?? last?.photo ?? null,
+          photoAt: (carry?.photo || rec?.photo) ? undefined : last?.at,
           leaveType,
         });
       });
     }
     return out;
-  }, [dbByCenter, attIndex, carryIndex, yBandByCode, date, jobsByCode, clockTick, bkkNowMinutes, leaveByCode]);
+  }, [dbByCenter, attIndex, carryIndex, latestIndex, yBandByCode, date, jobsByCode, clockTick, bkkNowMinutes, leaveByCode]);
 
   // เช็คอินของวันที่เลือกที่ "จับคู่ตารางเวรไม่ได้" (รหัส SE/ชื่อ ไม่ตรงตารางใด ๆ) → ไม่ขึ้นบนบอร์ดเลย
   // โชว์เป็นป้ายเตือน เพื่อแยก "ขาดงานจริง" ออกจาก "จับคู่พลาด" (รหัสผิด/ชื่อไม่ตรงบัญชีแอป)

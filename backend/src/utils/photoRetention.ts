@@ -6,6 +6,8 @@ import { STALE_OPEN_HOURS } from '../services/attendance.service';
  * รูปลงเวลาเข้างาน (att_*) **ใช้แสดงวันต่อวัน ไม่เก็บย้อนหลัง** (user เคาะ 25/09/69 "ไม่ต้องเก็บ ใช้แสดงแค่วันต่อวันพอ")
  *  (ก่อนหน้า 24/09/69: เคาะ 1 เดือน → ผมตั้ง 2 ปีเองจากการตีความ → user ถามกลับแล้วเคาะวันต่อวัน)
  *  - ลบรูปของรอบที่พ้นวันที่ลงเวลาแล้ว **และ** ลงเวลาออกแล้ว — รูปวันนี้ยังขึ้นครบบนบอร์ด/ตาราง/แอป
+ *  - **เก็บรูปล่าสุดของแต่ละคนไว้ 1 รูปเสมอ** (user เคาะ 25/09/69) — บอร์ดเข้างานโชว์รูปนี้กับคนที่ยังไม่ลงเวลา
+ *    ค้างไว้จนกว่าจะถ่ายใหม่ (GET /api/attendance/latest-photos) → ลบรูปเก่าเฉพาะเมื่อคนนั้นมีรูปใหม่กว่าแล้ว
  *  - เวรดึกที่ยังทำงานข้ามคืน (รอบเปิดไม่เกิน STALE_OPEN_HOURS ชม.) เก็บไว้จนลงเวลาออก — บอร์ดวันนี้โชว์รูปรอบข้ามคืน
  *    ส่วนรอบที่เปิดค้างเกิน STALE_OPEN_HOURS (ลืมลงเวลาออก = รอบทิ้งร้าง) ลบได้
  *  - ไฟล์ att_* ที่ไม่มีแถวไหนอ้างถึง (อัปรูปแล้วลงเวลาไม่สำเร็จ) ไม่เคยแสดงที่ไหน → ลบเมื่อเกิน 24 ชม. (เวลาจากชื่อ att_<epoch ms>_…)
@@ -44,11 +46,17 @@ export type RetentionStats = { expired: number; orphans: number; deleted: number
 /** apply=false = นับอย่างเดียว ไม่ลบอะไร */
 export async function purgeAttendancePhotos(opts: { apply: boolean }): Promise<RetentionStats> {
   const { rows } = await db.query(
-    `SELECT id, check_in_photo FROM attendance_records
-      WHERE check_in_photo IS NOT NULL
-        AND work_date < ${BKK_DATE}
-        AND (check_out_at IS NOT NULL OR check_in_at < ${BKK} - INTERVAL '${STALE_OPEN_HOURS} hours')
-      ORDER BY check_in_at`,
+    `SELECT ar.id, ar.check_in_photo FROM attendance_records ar
+      WHERE ar.check_in_photo IS NOT NULL
+        AND ar.work_date < ${BKK_DATE}
+        AND (ar.check_out_at IS NOT NULL OR ar.check_in_at < ${BKK} - INTERVAL '${STALE_OPEN_HOURS} hours')
+        -- รูปล่าสุดของคนนี้ห้ามลบ: ลบได้เฉพาะเมื่อมีรูปที่ถ่ายทีหลังของคนเดียวกันแล้ว
+        AND EXISTS (
+          SELECT 1 FROM attendance_records n
+           WHERE n.user_id = ar.user_id AND n.check_in_photo IS NOT NULL
+             AND (n.check_in_at, n.id) > (ar.check_in_at, ar.id)
+        )
+      ORDER BY ar.check_in_at`,
   );
   const ref = await db.query(`SELECT check_in_photo FROM attendance_records WHERE check_in_photo IS NOT NULL`);
   const referenced = new Set<string>(ref.rows.map((r: { check_in_photo: string }) => normalizeKey(r.check_in_photo) ?? ''));

@@ -83,6 +83,11 @@ export const attendanceController = {
     sendSuccess(res, await attendanceService.report(req.query as Record<string, unknown>));
   }),
 
+  // รูปลงเวลาล่าสุดของแต่ละคน — บอร์ดเข้างานโชว์ค้างไว้จนกว่าจะลงเวลาใหม่
+  latestPhotos: asyncHandler(async (_req: Request, res: Response) => {
+    sendSuccess(res, await attendanceService.latestPhotos());
+  }),
+
   // เวลา server (เวลาไทย) — บอร์ดใช้ตั้ง "วันนี้" + "ตอนนี้" แทนนาฬิกาเครื่อง
   now: asyncHandler(async (_req: Request, res: Response) => {
     sendSuccess(res, await attendanceService.now());

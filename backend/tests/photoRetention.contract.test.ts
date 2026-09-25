@@ -4,6 +4,7 @@
  * ล็อกกติกา:
  *  1) ค่าเริ่มต้น = รายงานอย่างเดียว · ลบจริงเมื่อ PHOTO_RETENTION_ENABLED === '1' เท่านั้น (ลบถาวร กู้ไม่ได้ — user เปิดเอง)
  *  2) ลบเมื่อพ้นวันที่ลงเวลา (วันไทย) และลงเวลาออกแล้ว — เวรดึกที่ยังเปิดอยู่ไม่เกิน STALE_OPEN_HOURS ห้ามแตะ · รันทุกชั่วโมง
+ *     · รูปล่าสุดของแต่ละคนห้ามลบ — บอร์ดเข้างานโชว์ค้างไว้จนกว่าจะถ่ายใหม่ (GET /api/attendance/latest-photos)
  *  3) ลบไฟล์ผ่าน storage.del แล้วล้าง check_in_photo = NULL เฉพาะแถวที่ยังชี้ไฟล์เดิม · ไม่แตะ fs ตรง ๆ
  *  4) ไฟล์ att_* ที่ไม่มีแถวอ้างถึง ลบตามเวลาในชื่อไฟล์ — ไฟล์ที่ยังมีแถวอ้างถึง/ยังไม่ถึงอายุ/ชื่อแปลก ห้ามแตะ
  *  5) เริ่มทำงานตอนเปิดเซิร์ฟเวอร์ (index.ts)
@@ -23,10 +24,22 @@ const read = (p: string) => fs.readFileSync(path.join(__dirname, '..', p), 'utf8
 
 const src = read('src/utils/photoRetention.ts');
 check('วันต่อวัน: ลบเมื่อพ้นวันที่ลงเวลา (วันไทย) + ลงเวลาออกแล้ว หรือรอบค้างเกิน STALE_OPEN_HOURS',
-  /AND work_date < \$\{BKK_DATE\}/.test(src)
-  && /AND \(check_out_at IS NOT NULL OR check_in_at < \$\{BKK\} - INTERVAL '\$\{STALE_OPEN_HOURS\} hours'\)/.test(src)
+  /AND ar\.work_date < \$\{BKK_DATE\}/.test(src)
+  && /AND \(ar\.check_out_at IS NOT NULL OR ar\.check_in_at < \$\{BKK\} - INTERVAL '\$\{STALE_OPEN_HOURS\} hours'\)/.test(src)
   && /import \{ STALE_OPEN_HOURS \} from '\.\.\/services\/attendance\.service'/.test(src)
   && !/ATTENDANCE_PHOTO_(DAYS|YEARS)/.test(src));
+check('รูปล่าสุดของแต่ละคนห้ามลบ: ลบได้เฉพาะเมื่อคนเดียวกันมีรูปที่ถ่ายทีหลังแล้ว',
+  /AND EXISTS \(\s*SELECT 1 FROM attendance_records n\s*WHERE n\.user_id = ar\.user_id AND n\.check_in_photo IS NOT NULL\s*AND \(n\.check_in_at, n\.id\) > \(ar\.check_in_at, ar\.id\)\s*\)/.test(src));
+const svc = read('src/services/attendance.service.ts');
+const routes = read('src/routes/attendance.routes.ts');
+check('API รูปล่าสุด: คนละ 1 แถว (DISTINCT ON user_id เรียงเวลาเข้างานใหม่สุด) · เฉพาะแถวที่มีรูป',
+  /SELECT DISTINCT ON \(ar\.user_id\)[\s\S]*WHERE ar\.check_in_photo IS NOT NULL\s*ORDER BY ar\.user_id, ar\.check_in_at DESC, ar\.id DESC/.test(svc));
+check('API รูปล่าสุด: เฉพาะแอดมิน/คอลเซ็นเตอร์ (เหมือนรายงานลงเวลา)',
+  /router\.get\('\/latest-photos', auth, requireRole\('admin', 'callcenter'\), attendanceController\.latestPhotos\)/.test(routes));
+const board = fs.readFileSync(path.join(__dirname, '..', '..', 'web', 'src', 'app', 'callcenter', 'checkin-board', 'page.tsx'), 'utf8');
+check('บอร์ดเข้างาน: ดึงรูปล่าสุด + ใช้เมื่อวันที่ดูยังไม่มีรูปของคนนั้น (รูปวันนี้/ข้ามคืนมาก่อน)',
+  /api\.get\('\/api\/attendance\/latest-photos'\)/.test(board)
+  && /photo: carry\?\.photo \?\? rec\?\.photo \?\? last\?\.photo \?\? null/.test(board));
 check('รันทุกชั่วโมง (พ้นเที่ยงคืน/ลงเวลาออกแล้วลบภายใน 1 ชม.)', /const RUN_EVERY_MS = 60 \* 60 \* 1000;/.test(src));
 check('เปิดลบจริงได้ทางเดียว: PHOTO_RETENTION_ENABLED === \'1\'', /process\.env\.PHOTO_RETENTION_ENABLED === '1'/.test(src)
   && /const apply = retentionEnabled\(\);/.test(src) && /purgeAttendancePhotos\(\{ apply \}\)/.test(src));

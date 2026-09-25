@@ -24,5 +24,6 @@ router.get('/mine', auth, attendanceController.mine);
 
 // รายงานสำหรับผู้จัดการ
 router.get('/report', auth, requireRole('admin', 'callcenter'), attendanceController.report);
+router.get('/latest-photos', auth, requireRole('admin', 'callcenter'), attendanceController.latestPhotos);
 
 export default router;

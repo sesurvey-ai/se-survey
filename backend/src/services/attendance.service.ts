@@ -189,6 +189,24 @@ export const attendanceService = {
     };
   },
 
+  // รูปลงเวลาล่าสุดของแต่ละคน (คนละ 1 แถว) — บอร์ดเข้างานใช้เป็นรูปของคนที่ยังไม่ได้ลงเวลาในวันที่ดู
+  // ตัวลบรูป (utils/photoRetention.ts) เก็บรูปล่าสุดของทุกคนไว้เสมอ รูปนี้จึงค้างจนกว่าจะถ่ายใหม่ (user เคาะ 25/09/69)
+  async latestPhotos() {
+    const { rows } = await db.query(
+      `SELECT DISTINCT ON (ar.user_id)
+              ar.user_id, u.username, u.code,
+              TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')) AS user_name,
+              ar.check_in_photo,
+              to_char(ar.work_date,   'YYYY-MM-DD') AS work_date,
+              to_char(ar.check_in_at, 'HH24:MI')    AS check_in_time
+         FROM attendance_records ar
+         JOIN users u ON u.id = ar.user_id
+        WHERE ar.check_in_photo IS NOT NULL
+        ORDER BY ar.user_id, ar.check_in_at DESC, ar.id DESC`
+    );
+    return { rows };
+  },
+
   // เวลาปัจจุบันฝั่ง server (เวลาไทย) — ให้บอร์ดยึดเวลานี้แทนนาฬิกาเครื่อง client (กันเบราว์เซอร์ TZ อื่นคำนวณ "วันนี้"/อาสาเพี้ยน)
   // today = วันที่ไทย, nowMinutes = นาทีจากเที่ยงคืน(ไทย), epochMs = เวลา UTC absolute ไว้คำนวณ offset ฝั่ง client
   async now() {
