@@ -192,11 +192,13 @@ const submitSurveySchema = z.object({
   acc_subdistrict: optStr,
   acc_province: optStr,
   acc_district: optStr,
+  acc_moo: optStr,              // หมู่ที่เกิดเหตุ (APK 1.0.126, 25/09/69) — ออก EMCS เป็น "ม.<หมู่>" ในข้อความสถานที่เกิดเหตุ
   // สถานที่ออกตรวจสอบ (มือถือ APK 1.0.105, 10/09/69) — z.object ตัดคีย์ที่ไม่ประกาศทิ้งเงียบ ๆ ต้องมีที่นี่
   survey_place: optStr,
   survey_province: optStr,
   survey_district: optStr,
   survey_subdistrict: optStr,   // ตำบลที่ตรวจสอบ (มือถือ APK 1.0.124, 25/09/69)
+  survey_moo: optStr,           // หมู่ที่ตรวจสอบ (APK 1.0.126, 25/09/69) — แสดงอย่างเดียว ไม่เข้า EMCS
   acc_cause: optStr,
   acc_damage_type: optStr,
   acc_detail: optStr,

@@ -267,13 +267,37 @@ const read = (p: string) => fs.readFileSync(path.join(ROOT, p), 'utf8');
   ];
   const bad = cases.filter(([pl, sub, prov, want]) => accPlaceLine(pl, sub, prov) !== want).map(([pl, sub, prov, want]) => `${String(pl)}|${String(sub)} → ${accPlaceLine(pl, sub, prov)} ≠ ${want}`);
   check('สถานที่เกิดเหตุ: ต่อ ต.<ตำบล> (กรุงเทพ แขวง) · ไม่มีตำบล = เดิม · มีแล้วไม่ซ้ำ · สถานที่ -/รอตรวจสอบ = เหลือตำบล', bad.length === 0, bad.join(' ; '));
+
+  // หมู่ที่เกิดเหตุ acc_moo (user สั่ง 25/09/69 รอบ 2) — มีเฉพาะฝั่ง backend (บอทใช้ acc_place_emcs · ISURVEY ไม่มีช่องหมู่)
+  const mooCases: Array<[unknown, unknown, unknown, unknown, string]> = [
+    ['หน้าเซเว่น ถ.สุขุมวิท', 'หนองปรือ', 'ชลบุรี', '7', 'หน้าเซเว่น ถ.สุขุมวิท ม.7 ต.หนองปรือ'],
+    ['หน้าเซเว่น', 'หนองปรือ', 'ชลบุรี', 'หมู่ที่ 7', 'หน้าเซเว่น ม.7 ต.หนองปรือ'],          // พิมพ์คำนำหน้ามาในช่องหมู่ = ตัดทิ้ง
+    ['หน้าเซเว่น', 'หนองปรือ', 'ชลบุรี', 'ม. 7', 'หน้าเซเว่น ม.7 ต.หนองปรือ'],
+    ['หน้าเซเว่น', '', 'ชลบุรี', '7', 'หน้าเซเว่น ม.7'],                                  // ไม่มีตำบล = หมู่อย่างเดียว
+    ['หน้าวัด หมู่ 7', 'หนองปรือ', 'ชลบุรี', '7', 'หน้าวัด หมู่ 7 ต.หนองปรือ'],           // มีหมู่เลขเดียวกันแล้ว = ไม่ซ้ำ
+    ['หน้าวัด ม.07', '', '', '7', 'หน้าวัด ม.07'],                                        // 07 = 7
+    ['หน้าวัด ม.5', 'หนองปรือ', 'ชลบุรี', '7', 'หน้าวัด ม.5 ม.7 ต.หนองปรือ'],              // เลขต่างกัน = คงทั้งคู่ (หัวหน้าเห็นว่าขัดกัน)
+    ['หน้าวัด ต.หนองปรือ', 'หนองปรือ', 'ชลบุรี', '7', 'หน้าวัด ม.7 ต.หนองปรือ'],          // ตำบลอยู่ในข้อความแล้ว → แทรกหน้า ต.
+    ['ถ.สุขุมวิท,ตำบล หนองปรือ', 'หนองปรือ', 'ชลบุรี', '7', 'ถ.สุขุมวิท, ม.7 ตำบล หนองปรือ'],
+    ['ลานจอด นิคมฯ บ่อวิน', 'บ่อวิน', 'ชลบุรี', '3', 'ลานจอด นิคมฯ บ่อวิน ม.3'],          // ชื่อตำบลเปล่า ๆ (ชื่อสถานที่) → ต่อท้าย
+    ['หน้าหมู่บ้านสุขใจ', 'หนองปรือ', 'ชลบุรี', '7', 'หน้าหมู่บ้านสุขใจ ม.7 ต.หนองปรือ'],  // "หมู่บ้าน" ไม่ใช่หมู่
+    ['-', 'หนองปรือ', 'ชลบุรี', '7', 'ม.7 ต.หนองปรือ'],
+    ['-', '', '', '7', 'ม.7'],
+    ['ปากซอย 5', 'บางด้วน', 'กรุงเทพฯ', '2', 'ปากซอย 5 ม.2 แขวงบางด้วน'],
+    ['  ว.4  สภ.ขลุง  ', '', 'จันทบุรี', '', 'ว.4  สภ.ขลุง'],                              // ไม่มีทั้งหมู่และตำบล = ข้อความเดิมทุกตัว
+    ['หน้าตลาด', 'นาเกลือ', 'ชลบุรี', '-', 'หน้าตลาด ต.นาเกลือ'],                          // หมู่ "-" = ไม่ทราบ
+    ['หน้าตลาด', 'นาเกลือ', 'ชลบุรี', null, 'หน้าตลาด ต.นาเกลือ'],
+  ];
+  const badMoo = mooCases.filter(([pl, sub, prov, m, want]) => accPlaceLine(pl, sub, prov, m) !== want)
+    .map(([pl, sub, prov, m, want]) => `${String(pl)}|${String(sub)}|ม.${String(m)} → ${accPlaceLine(pl, sub, prov, m)} ≠ ${want}`);
+  check('สถานที่เกิดเหตุ + หมู่: "ม.<หมู่>" ก่อนตำบล · หมู่เลขเดียวกันมีแล้วไม่ซ้ำ · ตำบลในข้อความแล้วแทรกหน้า ต. · หมู่ -/ว่าง = สูตรเดิม', badMoo.length === 0, badMoo.join(' ; '));
   const xml = read('backend/src/services/xmlExport.service.ts');
-  check('XML ACC_PLACE + เตือนความยาว ใช้สถานที่รวมตำบล',
-    xml.includes("el('ACC_PLACE', accPlaceLine(r.acc_place, r.acc_subdistrict, r.acc_province))")
-    && xml.includes("lenWarn(out, 'ACC_PLACE', 'สถานที่เกิดเหตุ (รวมตำบล)', accPlaceLine(r.acc_place, r.acc_subdistrict, r.acc_province));"));
+  check('XML ACC_PLACE + เตือนความยาว ใช้สถานที่รวมหมู่/ตำบล',
+    xml.includes("el('ACC_PLACE', accPlaceLine(r.acc_place, r.acc_subdistrict, r.acc_province, r.acc_moo))")
+    && xml.includes("lenWarn(out, 'ACC_PLACE', 'สถานที่เกิดเหตุ (รวมหมู่/ตำบล)', accPlaceLine(r.acc_place, r.acc_subdistrict, r.acc_province, r.acc_moo));"));
   const integ = read('backend/src/routes/integration.routes.ts');
-  check('integration /report ส่ง acc_place_emcs ให้บอท (บอทกรอก txtAcc_Place ทับหลังนำเข้า XML)',
-    integ.includes('acc_place_emcs: accPlaceLine(r.acc_place, r.acc_subdistrict, r.acc_province)'));
+  check('integration /report ส่ง acc_place_emcs (รวมหมู่/ตำบล) ให้บอท (บอทกรอก txtAcc_Place ทับหลังนำเข้า XML)',
+    integ.includes('acc_place_emcs: accPlaceLine(r.acc_place, r.acc_subdistrict, r.acc_province, r.acc_moo)'));
 }
 
 // ── ฝั่งบอท (se-autokey ข้าง ๆ — ข้ามถ้าไม่มี) ──

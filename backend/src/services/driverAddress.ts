@@ -154,16 +154,34 @@ export function driverAddressLine(address: unknown, moo: unknown, subdistrict: u
  * สถานที่เกิดเหตุสำหรับ EMCS/XML (user เคาะ 25/09/69) — EMCS มีช่องสถานที่ (ข้อความ) + dropdown จังหวัด/อำเภอ
  * ช่องตำบลที่เกิดเหตุมีในหน้าแต่ถูกซ่อน (ddlAcc_Sub_DistrictID display:none) → ต่อ "ต.<ตำบล>" (กรุงเทพ "แขวง<ตำบล>") ท้ายข้อความ
  * · ไม่มีตำบล = ข้อความเดิมทุกตัว · ข้อความมีชื่อตำบลนั้นอยู่แล้ว = ไม่ต่อซ้ำ · สถานที่ "-"/"รอตรวจสอบ" = เหลือแค่ตำบล
+ * · หมู่ (acc_moo — user สั่ง 25/09/69 รอบ 2): "ม.<หมู่>" ก่อนตำบล → "หน้าเซเว่น ม.7 ต.หนองปรือ" · ข้อความมีหมู่เลขเดียวกันอยู่แล้ว = ไม่ต่อซ้ำ
+ *   ข้อความมีตำบลอยู่แล้ว → แทรก ม. หน้า "ต./ตำบล/แขวง<ชื่อ>" (ชื่อตำบลเปล่า ๆ อาจเป็นชื่อสถานที่ → ต่อท้าย)
  * ⚠️ สูตรเดียวกับบอท claim_data.acc_place_line — แก้ที่หนึ่งต้องแก้อีกที่
+ *   ยกเว้นหมู่: มีเฉพาะฝั่งนี้ (บอทใช้ acc_place_emcs ที่ backend ประกอบ · เส้น ISURVEY ตรงไม่มีช่องหมู่ ใช้สูตรบอทได้เท่ากัน)
  */
-export function accPlaceLine(place: unknown, subdistrict: unknown, province: unknown = ''): string {
+export function accPlaceLine(place: unknown, subdistrict: unknown, province: unknown = '', moo: unknown = ''): string {
   const raw = s(place);
   const sub = s(subdistrict).replace(TUMBON_PREFIX, '').trim();
-  if (!sub) return raw;
+  const m = isPlaceholder(moo) ? '' : s(moo).replace(MOO_PREFIX, '').trim();
+  if (!sub && !m) return raw;
   const text = isPlaceholder(raw) ? '' : raw.replace(/\s+/g, ' ');
-  if (text.includes(sub)) return text;
-  const label = isBangkok(s(province).replace(PROVINCE_PREFIX, '')) ? `แขวง${sub}` : `ต.${sub}`;
-  return text ? `${text} ${label}` : label;
+  const mooLabel = m && !hasMoo(text, m) ? `ม.${m}` : '';
+  if (sub && text.includes(sub)) {
+    if (!mooLabel) return text;
+    const hit = new RegExp(`(?:ตำบล|แขวง|ต\\.)\\s*${escapeRe(sub)}`, 'u').exec(text);
+    if (!hit) return `${text} ${mooLabel}`;
+    const before = text.slice(0, hit.index).trimEnd();
+    return `${before ? `${before} ` : ''}${mooLabel} ${text.slice(hit.index)}`;
+  }
+  const label = !sub ? '' : isBangkok(s(province).replace(PROVINCE_PREFIX, '')) ? `แขวง${sub}` : `ต.${sub}`;
+  return [text, mooLabel, label].filter(Boolean).join(' ');
+}
+
+/** ข้อความมี "ม.7"/"หมู่ 7"/"หมู่ที่ 07" ของหมู่นี้อยู่แล้ว (เลขนำหน้าด้วย 0 นับเท่ากัน) — กันต่อ "ม." ซ้ำ */
+const MOO_ALL = new RegExp(MOO_RE.source, 'gu');
+const mooKey = (x: string): string => x.replace(/^0+(?=\d)/, '');
+function hasMoo(text: string, m: string): boolean {
+  return [...text.matchAll(MOO_ALL)].some((x) => mooKey(x[1]) === mooKey(m));
 }
 
 /** ที่อยู่ปัจจุบันผู้ขับขี่รถคู่กรณี → "46/23 ม.7 ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ" (กรุงเทพ: แขวง/เขต/กรุงเทพฯ) */

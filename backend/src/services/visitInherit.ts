@@ -21,7 +21,7 @@ export const VISIT_OWN_FIELDS: ReadonlySet<string> = new Set([
   'survey_result', 'review_comment', 'surveyor_comment', 'notes', 'source_remark', 'checklist',
   // เวลา/สถานที่ออกตรวจของครั้งนี้ (จ่ายงาน→ถึง→เสร็จ เป็นรายครั้ง · ที่เกิดเหตุ acc_* เป็นของเคลม)
   'acc_insurance_notify_date', 'acc_insurance_notify_time', 'acc_survey_arrive_date', 'acc_survey_complete_date',
-  'survey_place', 'survey_province', 'survey_district', 'survey_subdistrict',
+  'survey_place', 'survey_province', 'survey_district', 'survey_subdistrict', 'survey_moo',   // หมู่ที่ตรวจสอบ (25/09/69) — acc_moo เป็นข้อมูลหลักของเคลม
   // ช่างที่ออกครั้งนี้
   'acc_surveyor', 'acc_surveyor_branch', 'acc_surveyor_phone', 'surveyor_name', 'surveyor_phone',
 ]);

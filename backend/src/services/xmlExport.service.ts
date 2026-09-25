@@ -734,7 +734,7 @@ export function emcsNameWarnings(r: Row): EmcsNameWarning[] {
     dateWarn(out, 'DRI_DRVDATE_START', `ใบขับขี่คู่กรณีคันที่ ${i + 1} ออกให้วันที่`, o.license_start);
     dateWarn(out, 'DRI_DRVDATE_END', `ใบขับขี่คู่กรณีคันที่ ${i + 1} หมดอายุวันที่`, o.license_end);
   });
-  lenWarn(out, 'ACC_PLACE', 'สถานที่เกิดเหตุ (รวมตำบล)', accPlaceLine(r.acc_place, r.acc_subdistrict, r.acc_province));
+  lenWarn(out, 'ACC_PLACE', 'สถานที่เกิดเหตุ (รวมหมู่/ตำบล)', accPlaceLine(r.acc_place, r.acc_subdistrict, r.acc_province, r.acc_moo));
   lenWarn(out, 'ASSURED_NAME', 'ผู้เอาประกันภัย', r.assured_name);
   lenWarn(out, 'POLICE_STATION', 'สถานีตำรวจ', r.acc_police_station);
   lenWarn(out, 'DRIVER_BY_POLICY', 'ชื่อผู้ขับขี่ตามกรมธรรม์', r.driver_by_policy);
@@ -805,7 +805,7 @@ export function generateSurveyXml(r: Row): string {
     el('POLICY_START', toXmlCE(r.policy_start)) +
     el('POLICY_END', toXmlCE(r.policy_end)) +
     el('ACC_DATE', toXmlCE(r.acc_date, r.acc_time)) +
-    el('ACC_PLACE', accPlaceLine(r.acc_place, r.acc_subdistrict, r.acc_province)) +   // + ต.<ตำบลที่เกิดเหตุ> (25/09/69)
+    el('ACC_PLACE', accPlaceLine(r.acc_place, r.acc_subdistrict, r.acc_province, r.acc_moo)) +   // + ม.<หมู่> ต.<ตำบล> ที่เกิดเหตุ (25/09/69)
     el('ACC_DISTRICTID', districtId(r.acc_province, r.acc_district)) +
     el('ACC_PROVINCEID', provinceCode(r.acc_province)) +
     el('ACC_DETAIL', r.acc_detail) +

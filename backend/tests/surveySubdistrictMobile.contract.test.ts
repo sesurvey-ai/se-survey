@@ -38,7 +38,7 @@ check('แอป: ตำบลที่ตรวจสอบอยู่ใน�
   /IgnorePointer\(\s*ignoring: _survSameAsAcc,[\s\S]{0,600}?_row2\(_survProvinceDropdown\(\), _survDistrictDropdown\(\)\),\s*const SizedBox\(height: 14\),\s*_survTumbonDropdown\(\),/.test(form));
 check('แอป: ติ๊กเดียวกับที่เกิดเหตุ = คัดลอกครบ 4 ช่อง · อนุมานติ๊กตอนโหลดจาก 4 ช่อง',
   /_survDistrictCtl\.text = _accDistrictCtl\.text;\s*_survSubdistrictCtl\.text = _accSubdistrictCtl\.text;/.test(form)
-  && /&& _survSubdistrictCtl\.text\.trim\(\) == _accSubdistrictCtl\.text\.trim\(\);/.test(form)
+  && /&& _survSubdistrictCtl\.text\.trim\(\) == _accSubdistrictCtl\.text\.trim\(\)[;\s]/.test(form)   // หมู่ต่อท้ายได้ (25/09/69 รอบ 2 — placeMoo.contract)
   && /_accSubdistrictCtl\.text = v \?\? ''; _syncSurveyFromAcc\(\);/.test(form));
 check('แอป: บังคับเมื่ออำเภอนั้นมีรายชื่อตำบล (ไม่มีรายชื่อ = ไม่ขวางการส่งงาน)',
   form.includes("['ตำบลที่เกิดเหตุ', has(_accSubdistrictCtl) || _accTumbons().isEmpty],")

@@ -3010,7 +3010,7 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
                     className={`flex-1 min-w-0 border border-gray-300 rounded-none h-9 px-2.5 text-gray-800 ${d ? 'bg-gray-100' : 'bg-white'} text-sm`} />
                   {/* คำว่า "หมู่" คั่นหน้าช่อง (user ขอ 16/09/69 — ช่องเปล่า ๆ ไม่รู้ว่าคืออะไร) */}
                   <span className="text-sm text-gray-600 shrink-0 pl-1">หมู่</span>
-                  <input type="text" disabled={d} name="driver_moo" value={driverMoo} onChange={e => setDriverMoo(e.target.value)} title="หมู่ที่ (ไม่บังคับ)"
+                  <input type="text" disabled={d} name="driver_moo" value={driverMoo} onChange={e => setDriverMoo(e.target.value)} maxLength={20} title="หมู่ที่ (ไม่บังคับ)"
                     className={`w-16 shrink-0 border border-gray-300 rounded-none h-9 px-2.5 text-gray-800 ${d ? 'bg-gray-100' : 'bg-white'} text-sm`} />
                 </div>
               </F>
@@ -3138,8 +3138,16 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
           <div className="bg-white overflow-hidden text-sm">
             <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-x-5 gap-y-3 text-sm">
               {/* สถานที่ + จังหวัด + เขต/อำเภอ บังคับทั้ง 3 (จังหวัด/อำเภอ = ตัวที่บอทใช้หาเรทด้วย) */}
+              {/* หมู่ (user สั่ง 25/09/69) แบบเดียวกับที่อยู่ผู้ขับขี่: ช่องเล็กท้ายสถานที่ มีคำว่า "หมู่" คั่น · ไม่บังคับ
+                  · เข้า EMCS เป็น "ม.<หมู่>" ก่อน "ต.<ตำบล>" ในข้อความสถานที่เกิดเหตุ (accPlaceLine — EMCS ไม่มีช่องหมู่) */}
               <F label="สถานที่เกิดเหตุ" req={<Req of="acc_place,acc_province,acc_district" />} span={2}>
-                <input type="text" disabled={d} name="acc_place" defaultValue={report.acc_place || ''} className={CTL(d)} />
+                <div className="flex items-center gap-1">
+                  <input type="text" disabled={d} name="acc_place" defaultValue={report.acc_place || ''}
+                    className={`flex-1 min-w-0 border border-gray-300 rounded-none h-9 px-3 text-gray-800 ${d ? 'bg-gray-100' : 'bg-white'} text-sm`} />
+                  <span className="text-sm text-gray-600 shrink-0 pl-1">หมู่</span>
+                  <input type="text" disabled={d} name="acc_moo" defaultValue={report.acc_moo || ''} maxLength={20} title="หมู่ที่เกิดเหตุ (ไม่บังคับ)"
+                    className={`w-16 shrink-0 border border-gray-300 rounded-none h-9 px-2.5 text-gray-800 ${d ? 'bg-gray-100' : 'bg-white'} text-sm`} />
+                </div>
               </F>
               <F label="จังหวัด">
                 <select disabled={d} name="acc_province" value={accProv} onChange={e => { setAccProv(e.target.value); setAccDist('-- เขต --'); setAccTumbon(''); }} className={CTL(d)}>
@@ -3165,9 +3173,16 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
                   ISURVEY แยก "สถานที่ออกตรวจสอบ + จังหวัด/เขต-อำเภอ/ตำบล ที่ตรวจสอบ" ออกจากสถานที่เกิดเหตุ ตัวดึงงานเอามาให้
                   · เรทค่าบริการคิดจากชุดนี้ก่อน (ชุดเดียวกับ extension se-billing บน ISURVEY) ว่าง = ถอยไปคิดจากสถานที่เกิดเหตุ
                   · ไม่บังคับกรอก (งานมือถือ/XML ไม่มีข้อมูลนี้) · ไม่เข้า XML/EMCS · คอลัมน์ survey_* (migration 058) */}
+              {/* หมู่ที่ตรวจสอบ (user สั่ง 25/09/69) — เก็บ/แสดงอย่างเดียว ไม่เข้า EMCS · เป็นของประจำครั้ง (แก้ได้บนใบครั้งที่ 2+) */}
               <F label="สถานที่ออกตรวจสอบ" span={2}>
-                <input type="text" disabled={d} name="survey_place" defaultValue={report.survey_place || ''}
-                  placeholder="ว่าง = ใช้สถานที่เกิดเหตุคิดเรท" className={CTL(d)} />
+                <div className="flex items-center gap-1">
+                  <input type="text" disabled={d} name="survey_place" defaultValue={report.survey_place || ''}
+                    placeholder="ว่าง = ใช้สถานที่เกิดเหตุคิดเรท"
+                    className={`flex-1 min-w-0 border border-gray-300 rounded-none h-9 px-3 text-gray-800 ${d ? 'bg-gray-100' : 'bg-white'} text-sm`} />
+                  <span className="text-sm text-gray-600 shrink-0 pl-1">หมู่</span>
+                  <input type="text" disabled={d} name="survey_moo" defaultValue={report.survey_moo || ''} maxLength={20} title="หมู่ที่ตรวจสอบ (ไม่บังคับ)"
+                    className={`w-16 shrink-0 border border-gray-300 rounded-none h-9 px-2.5 text-gray-800 ${d ? 'bg-gray-100' : 'bg-white'} text-sm`} />
+                </div>
               </F>
               <F label="จังหวัดที่ตรวจสอบ">
                 <select disabled={d} name="survey_province" value={survProv} onChange={e => { setSurvProv(e.target.value); setSurvDist('-- เขต --'); setSurvTumbon(''); }} className={CTL(d)}>
