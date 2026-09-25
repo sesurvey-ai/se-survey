@@ -17,7 +17,7 @@
  */
 import fs from 'fs';
 import path from 'path';
-import { driverAddressLine, opponentAddressLine, withTitle, splitMoo, normalizeDriverAddressFields, normalizeOpponentsAddress, stripAdminParts, normalizeCardAddresses } from '../src/services/driverAddress';
+import { driverAddressLine, accPlaceLine, opponentAddressLine, withTitle, splitMoo, normalizeDriverAddressFields, normalizeOpponentsAddress, stripAdminParts, normalizeCardAddresses } from '../src/services/driverAddress';
 import { tumbonNames, amphurCode } from '../src/services/areaCode.service';
 
 let failed = 0;
@@ -74,7 +74,7 @@ const read = (p: string) => fs.readFileSync(path.join(ROOT, p), 'utf8');
   const xml = read('backend/src/services/xmlExport.service.ts');
   check('XML: DRI_ADDRESS ผู้ขับขี่รถประกันประกอบผ่าน driverAddressLine · คู่กรณีผ่าน opponentAddressLine',
     xml.includes("el('DRI_ADDRESS', insured ? driverAddressLine(c.driver_address, c.driver_moo, c.driver_subdistrict, c.driver_district, c.driver_province) : opponentAddressLine(c.address, c.moo, c.subdistrict, c.district, c.home_province))")
-    && xml.includes("import { driverAddressLine, opponentAddressLine, addressLineOrDash, withTitle, nameOrUnknown } from './driverAddress'"));   // 21/09/69 + addressLineOrDash/nameOrUnknown (ผู้บาดเจ็บ/ทรัพย์สิน)
+    && xml.includes("import { driverAddressLine, opponentAddressLine, addressLineOrDash, withTitle, nameOrUnknown, accPlaceLine } from './driverAddress'"));   // 21/09/69 + addressLineOrDash/nameOrUnknown (ผู้บาดเจ็บ/ทรัพย์สิน) · 25/09/69 + accPlaceLine
   const integ = read('backend/src/routes/integration.routes.ts');
   check('integration /report ส่ง driver_address_emcs', integ.includes('driver_address_emcs: driverAddressLine(r.driver_address, r.driver_moo, r.driver_subdistrict, r.driver_district, r.driver_province)'));
 }
@@ -251,6 +251,31 @@ const read = (p: string) => fs.readFileSync(path.join(ROOT, p), 'utf8');
     && web2.includes("...(opponentAgeMismatch(rec) ? ['age'] : []),") && web2.includes('อายุไม่ตรงกับวันเกิด (ควรเป็น ${ageExp})') && web2.includes("{ label: `ใช้ ${ageExp}`, onClick: () => set(i, 'age', ageExp) }"));
 }
 
+// ── 6) สถานที่เกิดเหตุ + "ต.<ตำบล>" (user เคาะ 25/09/69) — EMCS ช่องตำบลที่เกิดเหตุถูกซ่อน → ต่อท้ายข้อความสถานที่ ──
+{
+  // ⚠️ ชุดเดียวกับ se-autokey test_smoke.py (acc_place_line) — สองฝั่งต้องได้ผลเท่ากันทุกบรรทัด
+  const cases: Array<[unknown, unknown, unknown, string]> = [
+    ['หน้าเซเว่น ถ.สุขุมวิท', 'หนองปรือ', 'ชลบุรี', 'หน้าเซเว่น ถ.สุขุมวิท ต.หนองปรือ'],
+    ['หน้าตลาด', 'ตำบลนาเกลือ', 'จังหวัดชลบุรี', 'หน้าตลาด ต.นาเกลือ'],
+    ['ปากซอย 5', 'บางด้วน', 'กรุงเทพ ฯ', 'ปากซอย 5 แขวงบางด้วน'],
+    ['  ว.4  สภ.ขลุง  ', '', 'จันทบุรี', 'ว.4  สภ.ขลุง'],          // ไม่มีตำบล = ข้อความเดิมทุกตัว (แค่ตัดหัวท้าย)
+    ['', '', '', ''],
+    ['หน้าวัด ต.หนองปรือ', 'หนองปรือ', 'ชลบุรี', 'หน้าวัด ต.หนองปรือ'],   // มีแล้วไม่ต่อซ้ำ
+    ['-', 'หนองปรือ', 'ชลบุรี', 'ต.หนองปรือ'],
+    ['รอตรวจสอบ', 'หนองปรือ', '', 'ต.หนองปรือ'],
+    [null, null, '', ''],
+  ];
+  const bad = cases.filter(([pl, sub, prov, want]) => accPlaceLine(pl, sub, prov) !== want).map(([pl, sub, prov, want]) => `${String(pl)}|${String(sub)} → ${accPlaceLine(pl, sub, prov)} ≠ ${want}`);
+  check('สถานที่เกิดเหตุ: ต่อ ต.<ตำบล> (กรุงเทพ แขวง) · ไม่มีตำบล = เดิม · มีแล้วไม่ซ้ำ · สถานที่ -/รอตรวจสอบ = เหลือตำบล', bad.length === 0, bad.join(' ; '));
+  const xml = read('backend/src/services/xmlExport.service.ts');
+  check('XML ACC_PLACE + เตือนความยาว ใช้สถานที่รวมตำบล',
+    xml.includes("el('ACC_PLACE', accPlaceLine(r.acc_place, r.acc_subdistrict, r.acc_province))")
+    && xml.includes("lenWarn(out, 'ACC_PLACE', 'สถานที่เกิดเหตุ (รวมตำบล)', accPlaceLine(r.acc_place, r.acc_subdistrict, r.acc_province));"));
+  const integ = read('backend/src/routes/integration.routes.ts');
+  check('integration /report ส่ง acc_place_emcs ให้บอท (บอทกรอก txtAcc_Place ทับหลังนำเข้า XML)',
+    integ.includes('acc_place_emcs: accPlaceLine(r.acc_place, r.acc_subdistrict, r.acc_province)'));
+}
+
 // ── ฝั่งบอท (se-autokey ข้าง ๆ — ข้ามถ้าไม่มี) ──
 {
   const bot = path.join(ROOT, '..', 'se-autokey');
@@ -266,6 +291,9 @@ const read = (p: string) => fs.readFileSync(path.join(ROOT, p), 'utf8');
       cd.includes('def opponent_address_line(') && cd.includes('def with_title(')
       && main.includes('o.get("owner_name_emcs")') && main.includes('o.get("address_emcs")') && main.includes('with_title(o.get("title")')
       && api.includes('"address": ("@address_opp", None)') && conv.includes('"owner_title": otitle') && conv.includes('"subdistrict": api._tumbon(_s(d.get("drv_tumbonID")))'));
+    check('บอท: acc_place_line (สูตรเดียวกัน) · เส้นเว็บใช้ acc_place_emcs ก่อน',
+      cd.includes('def acc_place_line(place, subdistrict="", province="") -> str:') && cd.includes('return f"{text} {label}" if text else label')
+      && main.includes("gv('acc_place_emcs') or acc_place_line(gv('acc_place'), gv('acc_subdistrict'), gv('acc_province'))"));
   } else {
     console.log('[SKIP] ไม่มี repo se-autokey ข้าง ๆ — ข้ามเทสฝั่งบอท');
   }

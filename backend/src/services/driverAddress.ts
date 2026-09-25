@@ -150,6 +150,22 @@ export function driverAddressLine(address: unknown, moo: unknown, subdistrict: u
   return parts.join(' ');
 }
 
+/**
+ * สถานที่เกิดเหตุสำหรับ EMCS/XML (user เคาะ 25/09/69) — EMCS มีช่องสถานที่ (ข้อความ) + dropdown จังหวัด/อำเภอ
+ * ช่องตำบลที่เกิดเหตุมีในหน้าแต่ถูกซ่อน (ddlAcc_Sub_DistrictID display:none) → ต่อ "ต.<ตำบล>" (กรุงเทพ "แขวง<ตำบล>") ท้ายข้อความ
+ * · ไม่มีตำบล = ข้อความเดิมทุกตัว · ข้อความมีชื่อตำบลนั้นอยู่แล้ว = ไม่ต่อซ้ำ · สถานที่ "-"/"รอตรวจสอบ" = เหลือแค่ตำบล
+ * ⚠️ สูตรเดียวกับบอท claim_data.acc_place_line — แก้ที่หนึ่งต้องแก้อีกที่
+ */
+export function accPlaceLine(place: unknown, subdistrict: unknown, province: unknown = ''): string {
+  const raw = s(place);
+  const sub = s(subdistrict).replace(TUMBON_PREFIX, '').trim();
+  if (!sub) return raw;
+  const text = isPlaceholder(raw) ? '' : raw.replace(/\s+/g, ' ');
+  if (text.includes(sub)) return text;
+  const label = isBangkok(s(province).replace(PROVINCE_PREFIX, '')) ? `แขวง${sub}` : `ต.${sub}`;
+  return text ? `${text} ${label}` : label;
+}
+
 /** ที่อยู่ปัจจุบันผู้ขับขี่รถคู่กรณี → "46/23 ม.7 ต.ท้ายบ้าน อ.เมือง จ.สมุทรปราการ" (กรุงเทพ: แขวง/เขต/กรุงเทพฯ) */
 export function opponentAddressLine(address: unknown, moo: unknown, subdistrict: unknown, district: unknown, province: unknown): string {
   const split = splitMoo(isPlaceholder(address) ? '' : address);   // บ้านเลขที่ "-"/"รอตรวจสอบ" = ไม่ทราบ (20/09/69)

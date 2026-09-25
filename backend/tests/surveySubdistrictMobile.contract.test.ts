@@ -8,7 +8,7 @@
  *     (user ชี้ 25/09/69: ที่เกิดเหตุไม่มีตำบล ติ๊กแล้วข้อมูลไม่ครบ)
  *  3) บังคับเมื่ออำเภอนั้นมีรายชื่อตำบล · เปลี่ยนจังหวัด/อำเภอ = ล้างตำบลของชุดนั้น · ส่งงานส่งทั้ง acc_subdistrict/survey_subdistrict
  *  4) backend ไม่ทิ้ง 2 ช่องนี้ (zod ตัดคีย์ที่ไม่ประกาศเงียบ ๆ + รายชื่อช่องของสร้างเคส/บันทึกร่าง/ส่งงาน)
- *  5) หน้าเว็บโชว์ตำบลที่ไม่ใช่ตำบลคิดเรทพิเศษด้วย (ช่องติ๊กมีเฉพาะตำบลพิเศษ — user เคาะ 01/09/69) ไม่งั้นค่าจากแอปมองไม่เห็น
+ *  5) หน้าเว็บ: ตำบลทั้ง 2 ชุดเป็นดรอปดาวน์เต็มรายชื่อ (user เคาะ 25/09/69 แทนช่องติ๊กตำบลพิเศษของ 01/09/69) ตำบลพิเศษติดป้าย
  *
  * รัน: npm test   (backend/)
  */
@@ -59,9 +59,11 @@ const acc = svc.split("'acc_date','acc_time','acc_place','acc_subdistrict','acc_
 check('backend: รายชื่อช่องของสร้างเคส/บันทึกร่าง/ส่งงาน มีตำบลทั้ง 2 ชุดครบ 3 จุด', surv === 3 && acc === 3, `survey ${surv} · acc ${acc}`);
 
 const web = read('web', 'src', 'components', 'cases', 'CaseDetail.tsx');
-check('เว็บ: โชว์ตำบลที่ไม่ใช่ตำบลคิดเรทพิเศษ ทั้งที่เกิดเหตุและที่ตรวจสอบ (ค่าจากแอป/ISURVEY)',
-  /\{accTumbon && !tumbonChoices\.includes\(accTumbon\) && \(\s*<div className="mt-1 text-xs text-gray-500">ตำบล\{accTumbon\}<\/div>/.test(web)
-  && /\{survTumbon && !survTumbonChoices\.includes\(survTumbon\) && \(\s*<div className="mt-1 text-xs text-gray-500">ตำบล\{survTumbon\}<\/div>/.test(web));
+check('เว็บ: ตำบลที่เกิดเหตุ/ที่ตรวจสอบเป็นดรอปดาวน์เต็มรายชื่อ (user เคาะ 25/09/69) · ไม่มีช่องซ่อนชื่อซ้ำ · ตำบลพิเศษติดป้าย',
+  web.includes('<select disabled={d} name="acc_subdistrict" value={accTumbon}') && web.includes('<select disabled={d} name="survey_subdistrict" value={survTumbon}')
+  && web.includes('tumbonSelectOptions(survTumbons, survTumbon, survTumbonChoices)') && web.includes('const survTumbons = useTumbonNames(survProv, survDist);')
+  && !web.includes('name="acc_subdistrict" value={accTumbon} />') && !web.includes('name="survey_subdistrict" value={survTumbon} />')
+  && web.includes('`${t} (เรทพิเศษ)`'));
 
 console.log(failed ? `\nFAILED ❌: ${failed}` : '\nALL PASS ✅');
 process.exit(failed ? 1 : 0);

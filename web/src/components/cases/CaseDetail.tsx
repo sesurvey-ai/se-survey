@@ -311,6 +311,28 @@ const SURVEY_CO = {
  * ⚠️ ต้องมี `border-gray-300` + `bg-white`/`bg-gray-100` เสมอ — ตัวทากรอบแดงสลับคลาส
  *    ชุดนี้ (ดู RING / BG_ORIG) เปลี่ยนชื่อคลาสเมื่อไหร่ กรอบแดงจะทาไม่ติดเงียบ ๆ
  */
+/** รายชื่อตำบลตามจังหวัด/อำเภอ (GET /api/geo/tumbons) — ยังไม่เลือกจังหวัด/อำเภอ = [] (25/09/69) */
+function useTumbonNames(prov: string, dist: string): string[] {
+  const [list, setList] = useState<string[]>([]);
+  useEffect(() => {
+    if (!prov || prov === '0' || prov.startsWith('--') || !dist || dist.startsWith('--')) { setList([]); return; }
+    let alive = true;
+    api.get('/api/geo/tumbons', { params: { province: prov, district: dist } })
+      .then(res => { if (alive) setList(Array.isArray(res.data?.data) ? (res.data.data as string[]) : []); })
+      .catch(() => { if (alive) setList([]); });
+    return () => { alive = false; };
+  }, [prov, dist]);
+  return list;
+}
+/**
+ * ตัวเลือกดรอปดาวน์ตำบล: รายชื่อเต็ม + ตำบลคิดเรทพิเศษที่ชื่อไม่ตรงรายชื่อ + ค่าที่บันทึกไว้แต่ไม่อยู่ในรายการ (ไม่ทิ้งค่าเดิม)
+ * ตำบลที่อยู่ในตารางเรทพิเศษติดป้าย "(เรทพิเศษ)" — value เป็นชื่อเปล่าเสมอ (ตัวคิดเรทจับคู่จากชื่อ)
+ */
+function tumbonSelectOptions(list: string[], cur: string, special: string[]): { value: string; label: string }[] {
+  const names = [...list, ...special.filter((t) => !list.includes(t))];
+  if (cur && !names.includes(cur)) names.unshift(cur);
+  return names.map((t) => ({ value: t, label: special.includes(t) ? `${t} (เรทพิเศษ)` : t }));
+}
 const CTL = (locked: boolean) =>
   `w-full border border-gray-300 rounded-none h-9 px-3 text-gray-800 ${locked ? 'bg-gray-100' : 'bg-white'} text-sm`;
 /**
@@ -685,6 +707,9 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
   const survTumbonChoices = (tumbonOptions ?? [])
     .filter((t) => areaKey(t.province) === areaKey(survProv) && areaKey(t.district) === areaKey(survDist))
     .map((t) => t.tumbon);
+  // รายชื่อตำบลเต็มของอำเภอที่เลือก (GET /api/geo/tumbons ชุดเดียวกับที่อยู่ผู้ขับขี่) — ดรอปดาวน์ตำบลที่เกิดเหตุ/ที่ตรวจสอบ (25/09/69)
+  const accTumbons = useTumbonNames(accProv, accDist);
+  const survTumbons = useTumbonNames(survProv, survDist);
   const [driverProv, setDriverProv] = useState<string>(report.driver_province || '0');
   const [driverDist, setDriverDist] = useState<string>(report.driver_district || '-- เขต --');
   // ตำบลของที่อยู่ผู้ขับขี่ (16/09/69): รายการตามจังหวัด/อำเภอจาก /api/geo/tumbons · ค่าที่บันทึกไว้แต่ไม่อยู่ในรายการยังโชว์
@@ -3125,33 +3150,15 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
                 <select disabled={d} name="acc_district" value={accDist} onChange={e => { setAccDist(e.target.value); setAccTumbon(''); }} className={CTL(d)}>
                   {districtOptions(accProv, accProv === report.acc_province ? report.acc_district : '').map(dt => <option key={dt} value={dt}>{dt}</option>)}
                 </select>
-                {/* ── ตำบล ── (user เคาะ 01/09/69: เป็นช่องติ๊ก ไม่ใช่ dropdown)
-                    อำเภอที่มีตำบลคิดเรทต่างจากอำเภอแม่มีตำบลเดียว dropdown ที่มี "ไม่ระบุ"
-                    กับอีก 1 ตัวเลือกจึงเปลืองคลิกเปล่า ๆ · เผื่ออนาคตมีหลายตำบล = หลายช่องติ๊ก
-                    ที่เลือกได้ทีละอัน (เคสหนึ่งอยู่ตำบลเดียว) */}
-                {tumbonChoices.length > 0 && (
-                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
-                    {tumbonChoices.map((t) => (
-                      <label key={t} className="flex items-center gap-1.5 text-sm text-gray-700">
-                        <input type="checkbox" disabled={d} checked={accTumbon === t}
-                          onChange={e => setAccTumbon(e.target.checked ? t : '')} />
-                        ตำบล{t}
-                      </label>
-                    ))}
-                  </div>
-                )}
-                {/**
-                  * ⛔ ต้องมีช่องซ่อนเสมอ ไม่ใช่ให้ค่าไปกับช่องติ๊ก —
-                  *    ช่องติ๊กที่ไม่ได้ติ๊กจะไม่ถูกส่งไปกับฟอร์มเลย เอาติ๊กออกแล้วค่าเดิมจะค้าง
-                  *    ในฐานข้อมูลตลอดไป (ล้างไม่ได้) · ช่องซ่อนส่ง "" ไปแทนจึงล้างได้จริง
-                  *    และยังทำให้ย้ายอำเภอไปที่ที่ไม่มีตำบล แล้วตำบลเดิมถูกล้างตามด้วย
-                  */}
-                {/* ตำบลที่ไม่ใช่ตำบลคิดเรทพิเศษ (ไม่มีช่องติ๊ก) — แอป 1.0.125+ ให้ช่างเลือกตำบลได้ทุกตำบล (25/09/69) · OCR ก็เติมได้
-                    โชว์ให้รู้ว่ามีค่า ไม่งั้นมองไม่เห็นบนหน้าเว็บ (ค่ายังอยู่ในช่องซ่อน ไม่ถูกล้าง) */}
-                {accTumbon && !tumbonChoices.includes(accTumbon) && (
-                  <div className="mt-1 text-xs text-gray-500">ตำบล{accTumbon}</div>
-                )}
-                <input type="hidden" disabled={d} name="acc_subdistrict" value={accTumbon} />
+                {/* ── ตำบล / แขวง ── ดรอปดาวน์เต็มรายชื่อ (user เคาะ 25/09/69 แทนช่องติ๊กเฉพาะตำบลคิดเรทพิเศษของ 01/09/69)
+                    แอป 1.0.125+ ให้ช่างเลือกได้ทุกตำบล → หัวหน้าต้องเห็น/แก้ได้เหมือนกัน · ตำบลคิดเรทพิเศษ (ตารางเรท) ติดป้าย "(เรทพิเศษ)"
+                    · ตัวเลือกแรก "-- ตำบล / แขวง --" = ค่า "" → บันทึกแล้วล้างได้ (ย้ายอำเภอ = ล้างตาม) · ค่าที่บันทึกไว้แต่ไม่อยู่ในรายการยังโชว์
+                    · เข้า EMCS เป็น "ต.<ตำบล>" ต่อท้ายสถานที่เกิดเหตุ (accPlaceLine — ช่องตำบลของ EMCS ถูกซ่อน) */}
+                <select disabled={d} name="acc_subdistrict" value={accTumbon} onChange={e => setAccTumbon(e.target.value)}
+                  className={`${CTL(d)} mt-1.5`} title="ตำบล / แขวงที่เกิดเหตุ">
+                  <option value="">-- ตำบล / แขวง --</option>
+                  {tumbonSelectOptions(accTumbons, accTumbon, tumbonChoices).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
               </F>
 
               {/* ── สถานที่ออกตรวจสอบ ── (user ขอ 09/09/69 กับเคลม 2026013072661: เกิดเหตุ กทม./สวนหลวง แต่ออกตรวจ ชลบุรี/บางละมุง)
@@ -3171,23 +3178,12 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
                 <select disabled={d} name="survey_district" value={survDist} onChange={e => { setSurvDist(e.target.value); setSurvTumbon(''); }} className={CTL(d)}>
                   {districtOptions(survProv, survProv === report.survey_province ? report.survey_district : '').map(dt => <option key={dt} value={dt}>{dt}</option>)}
                 </select>
-                {survTumbonChoices.length > 0 && (
-                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
-                    {survTumbonChoices.map((t) => (
-                      <label key={t} className="flex items-center gap-1.5 text-sm text-gray-700">
-                        <input type="checkbox" disabled={d} checked={survTumbon === t}
-                          onChange={e => setSurvTumbon(e.target.checked ? t : '')} />
-                        ตำบล{t}
-                      </label>
-                    ))}
-                  </div>
-                )}
-                {/* ตำบลที่ ISURVEY/แอป (1.0.124+) ระบุมาแต่ไม่ใช่ตำบลคิดเรทพิเศษ (ไม่มีช่องติ๊ก) — โชว์ให้รู้ว่ามีค่า ไม่งั้นมองไม่เห็น */}
-                {survTumbon && !survTumbonChoices.includes(survTumbon) && (
-                  <div className="mt-1 text-xs text-gray-500">ตำบล{survTumbon}</div>
-                )}
-                {/* ช่องซ่อนส่ง "" เมื่อเอาติ๊กออก — เหตุผลเดียวกับ acc_subdistrict ข้างบน */}
-                <input type="hidden" disabled={d} name="survey_subdistrict" value={survTumbon} />
+                {/* ตำบลที่ตรวจสอบ — ดรอปดาวน์เต็มรายชื่อแบบเดียวกับที่เกิดเหตุ (user เคาะ 25/09/69) · ค่าจาก ISURVEY/แอปที่ไม่อยู่ในรายการยังโชว์ */}
+                <select disabled={d} name="survey_subdistrict" value={survTumbon} onChange={e => setSurvTumbon(e.target.value)}
+                  className={`${CTL(d)} mt-1.5`} title="ตำบล / แขวงที่ตรวจสอบ">
+                  <option value="">-- ตำบล / แขวง --</option>
+                  {tumbonSelectOptions(survTumbons, survTumbon, survTumbonChoices).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
               </F>
 
               <F label="ลักษณะการเกิดเหตุ" req={<Req of="acc_cause" />}>

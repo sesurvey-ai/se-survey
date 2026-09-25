@@ -10,7 +10,7 @@ import { CAR_BRANDS_BY_TYPE, BRAND_ALIASES, THAI_BRANDS, CAR_TYPE_LABELS } from 
 import { notifyCaseChanged } from '../services/caseEvents';
 import { emcsQueueService } from '../services/emcsQueue.service';
 import { botReleaseKeys, BOT_VERSION_RE } from '../services/botRelease';
-import { driverAddressLine, opponentAddressLine, withTitle, addressLineOrDash, nameOrUnknown } from '../services/driverAddress';
+import { driverAddressLine, opponentAddressLine, withTitle, addressLineOrDash, nameOrUnknown, accPlaceLine } from '../services/driverAddress';
 
 // ── routes สำหรับเครื่องมือภายใน (se-autokey) — auth ด้วย service token ไม่ผูกบัญชีพนักงาน ──
 // เปิดใช้โดยตั้ง env INTEGRATION_TOKEN (ยาว ≥24 ตัว); ไม่ตั้ง = ทุก route ตอบ 401
@@ -436,10 +436,12 @@ router.get('/cases/:id/report', integrationAuth, asyncHandler(async (req: Reques
   const eff = await caseService.getEffectiveReport(caseId);
   if (!eff) { res.status(404).json({ success: false, message: 'report not found' }); return; }
   // driver_address_emcs = ที่อยู่ผู้ขับขี่ประกอบแล้ว "46/23 ม.7 ต.ท้ายบ้าน" (16/09/69) — บอทกรอก txtDri_Address ตรง ๆ
+  // acc_place_emcs = สถานที่เกิดเหตุ + "ต.<ตำบล>" (25/09/69) — บอทกรอก txtAcc_Place ทับหลังนำเข้า XML จึงต้องได้ข้อความเดียวกับ ACC_PLACE
   const r = eff.report as Record<string, unknown>;
   const v = emcsRecordViews(r);
   res.json({ success: true, data: { ...eff.report, main_from: eff.main_from, opposing_parties: v.opposing, injured_persons: v.injured, damaged_property: v.property,
-    driver_address_emcs: driverAddressLine(r.driver_address, r.driver_moo, r.driver_subdistrict, r.driver_district, r.driver_province) } });
+    driver_address_emcs: driverAddressLine(r.driver_address, r.driver_moo, r.driver_subdistrict, r.driver_district, r.driver_province),
+    acc_place_emcs: accPlaceLine(r.acc_place, r.acc_subdistrict, r.acc_province) } });
 }));
 
 // รายการรูปของเคส (survey_photos ที่ผูกกับ report) — SE-AutoKey ใช้โหลดไปอัปเข้า EMCS

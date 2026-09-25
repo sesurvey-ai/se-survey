@@ -343,23 +343,24 @@ console.log('\n── ตัวเลือก "ตำบล" ในหมวด
   check('แปลงรหัสอำเภอเป็นชื่อ (ฟอร์มเก็บเป็นชื่อ ไม่ใช่รหัส)',
         svc3.includes('TH_AMPHURS[r.parent_amphur]') && svc3.includes('TH_PROVINCES[r.parent_amphur.slice(0, 2)]'));
 }
-check('มีช่องติ๊กตำบลผูกกับคอลัมน์เดิม acc_subdistrict',
-      ui.includes('name="acc_subdistrict"')
-      && ui.includes('checked={accTumbon === t}'));
+/** 25/09/69 user เคาะใหม่: ตำบลเป็นดรอปดาวน์เต็มรายชื่อ (แทนช่องติ๊กเฉพาะตำบลคิดเรทพิเศษของ 01/09/69) — แอปเลือกได้ทุกตำบลแล้ว */
+check('ดรอปดาวน์ตำบลเต็มรายชื่อ ผูกกับคอลัมน์เดิม acc_subdistrict (รายชื่อจาก /api/geo/tumbons)',
+      ui.includes('<select disabled={d} name="acc_subdistrict" value={accTumbon} onChange={e => setAccTumbon(e.target.value)}')
+      && ui.includes('tumbonSelectOptions(accTumbons, accTumbon, tumbonChoices)') && ui.includes('const accTumbons = useTumbonNames(accProv, accDist);'));
 /**
- * ⛔ ช่องติ๊กที่ไม่ได้ติ๊กจะไม่ติดไปกับ FormData เลย — ถ้าให้ค่าไปกับช่องติ๊กตรง ๆ
- *    เอาติ๊กออกแล้วค่าเดิมจะค้างในฐานข้อมูลตลอดไป ล้างไม่ได้
+ * ⛔ ล้างค่าได้: ตัวเลือกแรกค่า "" · ห้ามเหลือช่องซ่อนชื่อซ้ำ (ช่องชื่อเดียวกัน 2 ช่อง FormData ได้ค่าแรก = ค่าเดิมค้าง)
  */
-check('⛔ ส่งค่าผ่านช่องซ่อน ไม่ใช่ช่องติ๊ก (ไม่งั้นเอาติ๊กออกแล้วล้างค่าไม่ได้)',
-      ui.includes('<input type="hidden" disabled={d} name="acc_subdistrict" value={accTumbon} />')
-      && !/type="checkbox"[^>]*name="acc_subdistrict"/.test(ui));
+check('⛔ ล้างตำบลได้ (ตัวเลือก "" ) และไม่มีช่องซ่อนชื่อ acc_subdistrict ซ้ำ',
+      ui.includes('<option value="">-- ตำบล / แขวง --</option>')
+      && !ui.includes('<input type="hidden" disabled={d} name="acc_subdistrict"') && !/type="checkbox"[^>]*name="acc_subdistrict"/.test(ui));
 /** ฟอร์มเก็บ "อำเภอศรีราชา"/"กรุงเทพ ฯ" ตารางเก็บ "ศรีราชา"/"กรุงเทพฯ" — ต้องตัดคำนำหน้าก่อนเทียบ */
 check('เทียบชื่อพื้นที่โดยตัดคำนำหน้า/ช่องว่าง/ฯ',
       ui.includes("const areaKey = (v: unknown) =>")
       && ui.includes('areaKey(t.province) === areaKey(accProv)')
       && ui.includes('areaKey(t.district) === areaKey(accDist)'));
-/** อำเภออื่นไม่มีตำบลที่คิดเรทต่าง → ไม่ต้องโชว์ช่องให้รก */
-check('ขึ้นเฉพาะอำเภอที่มีตำบล', ui.includes('{tumbonChoices.length > 0 && ('));
+/** ตำบลที่คิดเรทต่างจากอำเภอแม่ (ตารางเรท) ยังต้องเห็นว่าพิเศษ → ติดป้ายในดรอปดาวน์ · ค่าเดิมที่ไม่อยู่ในรายการไม่หาย */
+check('ตำบลคิดเรทพิเศษติดป้าย "(เรทพิเศษ)" · ค่าที่บันทึกไว้แต่ไม่อยู่ในรายการยังเป็นตัวเลือก',
+      ui.includes('label: special.includes(t) ? `${t} (เรทพิเศษ)` : t') && ui.includes('if (cur && !names.includes(cur)) names.unshift(cur);'));
 /** เปลี่ยนจังหวัด/อำเภอแล้วตำบลเดิมค้างอยู่ = ตำบลไม่ตรงอำเภอ */
 check('เปลี่ยนจังหวัดหรืออำเภอแล้วล้างตำบล',
       ui.includes("setAccDist('-- เขต --'); setAccTumbon('');")
