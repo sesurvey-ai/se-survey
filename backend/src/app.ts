@@ -1,10 +1,10 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import morgan from 'morgan';
 import path from 'path';
 import { env } from './config/env';
 import { errorHandler } from './middleware/errorHandler';
+import { requestLogger } from './middleware/requestLogger';
 import { uploadsAuth } from './middleware/uploadsAuth';
 import { serveUploads } from './middleware/serveUploads';
 import { isFirebaseReady } from './config/firebase';
@@ -18,7 +18,8 @@ app.set('trust proxy', 1);
 // Middleware
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors({ origin: env.CORS_ORIGIN.split(',') }));
-app.use(morgan('dev'));
+// log คำขอแบบปิดรหัสล็อกอินใน URL (?token= ของรูปที่เว็บเปิด) — ห้ามกลับไปใช้ morgan('dev') ตรง ๆ (27/09/69)
+app.use(requestLogger);
 app.use(express.json());
 
 // Static files (uploaded photos) — ต้องผ่าน auth (รูปเป็น PII: บัตร ปชช./ใบขับขี่/รูปลงเวลา)
