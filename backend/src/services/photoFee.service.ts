@@ -63,6 +63,11 @@ export function standardPhotoFee(row: Record<string, unknown>): PhotoFee | null 
   if (Number.isFinite(visit) && visit >= 2) {
     return { count: 0, price: 0, reason: `งานครั้งที่ ${visit} — ไม่มีค่ารูป (ค่ารูปเบิกเฉพาะครั้งที่ 1)` };
   }
+  // 0.5 จังหวัดเรทเหมาตามลำดับเรื่อง (ราชบุรี — lumpSum.ts · user เคาะ 01/10/69) → ยอดเหมารวมค่ารูปแล้ว
+  //     ไม่มีค่ารูปแยก (ใบค่าใช้จ่ายบน EMCS จริงไม่มีค่ารูปเลย) · ผู้เรียกใส่ row.lump_sum_label มาเมื่องานอยู่ในจังหวัดเหมา
+  if (row.lump_sum_label) {
+    return { count: 0, price: 0, reason: `${String(row.lump_sum_label)} — ค่ารูปรวมในยอดเหมาแล้ว ไม่มีค่ารูปแยก` };
+  }
   // 1. ไทยไพบูลย์ → ไม่มีค่ารูปทุกกรณี (จบตั้งแต่ข้อนี้ ไม่ต้องดูอย่างอื่น)
   if (isThaiPaiboon(row)) return { count: 0, price: 0, reason: 'งานไทยไพบูลย์ — ไม่มีค่ารูป' };
 

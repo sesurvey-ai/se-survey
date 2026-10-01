@@ -84,7 +84,8 @@ check('ครั้งที่ 1 / ไม่ส่งครั้งที่�
 check('ครั้งที่ 2 กรุงเทพ/ไทยไพบูลย์ ก็ 0 (ไม่ขัดกัน)', total({ survey_job_no: 'SEABI-110260900001', visit_no: 2 }) === 0 && total({ survey_job_no: 'SETP-69090001', visit_no: 3 }) === 0);
 check('case.service ส่ง visit_no ของใบนี้ให้ standardPhotoFee',
       (require('fs') as typeof import('fs')).readFileSync((require('path') as typeof import('path')).join(__dirname, '..', 'src', 'services', 'case.service.ts'), 'utf8')
-        .includes("standardPhotoFee({ ...report, visit_no: Number(caseResult.rows[0]?.visit_no) || visitCount })"));
+        // ต่อท้ายด้วย lump_sum_label ได้ (จังหวัดเรทเหมา 01/10/69 — ล็อกใน lumpSum.contract.test.ts)
+        .includes("standardPhotoFee({ ...report, visit_no: Number(caseResult.rows[0]?.visit_no) || visitCount"));
 
 console.log(`\n${failed === 0 ? '✅ ผ่านทั้งหมด' : `❌ ล้มเหลว ${failed} รายการ`}`);
 process.exit(failed === 0 ? 0 : 1);

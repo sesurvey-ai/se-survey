@@ -19,6 +19,8 @@ import { assertReportRev } from './reportRev';
 import { notifyCaseChanged } from './caseEvents';
 import { provinceOf } from './geoProvince';
 import { standardPhotoFee } from './photoFee.service';
+import { lumpSumFee, loadLumpRules, parseSurveySeq } from './lumpSum';
+import { provinceCode } from './areaCode.service';
 import { tumbonOptions } from './billingRates.service';
 import { districtCentroid } from './geoDistrict';
 import { recordMoneyChanges, damageSnapshot } from './moneyAudit';
@@ -1418,6 +1420,19 @@ export const caseService = {
       : null;
     const reportOut = firstVisit && report ? effectiveReport(report, firstVisit.report) : report;
 
+    /**
+     * จังหวัดเรทเหมาตามลำดับเรื่อง (ราชบุรี — lumpSum.ts · 01/10/69) → ค่ารูปรวมในยอดเหมาแล้ว (standardPhotoFee ข้อ 0.5)
+     * จังหวัดของงาน = รหัสในเลขเซอร์เวย์ก่อน (ตัวจริงตามเอกสาร) · ยังไม่มีเลข = จังหวัดออกตรวจสอบ → ที่เกิดเหตุ
+     */
+    const lumpLabel = report
+      ? lumpSumFee(
+        await loadLumpRules(),
+        parseSurveySeq(report.survey_job_no)?.province
+          ?? provinceCode(String(report.survey_province ?? '').trim() || report.acc_province),
+        report.survey_job_no,
+      )?.label ?? null
+      : null;
+
     return {
       case: caseResult.rows[0],
       report: reportOut,
@@ -1441,7 +1456,7 @@ export const caseService = {
       photo_fee_suggest:
         report && caseResult.rows[0]?.source !== 'isurvey_xml'
           // ครั้งที่ของใบนี้ (visit_no ที่เก็บ · ไม่มีก็ลำดับสร้าง) — ครั้งที่ 2+ ไม่มีค่ารูป (22/09/69)
-          ? standardPhotoFee({ ...report, visit_no: Number(caseResult.rows[0]?.visit_no) || visitCount })
+          ? standardPhotoFee({ ...report, visit_no: Number(caseResult.rows[0]?.visit_no) || visitCount, lump_sum_label: lumpLabel })
           : null,
       // ชื่อคนที่มีอักขระซึ่ง EMCS จะล้างค่าทั้งช่องทิ้ง — เตือนคนตรวจก่อนส่งเข้า EMCS
       emcs_name_warnings: report ? emcsNameWarnings(report) : [],

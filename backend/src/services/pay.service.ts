@@ -190,6 +190,7 @@ export function computePay(rates: ResolvedRates, input: PayInput): PayResult {
 // ────────────────── ผูกกับเคสจริง ──────────────────
 
 import { amphurCode, provinceCode, tumbonCode } from './areaCode.service';
+import { lumpSumFee, loadLumpRules } from './lumpSum';
 
 /** ช่องรายรับฝั่งพนักงาน (บวกเข้ายอดรวม) — ชื่อคีย์ตรงกับคอลัมน์ใน survey_pay */
 export const PAY_MONEY_FIELDS = [
@@ -257,14 +258,14 @@ export async function getCasePay(caseId: number, override: PayLocationOverride =
   const r = (await db.query(
     `SELECT sr.acc_province, sr.acc_district, sr.acc_subdistrict,
             sr.survey_province, sr.survey_district, sr.survey_subdistrict,
-            sr.acc_surveyor, sr.claim_type, c.source,
+            sr.acc_surveyor, sr.claim_type, sr.survey_job_no, c.source,
             (SELECT count(*) FROM survey_photos sp WHERE sp.report_id = sr.id) AS photo_count
        FROM survey_reports sr
        JOIN cases c ON c.id = sr.case_id
       WHERE sr.case_id = $1`, [caseId])).rows[0] as
     | { acc_province?: string; acc_district?: string; acc_subdistrict?: string;
         survey_province?: string; survey_district?: string; survey_subdistrict?: string; acc_surveyor?: string;
-        claim_type?: string; photo_count?: string; source?: string }
+        claim_type?: string; survey_job_no?: string; photo_count?: string; source?: string }
     | undefined;
 
   if (!r) return { saved, suggest: null, area: null };
@@ -329,13 +330,22 @@ export async function getCasePay(caseId: number, override: PayLocationOverride =
    *    ins_photo_12 ในตารางเป็นคนละฐานกัน อย่าเอามาปนโดยไม่ได้ตรวจสอบก่อน
    */
   const fromIsurveyFile = r.source === 'isurvey_xml';
+  /**
+   * ── จังหวัดเรทเหมาตามลำดับเรื่อง (ราชบุรี · user เคาะ 01/10/69 ดู lumpSum.ts) ──
+   * ค่าบริการฝั่งเรียกเก็บ = ยอดเหมาตามลำดับในเลขเซอร์เวย์ (ทับเรทรายอำเภอ) · ค่าเดินทาง = ไม่มี (รวมในเหมาแล้ว)
+   * นับลำดับไม่ได้ (ยังไม่มีเลข) = ไม่เสนอค่าบริการ ให้หัวหน้ากรอกเอง — ห้ามถอยไปใช้เรทรายอำเภอ
+   * ฝั่งพนักงานไม่เกี่ยว (ราชบุรีจ่ายเหมา 700 ผ่านตารางเรทรายอำเภอตามปกติ)
+   */
+  const lump = lumpSumFee(await loadLumpRules(), province, r.survey_job_no);
   return {
     saved,
     suggest: {
       service_fee: pay.surInvest === null ? null : (typeof baseRate === 'number' ? baseRate : null),
-      ins_service_fee: fromIsurveyFile ? null : pay.insInvest,
-      ins_travel_fee: fromIsurveyFile ? null : pay.insTrans,
-      snapshot: pay.snapshot,
+      ins_service_fee: fromIsurveyFile ? null : (lump ? lump.fee : pay.insInvest),
+      ins_travel_fee: fromIsurveyFile ? null : (lump ? null : pay.insTrans),
+      // ที่มาของยอดฝั่งเรียกเก็บ (เฉพาะจังหวัดเหมา) — หน้าตรวจโชว์ใต้ตาราง
+      ins_note: fromIsurveyFile || !lump ? null : lump.note,
+      snapshot: lump ? { ...pay.snapshot, lump_sum: { label: lump.label, seq: lump.seq, fee: lump.fee } } : pay.snapshot,
     },
     area: {
       province_code: province, amphur_code: amphur, tumbon_code: tumbon, team,

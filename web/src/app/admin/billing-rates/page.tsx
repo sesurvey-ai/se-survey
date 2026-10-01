@@ -718,6 +718,7 @@ const SETTING_TITLES: Record<string, string> = {
   company2_rules: 'เรทตามคำนำหน้าเลขเซอร์เวย์',
   continuous_rules: 'งานต่อเนื่อง (ครั้งที่ 2)',
   daily_check_fees: 'ค่าคัดประจำวัน',
+  ins_lump_by_survey_seq: 'เรทเหมาตามลำดับเรื่องในเดือน (ราชบุรี)',
 };
 
 function SettingTab({ rows, flash, reload }: { rows: SettingRow[]; flash: Flash; reload: () => Promise<void> }) {

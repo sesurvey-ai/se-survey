@@ -297,7 +297,8 @@ console.log('\n── เรทฝั่งเรียกเก็บประ�
    */
   check('⛔ ไม่เสนอกับงานที่นำเข้าจากไฟล์ ISURVEY',
         paySvc2.includes("const fromIsurveyFile = r.source === 'isurvey_xml';")
-        && paySvc2.includes('fromIsurveyFile ? null : pay.insInvest'));
+        // จังหวัดเรทเหมา (ราชบุรี 01/10/69) ใช้ยอดเหมาแทน — แต่ยังอยู่หลังด่าน fromIsurveyFile เหมือนเดิม
+        && paySvc2.includes('fromIsurveyFile ? null : (lump ? lump.fee : pay.insInvest)'));
   /** ต้อง join cases มาด้วย ไม่งั้นไม่รู้ที่มาของงาน */
   check('อ่านที่มาของงานมาจริง', paySvc2.includes('JOIN cases c ON c.id = sr.case_id'));
 }

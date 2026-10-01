@@ -24,6 +24,8 @@ interface PayData {
     /** เรทฝั่งเรียกเก็บประกันจากตารางเรท (ต่อครั้ง) — null = ไม่มีเรทของพื้นที่นี้ */
     ins_service_fee?: number | null;
     ins_travel_fee?: number | null;
+    /** ที่มาของยอดฝั่งเรียกเก็บ — มีเฉพาะจังหวัดเรทเหมาตามลำดับเรื่อง (ราชบุรี) */
+    ins_note?: string | null;
     snapshot: Record<string, unknown>;
   } | null;
   area: {
@@ -3876,6 +3878,10 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
                             {pay.area.team ? ` · ทีม${pay.area.team}` : ''}
                             {pay.suggest?.service_fee != null ? ` · ระบบแนะนำค่าบริการ ${pay.suggest.service_fee} บาท` : ''}
                             {pay.saved?.total != null ? ` · รวมที่บันทึกไว้ ${pay.saved.total} บาท` : ''}
+                            {/* จังหวัดเรทเหมาตามลำดับเรื่อง (ราชบุรี 01/10/69) — บอกว่าค่าบริการฝั่งประกันมาจากเรื่องที่เท่าไหร่ของเดือน */}
+                            {pay.suggest?.ins_note && (
+                              <div className="mt-1 text-blue-900">ฝั่งเรียกเก็บประกัน — {pay.suggest.ins_note}</div>
+                            )}
                             {/* ── หาเรทฝั่งพนักงานไม่ได้ ต้องบอกสาเหตุ ── (user เจอ #267 10/09/69: ช่องค่าบริการว่างเงียบ ๆ)
                                 ศรีราชา/บ่อวิน จ่ายแยกตามทีม แต่ช่าง SEC481 ไม่มีทีมในตารางเรท → เดิมตอบ "0 บาท" แล้วไม่เติมช่อง
                                 ตอนนี้ backend ตอบ null + team_needed/team_rates ให้บอกว่าต้องไปกำหนดทีมที่หน้าแอดมิน */}
