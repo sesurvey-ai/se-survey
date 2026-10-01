@@ -1,6 +1,10 @@
 import { db } from '../config/database';
 
 /**
+ * จังหวัดเรทเหมาฝั่งเรียกเก็บประกัน — มี 2 แบบ ทั้งคู่ไม่มีค่าเดินทาง/ค่ารูปแยก:
+ *   ① ตามลำดับเรื่องในเดือน (ราชบุรี) — ข้างล่างนี้
+ *   ② ตามเรทรายอำเภอ (กระบี่) — `amphurLump` ท้ายไฟล์
+ *
  * เรทเหมาฝั่งเรียกเก็บประกัน "ตามลำดับเรื่องในเดือน" — ราชบุรี (user เคาะ 01/10/69)
  *
  * กติกา (ตารางเรทราชบุรีของ user):
@@ -73,13 +77,51 @@ export function lumpSumFee(
   return { label, fee, seq: s.seq, note: `${label}: เรื่องที่ ${s.seq} ของเดือน → ${baht(fee)} บาท ไม่มีค่าเดินทาง/ค่ารูปแยก (${range})` };
 }
 
-/** อ่านกติกาเหมาจากตั้งค่า — ไม่มีแถว/อ่านพัง = {} (ไม่มีเหมา) ไม่ให้หน้าเคสพังเพราะตั้งค่า */
-export async function loadLumpRules(): Promise<LumpRules> {
+/**
+ * เหมาฝั่งเรียกเก็บประกัน "ตามเรทรายอำเภอ" — กระบี่ (user เคาะ 02/10/69)
+ *
+ * กติกา (ไฟล์ค่าพาหนะกระบี่ของ user · ตรงยอดเบิกจริง 2568–2569 91% จาก 649 งาน):
+ *   ค่าบริการในตารางเรทรายอำเภอ (ins_invest_12/34 — สด/แห้ง กับ ติดตาม/เจรจา เท่ากัน) ของจังหวัดนี้ = **ยอดเหมา**
+ *   รวมค่าเดินทาง + ค่ารูปแล้ว → **ไม่มีค่าเดินทาง/ค่ารูปแยก** (งานจริง 97–98% ไม่มีทั้งสองอย่าง) · ค่าคัดประจำวันยังบวกได้ตามปกติ
+ * ต่างจากราชบุรีตรงที่ยอดขึ้นกับอำเภอ ไม่ใช่ลำดับเรื่อง — ตัวเลขจึงอยู่ในตารางเรทอำเภอตามปกติ (แก้ที่หน้า "เรทค่าตอบแทน")
+ * ตั้งค่านี้บอกแค่ "จังหวัดไหนเป็นเหมา": `billing_settings.ins_lump_by_amphur` = { "<รหัสจังหวัด 2 หลัก>": { label } }
+ */
+export const AMPHUR_LUMP_SETTING_KEY = 'ins_lump_by_amphur';
+export interface AmphurLumpRule { label?: string }
+export type AmphurLumpRules = Record<string, AmphurLumpRule>;
+
+export interface AmphurLumpResult {
+  label: string;
+  /** ข้อความบอกที่มาของยอด โชว์บนหน้าตรวจ */
+  note: string;
+}
+
+/**
+ * จังหวัดนี้เหมาตามเรทรายอำเภอไหม — คืน null = ไม่ใช่ (ใช้กติกาเดิม)
+ * fee = ค่าบริการจากตารางรายอำเภอของงานนี้ (ใช้เขียนข้อความ) · ไม่มี = อำเภอนี้ไม่มีเรท ให้หัวหน้ากรอกเอง
+ */
+export function amphurLump(
+  rules: AmphurLumpRules | null | undefined, provinceCode: string | null | undefined, fee: number | null = null,
+): AmphurLumpResult | null {
+  const rule = provinceCode ? rules?.[provinceCode] : undefined;
+  if (!rule || typeof rule !== 'object') return null;
+  const label = String(rule.label || `เหมาจังหวัดรหัส ${provinceCode}`);
+  const note = fee !== null && fee > 0
+    ? `${label}: ค่าบริการตามอำเภอ ${baht(fee)} บาท รวมค่าเดินทาง/ค่ารูปแล้ว ไม่มีค่าเดินทาง/ค่ารูปแยก`
+    : `${label}: อำเภอนี้ไม่มีเรทเหมาในตาราง — กรอกค่าบริการเอง (ไม่มีค่าเดินทาง/ค่ารูปแยก)`;
+  return { label, note };
+}
+
+/** อ่านตั้งค่าเหมาหนึ่งคีย์ — ไม่มีแถว/อ่านพัง = {} (ไม่มีเหมา) ไม่ให้หน้าเคสพังเพราะตั้งค่า */
+async function loadRules<T>(key: string): Promise<Record<string, T>> {
   try {
-    const r = await db.query('SELECT value FROM billing_settings WHERE key = $1', [LUMP_SETTING_KEY]);
+    const r = await db.query('SELECT value FROM billing_settings WHERE key = $1', [key]);
     const v = r.rows[0]?.value;
-    return v && typeof v === 'object' ? (v as LumpRules) : {};
+    return v && typeof v === 'object' ? (v as Record<string, T>) : {};
   } catch {
     return {};
   }
 }
+
+export const loadLumpRules = (): Promise<LumpRules> => loadRules<LumpRule>(LUMP_SETTING_KEY);
+export const loadAmphurLumpRules = (): Promise<AmphurLumpRules> => loadRules<AmphurLumpRule>(AMPHUR_LUMP_SETTING_KEY);

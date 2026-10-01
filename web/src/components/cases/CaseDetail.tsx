@@ -3878,7 +3878,8 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
                             {pay.area.team ? ` · ทีม${pay.area.team}` : ''}
                             {pay.suggest?.service_fee != null ? ` · ระบบแนะนำค่าบริการ ${pay.suggest.service_fee} บาท` : ''}
                             {pay.saved?.total != null ? ` · รวมที่บันทึกไว้ ${pay.saved.total} บาท` : ''}
-                            {/* จังหวัดเรทเหมาตามลำดับเรื่อง (ราชบุรี 01/10/69) — บอกว่าค่าบริการฝั่งประกันมาจากเรื่องที่เท่าไหร่ของเดือน */}
+                            {/* จังหวัดเรทเหมา — บอกว่าค่าบริการฝั่งประกันมาจากไหน: ราชบุรี (01/10/69) = เรื่องที่เท่าไหร่ของเดือน ·
+                                กระบี่ (02/10/69) = เรทเหมารายอำเภอ ไม่มีค่าเดินทาง/ค่ารูปแยก */}
                             {pay.suggest?.ins_note && (
                               <div className="mt-1 text-blue-900">ฝั่งเรียกเก็บประกัน — {pay.suggest.ins_note}</div>
                             )}

@@ -719,6 +719,7 @@ const SETTING_TITLES: Record<string, string> = {
   continuous_rules: 'งานต่อเนื่อง (ครั้งที่ 2)',
   daily_check_fees: 'ค่าคัดประจำวัน',
   ins_lump_by_survey_seq: 'เรทเหมาตามลำดับเรื่องในเดือน (ราชบุรี)',
+  ins_lump_by_amphur: 'จังหวัดเหมาตามเรทรายอำเภอ ไม่มีค่าเดินทาง/ค่ารูปแยก (กระบี่)',
 };
 
 function SettingTab({ rows, flash, reload }: { rows: SettingRow[]; flash: Flash; reload: () => Promise<void> }) {

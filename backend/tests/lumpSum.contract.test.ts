@@ -1,5 +1,7 @@
 /**
- * Contract test — เรทเหมาฝั่งเรียกเก็บประกัน "ตามลำดับเรื่องในเดือน" (ราชบุรี · user เคาะ 01/10/69)
+ * Contract test — เรทเหมาฝั่งเรียกเก็บประกัน 2 แบบ
+ *   ① "ตามลำดับเรื่องในเดือน" (ราชบุรี · user เคาะ 01/10/69)
+ *   ② "ตามเรทรายอำเภอ" (กระบี่ · user เคาะ 02/10/69) — ค่าบริการในตารางอำเภอเป็นยอดเหมาอยู่แล้ว ไม่มีค่าเดินทาง/ค่ารูปแยก
  *
  * กติกา: ลำดับ = 5 หลักท้ายของเลขเซอร์เวย์ SEABI · เรื่องที่ 1–25 = 1,200 · 26 ขึ้นไป = 1,000 · ทุกประเภทเคลม
  *        ยอดเหมารวมทุกอย่าง → ไม่มีค่าเดินทาง/ค่ารูปแยก · นับลำดับไม่ได้ = ไม่เสนอ ให้หัวหน้ากรอกเอง (ห้ามเดา)
@@ -11,12 +13,16 @@
  *  3) standardPhotoFee: งานจังหวัดเหมา = ไม่มีค่ารูป · งานต่างจังหวัดปกติยังได้ 50 เหมือนเดิม
  *  4) ต่อสายครบ: getCasePay อ่านเลขเซอร์เวย์ + ใช้ยอดเหมาแทนเรทรายอำเภอ + ไม่เสนอค่าเดินทาง · หน้าเคสส่ง lump_sum_label ให้ค่ารูป ·
  *     หน้าตรวจโชว์ที่มาของยอด · หน้าตั้งค่ามีชื่อไทยของคีย์
+ *  5) เหมารายอำเภอ (กระบี่): amphurLump เฉพาะจังหวัดในตั้งค่า · ข้อความบอกยอด/อำเภอไม่มีเรท · ค่ารูป 0 ·
+ *     getCasePay ใช้ค่าบริการจากตารางเหมือนเดิมแต่ไม่เสนอค่าเดินทาง · หน้าเคสส่งป้ายให้กติกาค่ารูป · หน้าตั้งค่ามีชื่อไทย
  *
  * รัน: npm test   (backend/)
  */
 import fs from 'fs';
 import path from 'path';
-import { parseSurveySeq, lumpSumFee, LUMP_SETTING_KEY, LumpRules } from '../src/services/lumpSum';
+import {
+  parseSurveySeq, lumpSumFee, LUMP_SETTING_KEY, LumpRules, amphurLump, AMPHUR_LUMP_SETTING_KEY, AmphurLumpRules,
+} from '../src/services/lumpSum';
 import { standardPhotoFee } from '../src/services/photoFee.service';
 
 let failed = 0;
@@ -66,7 +72,7 @@ const pay = read('backend/src/services/pay.service.ts');
 check('getCasePay อ่านเลขเซอร์เวย์', /sr\.survey_job_no/.test(pay));
 check('getCasePay ใช้ยอดเหมาแทนเรทรายอำเภอ', /lumpSumFee\(await loadLumpRules\(\), province, r\.survey_job_no\)/.test(pay)
   && /ins_service_fee:[^\n]*lump \? lump\.fee : pay\.insInvest/.test(pay));
-check('จังหวัดเหมาไม่เสนอค่าเดินทาง', /ins_travel_fee:[^\n]*lump \? null : pay\.insTrans/.test(pay));
+check('จังหวัดเหมาไม่เสนอค่าเดินทาง', /ins_travel_fee:[^\n]*lump \|\| amphurLumpRule \? null : pay\.insTrans/.test(pay));
 check('งานจากไฟล์ ISURVEY ยังไม่ถูกเติม (กติกาเดิม)', /ins_service_fee: fromIsurveyFile \? null/.test(pay));
 const cs = read('backend/src/services/case.service.ts');
 check('หน้าเคสส่ง lump_sum_label ให้กติกาค่ารูป', /standardPhotoFee\(\{[^}]*lump_sum_label: lumpLabel/.test(cs));
@@ -75,9 +81,30 @@ check('หน้าตรวจโชว์ที่มาของยอดเ�
 const admin = read('web/src/app/admin/billing-rates/page.tsx');
 check('หน้าตั้งค่ามีชื่อไทยของคีย์เหมา', admin.includes(`${LUMP_SETTING_KEY}:`));
 
+// ── 5) เหมาตามเรทรายอำเภอ (กระบี่) ──
+const A_RULES: AmphurLumpRules = { '81': { label: 'เหมากระบี่' } };
+const kb = amphurLump(A_RULES, '81', 1200);
+check('กระบี่ = เหมารายอำเภอ · ข้อความบอกยอด + ไม่มีค่าเดินทาง/ค่ารูปแยก',
+  !!kb && kb.label === 'เหมากระบี่' && kb.note.includes('1,200') && kb.note.includes('ไม่มีค่าเดินทาง/ค่ารูปแยก'), kb?.note);
+const kbNoRate = amphurLump(A_RULES, '81', null);
+check('อำเภอที่ไม่มีเรทในตาราง = ยังเป็นเหมา แต่บอกให้กรอกเอง', !!kbNoRate && kbNoRate.note.includes('กรอกค่าบริการเอง'), kbNoRate?.note);
+check('จังหวัดอื่น/ไม่มีตั้งค่า = ไม่ใช่เหมา (กติกาเดิม)',
+  amphurLump(A_RULES, '70', 1200) === null && amphurLump(A_RULES, null, 1200) === null
+  && amphurLump(null, '81', 1200) === null && amphurLump({}, '81', 1200) === null);
+check('ไม่มีชื่อป้าย ก็ยังรู้ว่าเหมา', amphurLump({ '81': {} }, '81', 1300)?.label.includes('81') === true);
+const kbPhoto = standardPhotoFee({ survey_job_no: 'SEABI-181260900026', lump_sum_label: 'เหมากระบี่' });
+check('งานกระบี่ = ไม่มีค่ารูป', !!kbPhoto && kbPhoto.count === 0 && kbPhoto.price === 0 && kbPhoto.reason.includes('เหมากระบี่'), kbPhoto?.reason);
+check('getCasePay เช็กเหมารายอำเภอด้วยค่าบริการจากตาราง (เฉพาะเมื่อไม่ใช่เหมาตามลำดับเรื่อง)',
+  /amphurLumpRule = lump \? null : amphurLump\(await loadAmphurLumpRules\(\), province, pay\.insInvest\)/.test(pay));
+check('เหมารายอำเภอยังเสนอค่าบริการจากตารางตามปกติ + บอกที่มา',
+  /ins_service_fee: fromIsurveyFile \? null : \(lump \? lump\.fee : pay\.insInvest\)/.test(pay)
+  && /ins_note:[^\n]*amphurLumpRule\?\.note/.test(pay));
+check('หน้าเคสส่งป้ายเหมารายอำเภอให้กติกาค่ารูป', /amphurLump\(await loadAmphurLumpRules\(\), lumpProvince\)\?\.label/.test(cs));
+check('หน้าตั้งค่ามีชื่อไทยของคีย์เหมารายอำเภอ', admin.includes(`${AMPHUR_LUMP_SETTING_KEY}:`));
+
 if (failed) {
   console.error(`\n${failed} ข้อไม่ผ่าน`);
   process.exit(1);
 }
-console.log('\nเรทเหมาตามลำดับเรื่อง: ผ่านทุกข้อ');
+console.log('\nเรทเหมา (ลำดับเรื่อง + รายอำเภอ): ผ่านทุกข้อ');
 process.exit(0);

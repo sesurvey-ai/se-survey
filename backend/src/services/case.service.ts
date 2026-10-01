@@ -19,7 +19,7 @@ import { assertReportRev } from './reportRev';
 import { notifyCaseChanged } from './caseEvents';
 import { provinceOf } from './geoProvince';
 import { standardPhotoFee } from './photoFee.service';
-import { lumpSumFee, loadLumpRules, parseSurveySeq } from './lumpSum';
+import { lumpSumFee, loadLumpRules, parseSurveySeq, amphurLump, loadAmphurLumpRules } from './lumpSum';
 import { provinceCode } from './areaCode.service';
 import { tumbonOptions } from './billingRates.service';
 import { districtCentroid } from './geoDistrict';
@@ -1421,16 +1421,17 @@ export const caseService = {
     const reportOut = firstVisit && report ? effectiveReport(report, firstVisit.report) : report;
 
     /**
-     * จังหวัดเรทเหมาตามลำดับเรื่อง (ราชบุรี — lumpSum.ts · 01/10/69) → ค่ารูปรวมในยอดเหมาแล้ว (standardPhotoFee ข้อ 0.5)
+     * จังหวัดเรทเหมา → ค่ารูปรวมในยอดเหมาแล้ว (standardPhotoFee ข้อ 0.5) — lumpSum.ts
+     *   ราชบุรี = เหมาตามลำดับเรื่อง (01/10/69) · กระบี่ = เหมาตามเรทรายอำเภอ (02/10/69)
      * จังหวัดของงาน = รหัสในเลขเซอร์เวย์ก่อน (ตัวจริงตามเอกสาร) · ยังไม่มีเลข = จังหวัดออกตรวจสอบ → ที่เกิดเหตุ
      */
+    const lumpProvince = report
+      ? parseSurveySeq(report.survey_job_no)?.province
+        ?? provinceCode(String(report.survey_province ?? '').trim() || report.acc_province)
+      : null;
     const lumpLabel = report
-      ? lumpSumFee(
-        await loadLumpRules(),
-        parseSurveySeq(report.survey_job_no)?.province
-          ?? provinceCode(String(report.survey_province ?? '').trim() || report.acc_province),
-        report.survey_job_no,
-      )?.label ?? null
+      ? lumpSumFee(await loadLumpRules(), lumpProvince, report.survey_job_no)?.label
+        ?? amphurLump(await loadAmphurLumpRules(), lumpProvince)?.label ?? null
       : null;
 
     return {

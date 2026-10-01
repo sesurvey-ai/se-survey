@@ -190,7 +190,7 @@ export function computePay(rates: ResolvedRates, input: PayInput): PayResult {
 // ────────────────── ผูกกับเคสจริง ──────────────────
 
 import { amphurCode, provinceCode, tumbonCode } from './areaCode.service';
-import { lumpSumFee, loadLumpRules } from './lumpSum';
+import { lumpSumFee, loadLumpRules, amphurLump, loadAmphurLumpRules } from './lumpSum';
 
 /** ช่องรายรับฝั่งพนักงาน (บวกเข้ายอดรวม) — ชื่อคีย์ตรงกับคอลัมน์ใน survey_pay */
 export const PAY_MONEY_FIELDS = [
@@ -337,15 +337,22 @@ export async function getCasePay(caseId: number, override: PayLocationOverride =
    * ฝั่งพนักงานไม่เกี่ยว (ราชบุรีจ่ายเหมา 700 ผ่านตารางเรทรายอำเภอตามปกติ)
    */
   const lump = lumpSumFee(await loadLumpRules(), province, r.survey_job_no);
+  /**
+   * ── จังหวัดเหมาตามเรทรายอำเภอ (กระบี่ · user เคาะ 02/10/69 ดู lumpSum.ts) ──
+   * ค่าบริการ = เรทรายอำเภอตามปกติ (ในตารางเป็นยอดเหมาอยู่แล้ว) · ค่าเดินทาง = ไม่มี · ค่ารูป = ไม่มี (case.service ส่งป้ายให้กติกาค่ารูป)
+   */
+  const amphurLumpRule = lump ? null : amphurLump(await loadAmphurLumpRules(), province, pay.insInvest);
   return {
     saved,
     suggest: {
       service_fee: pay.surInvest === null ? null : (typeof baseRate === 'number' ? baseRate : null),
       ins_service_fee: fromIsurveyFile ? null : (lump ? lump.fee : pay.insInvest),
-      ins_travel_fee: fromIsurveyFile ? null : (lump ? null : pay.insTrans),
+      ins_travel_fee: fromIsurveyFile ? null : (lump || amphurLumpRule ? null : pay.insTrans),
       // ที่มาของยอดฝั่งเรียกเก็บ (เฉพาะจังหวัดเหมา) — หน้าตรวจโชว์ใต้ตาราง
-      ins_note: fromIsurveyFile || !lump ? null : lump.note,
-      snapshot: lump ? { ...pay.snapshot, lump_sum: { label: lump.label, seq: lump.seq, fee: lump.fee } } : pay.snapshot,
+      ins_note: fromIsurveyFile ? null : (lump?.note ?? amphurLumpRule?.note ?? null),
+      snapshot: lump ? { ...pay.snapshot, lump_sum: { label: lump.label, seq: lump.seq, fee: lump.fee } }
+        : amphurLumpRule ? { ...pay.snapshot, lump_sum: { label: amphurLumpRule.label, seq: null, fee: pay.insInvest } }
+        : pay.snapshot,
     },
     area: {
       province_code: province, amphur_code: amphur, tumbon_code: tumbon, team,
