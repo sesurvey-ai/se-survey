@@ -81,6 +81,18 @@ const byTeam = (map: Record<string, number> | null, team?: string | null): numbe
  */
 const pos = (v: number | null): number | null => (v !== null && v > 0 ? v : null);
 
+/**
+ * ช่าง SE หรือบริษัทนอก/OSS — กติกา user เคาะ 02/10/69:
+ *   ช่องผู้สำรวจ (acc_surveyor) **ขึ้นต้นด้วยรหัส SE/SEC ตามด้วยตัวเลข** = ช่าง SE ("SEC125 นาย…" · "SE121 …")
+ *   นอกนั้นทั้งหมด = บริษัทนอก/OSS (ชื่อบริษัท/หจก. · ไม่มีรหัส · ว่าง)
+ * บริษัทนอก/OSS → **ไม่เสนอค่าบริการฝั่งพนักงาน** ให้หัวหน้ากรอกเอง (ฝั่งเรียกเก็บประกันเสนอตามปกติ)
+ * แอปเติมช่องนี้เป็น "รหัส ชื่อ" ของช่างที่ล็อกอินเอง · ISURVEY ส่งมาแบบเดียวกัน — ข้อมูลจริง 864 เคสแยกได้ชัดทุกเคส (02/10/69)
+ * (ธง is_se ที่ส่งเข้า se-billing ใช้ /^se/i ตาม extension — ให้ผลเท่ากันกับข้อมูลจริง: รหัส SE/SEC vs ชื่อบริษัทภาษาไทย)
+ */
+export function isSeSurveyor(accSurveyor: unknown): boolean {
+  return /^\s*SEC?\s*\d/i.test(String(accSurveyor ?? ''));
+}
+
 /** รหัสผู้สำรวจ → ทีม · รับได้ทั้ง "SEC125" และ "SEC125 นายสมภพ ปั้นเปรื่อง" */
 export async function teamOfSurveyor(codeOrName: string): Promise<string | null> {
   const m = /\b(SEC\d+)\b/i.exec(codeOrName || '');
@@ -303,7 +315,8 @@ export async function getCasePay(caseId: number, override: PayLocationOverride =
 
   const pay = await calcPay({
     provinceId: province, amphurId: amphur, tumbonId: tumbon, mtypeId, team,
-    isSE: true,
+    // บริษัทนอก/OSS (ผู้สำรวจไม่ขึ้นต้นด้วยรหัส SE/SEC) → ไม่เสนอค่าบริการฝั่งพนักงาน ให้หัวหน้ากรอกเอง (user เคาะ 02/10/69)
+    isSE: isSeSurveyor(r.acc_surveyor),
     outOfArea: saved?.out_of_area ? Number(saved.out_of_area_amt ?? 50) : null,
     outOfHours: saved?.out_of_hours ? Number(saved.out_of_hours_amt ?? 100) : null,
   });

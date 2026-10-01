@@ -3886,7 +3886,14 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
                             {/* ── หาเรทฝั่งพนักงานไม่ได้ ต้องบอกสาเหตุ ── (user เจอ #267 10/09/69: ช่องค่าบริการว่างเงียบ ๆ)
                                 ศรีราชา/บ่อวิน จ่ายแยกตามทีม แต่ช่าง SEC481 ไม่มีทีมในตารางเรท → เดิมตอบ "0 บาท" แล้วไม่เติมช่อง
                                 ตอนนี้ backend ตอบ null + team_needed/team_rates ให้บอกว่าต้องไปกำหนดทีมที่หน้าแอดมิน */}
-                            {pay.suggest && pay.suggest.service_fee == null && pay.suggest.snapshot?.rate_from === 'ไม่พบเรท' && (
+                            {/* งานบริษัทนอก/OSS (ผู้สำรวจไม่ขึ้นต้นด้วยรหัส SE/SEC — user เคาะ 02/10/69) → ระบบไม่เสนอฝั่งพนักงานทุกจังหวัด
+                                บอกตรง ๆ ว่าตั้งใจไม่เติม ไม่ใช่หาเรทไม่เจอ · ฝั่งเรียกเก็บประกันยังเติมตามปกติ */}
+                            {pay.suggest && pay.suggest.service_fee == null && pay.suggest.snapshot?.is_se === false && (
+                              <div className="mt-1 text-amber-700 bg-amber-50 border border-amber-200 rounded-none px-2 py-1">
+                                งานบริษัทนอก/OSS (ผู้สำรวจไม่ได้ขึ้นต้นด้วยรหัส SE/SEC) — ระบบไม่เติมค่าบริการฝั่งพนักงาน กรอกเองตามที่ตกลงกับบริษัท · ฝั่งเรียกเก็บประกันเติมให้ตามปกติ
+                              </div>
+                            )}
+                            {pay.suggest && pay.suggest.service_fee == null && pay.suggest.snapshot?.is_se !== false && pay.suggest.snapshot?.rate_from === 'ไม่พบเรท' && (
                               <div className="mt-1 text-amber-700 bg-amber-50 border border-amber-200 rounded-none px-2 py-1">
                                 {pay.suggest.snapshot?.team_needed
                                   ? (pay.area.surveyor_code
