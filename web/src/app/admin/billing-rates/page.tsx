@@ -718,8 +718,9 @@ const SETTING_TITLES: Record<string, string> = {
   company2_rules: 'เรทตามคำนำหน้าเลขเซอร์เวย์',
   continuous_rules: 'งานต่อเนื่อง (ครั้งที่ 2)',
   daily_check_fees: 'ค่าคัดประจำวัน',
-  ins_lump_by_survey_seq: 'เรทเหมาตามลำดับเรื่องในเดือน (ราชบุรี)',
-  ins_lump_by_amphur: 'จังหวัดเหมาตามเรทรายอำเภอ ไม่มีค่าเดินทาง/ค่ารูปแยก (กระบี่)',
+  // ไม่ใส่ชื่อจังหวัดในหัวข้อ — รายชื่อจังหวัดอยู่ในค่า (label ของแต่ละรหัส) เพิ่มจังหวัดแล้วหัวข้อไม่ล้าสมัย
+  ins_lump_by_survey_seq: 'จังหวัดเรทเหมาตามลำดับเรื่องในเดือน ไม่มีค่าเดินทาง/ค่ารูปแยก',
+  ins_lump_by_amphur: 'จังหวัดเหมาตามเรทรายอำเภอ ไม่มีค่าเดินทาง/ค่ารูปแยก',
 };
 
 function SettingTab({ rows, flash, reload }: { rows: SettingRow[]; flash: Flash; reload: () => Promise<void> }) {
