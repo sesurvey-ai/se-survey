@@ -19,6 +19,7 @@ import { assertReportRev } from './reportRev';
 import { notifyCaseChanged } from './caseEvents';
 import { provinceOf } from './geoProvince';
 import { standardPhotoFee } from './photoFee.service';
+import { isSeSurveyor, provinceHasRates } from './pay.service';
 import { lumpSumFee, loadLumpRules, parseSurveySeq, amphurLump, loadAmphurLumpRules } from './lumpSum';
 import { provinceCode } from './areaCode.service';
 import { tumbonOptions } from './billingRates.service';
@@ -1433,6 +1434,9 @@ export const caseService = {
       ? lumpSumFee(await loadLumpRules(), lumpProvince, report.survey_job_no)?.label
         ?? amphurLump(await loadAmphurLumpRules(), lumpProvince)?.label ?? null
       : null;
+    // ค่ารูปที่ระบบไม่เติม ให้หัวหน้ากรอกเอง (user เคาะ 02/10/69 · standardPhotoFee ข้อ 3.5/3.6):
+    //   งานบริษัทนอก/OSS (ผู้สำรวจไม่ขึ้นต้นด้วยรหัส SE/SEC) · จังหวัดที่ไม่มีเรทในระบบ (SE ไม่ได้ให้บริการ) — จังหวัดเดียวกับข้างบน
+    const areaHasRates = report ? await provinceHasRates(lumpProvince) : null;
 
     return {
       case: caseResult.rows[0],
@@ -1457,7 +1461,8 @@ export const caseService = {
       photo_fee_suggest:
         report && caseResult.rows[0]?.source !== 'isurvey_xml'
           // ครั้งที่ของใบนี้ (visit_no ที่เก็บ · ไม่มีก็ลำดับสร้าง) — ครั้งที่ 2+ ไม่มีค่ารูป (22/09/69)
-          ? standardPhotoFee({ ...report, visit_no: Number(caseResult.rows[0]?.visit_no) || visitCount, lump_sum_label: lumpLabel })
+          ? standardPhotoFee({ ...report, visit_no: Number(caseResult.rows[0]?.visit_no) || visitCount, lump_sum_label: lumpLabel,
+            is_outsource: !isSeSurveyor(report.acc_surveyor), area_has_rates: areaHasRates ?? undefined })
           : null,
       // ชื่อคนที่มีอักขระซึ่ง EMCS จะล้างค่าทั้งช่องทิ้ง — เตือนคนตรวจก่อนส่งเข้า EMCS
       emcs_name_warnings: report ? emcsNameWarnings(report) : [],

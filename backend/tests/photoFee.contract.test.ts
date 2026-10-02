@@ -2,7 +2,8 @@
  * กติกาค่ารูปเหมา — เป็น **ตัวเงินที่เรียกเก็บบริษัทประกัน** ผิดแล้วไม่มีอะไรฟ้อง
  *
  * user เคาะ 20/08/69 (กติกา) + 31/08/69 (ลงมือ): เหมา 10 รูป × 5 = 50 ไม่อิงจำนวนรูปจริง
- * ไล่ 4 ชั้นตามลำดับ หยุดที่ชั้นแรกที่เข้าเงื่อนไข
+ * ไล่ทีละชั้นตามลำดับ หยุดที่ชั้นแรกที่เข้าเงื่อนไข
+ * 02/10/69: งานบริษัทนอก/OSS + จังหวัดที่ไม่มีเรทในระบบ → ระบบไม่เติม ให้หัวหน้ากรอกเอง (manual)
  */
 import { standardPhotoFee, PHOTO_FEE_COUNT, PHOTO_FEE_PRICE } from '../src/services/photoFee.service';
 
@@ -86,6 +87,29 @@ check('case.service ส่ง visit_no ของใบนี้ให้ standar
       (require('fs') as typeof import('fs')).readFileSync((require('path') as typeof import('path')).join(__dirname, '..', 'src', 'services', 'case.service.ts'), 'utf8')
         // ต่อท้ายด้วย lump_sum_label ได้ (จังหวัดเรทเหมา 01/10/69 — ล็อกใน lumpSum.contract.test.ts)
         .includes("standardPhotoFee({ ...report, visit_no: Number(caseResult.rows[0]?.visit_no) || visitCount"));
+
+// ── ชั้น 3.5/3.6: ระบบไม่เติม ให้หัวหน้ากรอกเอง (user เคาะ 02/10/69) ──
+const ossFee = fee({ survey_job_no: 'SEABI-174261000001', is_outsource: true });
+check('งานบริษัทนอก/OSS ต่างจังหวัด → ไม่เติม (manual) พร้อมเหตุผล',
+      !!ossFee && ossFee.count === 0 && ossFee.price === 0 && ossFee.manual === true && ossFee.reason.includes('บริษัทนอก'));
+const noRate = fee({ survey_job_no: 'SEABI-174261000001', area_has_rates: false });
+check('จังหวัดที่ไม่มีเรทในระบบ → ไม่เติม (manual) พร้อมเหตุผล',
+      !!noRate && noRate.count === 0 && noRate.manual === true && noRate.reason.includes('ไม่มีเรท'));
+check('ช่าง SE ในจังหวัดที่มีเรท → 50 เหมือนเดิม',
+      total({ survey_job_no: 'SEABI-120261000001', is_outsource: false, area_has_rates: true }) === 50);
+check('ไม่ส่งธงมา (ผู้เรียกอื่น) → กติกาเดิม 50', total({ survey_job_no: 'SEABI-120261000001' }) === 50);
+check('บริษัทนอกในกรุงเทพ → "ไม่มีค่ารูป" ตามข้อกรุงเทพ (ไม่ใช่กรอกเอง)', (() => {
+  const f = fee({ survey_job_no: 'SEABI-110261000001', is_outsource: true });
+  return !!f && f.count === 0 && !f.manual && f.reason.includes('กรุงเทพ');
+})());
+check('บริษัทนอกงานครั้งที่ 2 / ไทยไพบูลย์ → ไม่มีค่ารูปตามข้อเดิม (ไม่ใช่กรอกเอง)',
+      !fee({ survey_job_no: 'SEABI-174261000001', is_outsource: true, visit_no: 2 })?.manual
+      && !fee({ survey_job_no: 'SETP-69100001', is_outsource: true })?.manual);
+const cs = (require('fs') as typeof import('fs')).readFileSync((require('path') as typeof import('path')).join(__dirname, '..', 'src', 'services', 'case.service.ts'), 'utf8');
+check('case.service ส่งธงบริษัทนอก (จากช่องผู้สำรวจ) + จังหวัดมีเรทไหม ให้กติกาค่ารูป',
+      cs.includes('is_outsource: !isSeSurveyor(report.acc_surveyor)') && cs.includes('area_has_rates: areaHasRates'));
+const web = (require('fs') as typeof import('fs')).readFileSync((require('path') as typeof import('path')).join(__dirname, '..', '..', 'web', 'src', 'components', 'cases', 'CaseDetail.tsx'), 'utf8');
+check('หน้าตรวจบอกเหตุผลเมื่อระบบตั้งใจไม่เติมค่ารูป', /photoFee\.count === 0 && photoFee\.manual/.test(web));
 
 console.log(`\n${failed === 0 ? '✅ ผ่านทั้งหมด' : `❌ ล้มเหลว ${failed} รายการ`}`);
 process.exit(failed === 0 ? 0 : 1);

@@ -49,7 +49,8 @@ interface CaseDetailProps {
   /** ครั้งที่ทั้งหมดของเลขเคลมนี้ (คนละเคสกัน) — ดู getDetail ฝั่ง backend */
   visits?: { id: number; visit_no: number | string; survey_job_no: string | null; status: string; created_on: string }[];
   expenses?: any;
-  photoFeeSuggest?: { count: number; price: number; reason: string } | null;
+  /** manual = ระบบตั้งใจไม่เติม ให้หัวหน้ากรอกเอง (งานบริษัทนอก/OSS · จังหวัดที่ไม่มีเรท — 02/10/69) */
+  photoFeeSuggest?: { count: number; price: number; reason: string; manual?: boolean } | null;
   /** ตำบลที่มีเรทของตัวเอง (มาจากตารางเรท) — ใช้ทำตัวเลือก "ตำบล" ใต้เขต/อำเภอ */
   tumbonOptions?: { tumbon: string; district: string; province: string }[];
   /**
@@ -3721,6 +3722,15 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
                       </td>
                     </tr>
                   )}
+                  {/* ระบบตั้งใจไม่เติม ให้หัวหน้าตัดสินเอง (งานบริษัทนอก/OSS · จังหวัดที่ไม่มีเรท — user 02/10/69)
+                      ต่างจาก "ไม่มีค่ารูป" (กรุงเทพ/ไทยไพบูลย์) ที่ไม่ขึ้นบรรทัด — อันนี้ต้องบอก ไม่งั้นช่องว่างดูเหมือนไม่มีค่ารูป */}
+                  {photoFee && photoFee.count === 0 && photoFee.manual && (
+                    <tr className="border-b border-gray-100">
+                      <td colSpan={4} className="px-3 min-[1500px]:px-2 pb-2 pt-0 text-[0.6875rem] text-amber-700">
+                        {`ค่ารูป: ${photoFee.reason}`}
+                      </td>
+                    </tr>
+                  )}
                   <tr className="border-b border-gray-100">
                     <td className="px-3 min-[1500px]:px-2 py-2 text-gray-700">ค่าเรียกร้อง</td>
                     {/* 0.00 ในช่องเปอร์เซ็นต์ = ยังไม่ได้กำหนด ไม่ใช่ "ศูนย์เปอร์เซ็นต์" — โชว์ว่างไว้
@@ -3890,7 +3900,7 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
                                 บอกตรง ๆ ว่าตั้งใจไม่เติม ไม่ใช่หาเรทไม่เจอ · ฝั่งเรียกเก็บประกันยังเติมตามปกติ */}
                             {pay.suggest && pay.suggest.service_fee == null && pay.suggest.snapshot?.is_se === false && (
                               <div className="mt-1 text-amber-700 bg-amber-50 border border-amber-200 rounded-none px-2 py-1">
-                                งานบริษัทนอก/OSS (ผู้สำรวจไม่ได้ขึ้นต้นด้วยรหัส SE/SEC) — ระบบไม่เติมค่าบริการฝั่งพนักงาน กรอกเองตามที่ตกลงกับบริษัท · ฝั่งเรียกเก็บประกันเติมให้ตามปกติ
+                                งานบริษัทนอก/OSS (ผู้สำรวจไม่ได้ขึ้นต้นด้วยรหัส SE/SEC) — ระบบไม่เติมค่าบริการฝั่งพนักงาน กรอกเองตามที่ตกลงกับบริษัท · ฝั่งเรียกเก็บประกันเติมค่าบริการ/ค่าเดินทางให้ตามปกติ (ค่ารูปกรอกเอง)
                               </div>
                             )}
                             {pay.suggest && pay.suggest.service_fee == null && pay.suggest.snapshot?.is_se !== false && pay.suggest.snapshot?.rate_from === 'ไม่พบเรท' && (

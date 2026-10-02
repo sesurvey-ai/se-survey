@@ -93,6 +93,24 @@ export function isSeSurveyor(accSurveyor: unknown): boolean {
   return /^\s*SEC?\s*\d/i.test(String(accSurveyor ?? ''));
 }
 
+/**
+ * จังหวัดนี้มีเรทในระบบไหม (มีแถวเรทอำเภอ หรือเรทสำรองระดับจังหวัด > 0)
+ * จังหวัดที่ SE ไม่ได้ให้บริการ (ช่างวิ่งข้ามไปเป็นครั้งคราว) ไม่มีเลย — user เคาะ 02/10/69 ให้หัวหน้ากรอกเองทั้งหมด รวมค่ารูป
+ * null = บอกไม่ได้ (ไม่มีรหัสจังหวัด/อ่านพัง) → ผู้เรียกต้องไม่ถือว่า "ไม่มีเรท"
+ */
+export async function provinceHasRates(provinceId: string | null | undefined): Promise<boolean | null> {
+  if (!provinceId || !/^\d{2}$/.test(provinceId)) return null;
+  try {
+    const r = await db.query(
+      `SELECT EXISTS (SELECT 1 FROM billing_amphur_rates WHERE amphur_id LIKE $1 || '%')
+           OR EXISTS (SELECT 1 FROM billing_province_rates WHERE province_id = $1 AND sur_invest > 0) AS has`,
+      [provinceId]);
+    return Boolean(r.rows[0]?.has);
+  } catch {
+    return null;
+  }
+}
+
 /** รหัสผู้สำรวจ → ทีม · รับได้ทั้ง "SEC125" และ "SEC125 นายสมภพ ปั้นเปรื่อง" */
 export async function teamOfSurveyor(codeOrName: string): Promise<string | null> {
   const m = /\b(SEC\d+)\b/i.exec(codeOrName || '');
