@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import compression from 'compression';
 import path from 'path';
 import { env } from './config/env';
 import { errorHandler } from './middleware/errorHandler';
@@ -18,6 +19,14 @@ app.set('trust proxy', 1);
 // Middleware
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors({ origin: env.CORS_ORIGIN.split(',') }));
+/**
+ * บีบอัด gzip คำตอบที่เป็นข้อความ (JSON/HTML) — user เจอ 03/10/69: หน้า "รายการงาน" ของหัวหน้าโหลดช้า/ขึ้น
+ * "ไม่สามารถโหลดรายการงานได้" ทั้งที่เซิร์ฟเวอร์ตอบใน ~100 ms — /api/cases/review ส่ง JSON 1.6 MB ดิบ ๆ
+ * (งานทั้งทีมตั้งแต่เริ่มระบบ ให้แท็บอนุมัติแล้ว/ส่งประกันแล้ว + ค้นทุกสถานะ) และโหลดซ้ำทุก 60 วิ/ทุกครั้งที่เคสเปลี่ยน
+ * เน็ตช้าดาวน์โหลดเกิน 15 วิ = หน้าเว็บตัดทิ้ง · gzip วัดกับข้อมูลจริง 1,698 KB → 150 KB
+ * รูป/ไฟล์ zip-based (xlsx) ไม่ถูกบีบซ้ำ — ตัวกรองมาตรฐานบีบเฉพาะชนิดที่บีบได้ (compressible)
+ */
+app.use(compression());
 // log คำขอแบบปิดรหัสล็อกอินใน URL (?token= ของรูปที่เว็บเปิด) — ห้ามกลับไปใช้ morgan('dev') ตรง ๆ (27/09/69)
 app.use(requestLogger);
 app.use(express.json());

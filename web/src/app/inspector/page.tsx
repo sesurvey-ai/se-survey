@@ -62,7 +62,9 @@ export default function InspectorDashboard() {
   const load = useCallback(async (quiet = false) => {
     if (quiet) setRefreshing(true); else setLoading(true);
     try {
-      const res = await api.get('/api/cases/review');
+      // รอนานกว่าค่าปกติ 15 วิ — รายการทั้งทีมใหญ่ (หลายร้อยเรื่องให้แท็บอนุมัติแล้ว/ค้นหา) เน็ตช้าแล้วโดนตัด
+      // = ขึ้น "ไม่สามารถโหลดรายการงานได้" ทั้งที่ข้อมูลกำลังมา (user เจอ 03/10/69 · backend บีบ gzip แล้วด้วย)
+      const res = await api.get('/api/cases/review', { timeout: 45_000 });
       if (res.data.success) { setCases(res.data.data); setFreshAt(new Date()); setError(''); }
     } catch {
       // โหลดเงียบพลาด = เน็ตสะดุดชั่วคราว ไม่ต้องล้างของเดิมทิ้งแล้วขึ้นหน้าจอ error
