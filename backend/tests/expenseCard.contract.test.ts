@@ -603,7 +603,7 @@ console.log('\n── เรทแนะนำตามพื้นที่ท�
   check('GET /pay รับ ?province=&district=&subdistrict=', ctl.includes("q('subdistrict')"));
   check('snapshot ตอนบันทึกคิดจากพื้นที่ที่ส่งมารอบนี้', pay.includes("acc_subdistrict: str('acc_subdistrict')"));
   check('หน้าเคส: เปลี่ยนตำบลแล้วขอเรทใหม่ (หน่วง 350ms)', ui.includes('params.subdistrict = tb;') && ui.includes('}, 350);'));
-  check('หน้าเคส: เรทใหม่เติมทับเฉพาะช่องว่าง/ค่าที่ระบบเติมไว้ (ไม่ทับที่พิมพ์เอง)', ui.includes('lastSuggestRef') && ui.includes("['pay_service_fee', sg.service_fee]"));
+  check('หน้าเคส: เรทใหม่เติมทับเฉพาะช่องว่าง/ค่าที่ระบบเติมไว้ (ไม่ทับที่พิมพ์เอง)', ui.includes('lastSuggestRef') && ui.includes("['pay_service_fee', sg.service_fee"));   // 02/10/69: ทูเพิลมียอดที่บันทึกต่อท้าย (กันล้างค่าที่บันทึกแล้ว)
   check('บันทึกส่งพื้นที่ไปกับยอดเงิน', ui.includes("acc_subdistrict: data['acc_subdistrict'] ?? null, claim_type: data['claim_type'] ?? null"));
 }
 

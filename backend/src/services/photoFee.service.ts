@@ -24,6 +24,14 @@ export interface PhotoFee {
 const norm = (v: unknown) => String(v ?? '').replace(/\s|ฯ|\./g, '');
 
 /**
+ * ผลคดี "ไปถึงแล้วไม่พบ" ไหม — ค่าที่เก็บมี 2 แบบ (มี/ไม่มีเว้นวรรค ตามที่หน้าเว็บกับแอปรับไว้)
+ * ใช้ 2 ที่: ค่ารูป (ข้อ 2 ข้างล่าง) · เรทแนะนำ (pay.service — ไม่เติมเรทเลยทั้ง 2 ฝั่ง user เคาะ 02/10/69)
+ */
+export function isNotFoundFault(v: unknown): boolean {
+  return norm(v) === norm('ไปถึงแล้วไม่พบ');
+}
+
+/**
  * จังหวัดที่ "ออกสำรวจ" — ตัวตัดสินข้อ 3 (งานกรุงเทพไม่มีค่ารูป)
  *
  * ลำดับความน่าเชื่อ:
@@ -76,7 +84,7 @@ export function standardPhotoFee(row: Record<string, unknown>): PhotoFee | null 
 
   // 2. "ไปถึงแล้วไม่พบ" → ไม่เบิกทุกกรณี แม้เป็นงานต่างจังหวัด
   //    (ค่าที่เก็บมี 2 แบบ — มี/ไม่มีเว้นวรรค ตามที่หน้าเว็บกับแอปรับไว้)
-  if (norm(row.acc_fault) === norm('ไปถึงแล้วไม่พบ')) {
+  if (isNotFoundFault(row.acc_fault)) {
     return { count: 0, price: 0, reason: 'ไปถึงแล้วไม่พบ — ไม่มีค่ารูป' };
   }
 

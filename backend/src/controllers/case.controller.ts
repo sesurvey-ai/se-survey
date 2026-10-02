@@ -204,10 +204,11 @@ export const caseController = {
   getPay: asyncHandler(async (req: Request, res: Response) => {
     // ?province=&district=&subdistrict=&claim_type= = พื้นที่ที่กำลังเลือกบนหน้า (ยังไม่บันทึก) — เรทแนะนำต้องตามทัน
     // &location=survey|accident = ชุดที่ส่งมาคือสถานที่ออกตรวจสอบหรือสถานที่เกิดเหตุ (บอกในบรรทัดเรท)
+    // &acc_fault= = ผลคดีที่กำลังเลือกบนหน้า — "ไปถึงแล้วไม่พบ" ระบบไม่เติมเรท (02/10/69)
     const q = (k: string) => (typeof req.query[k] === 'string' ? String(req.query[k]) : null);
     sendSuccess(res, await payService.getCasePay(parseInt(req.params.id as string), {
       province: q('province'), district: q('district'), subdistrict: q('subdistrict'), claim_type: q('claim_type'),
-      location: q('location'),
+      location: q('location'), acc_fault: q('acc_fault'),
     }));
   }),
 

@@ -221,6 +221,7 @@ export function computePay(rates: ResolvedRates, input: PayInput): PayResult {
 
 import { amphurCode, provinceCode, tumbonCode } from './areaCode.service';
 import { lumpSumFee, loadLumpRules, amphurLump, loadAmphurLumpRules } from './lumpSum';
+import { isNotFoundFault } from './photoFee.service';
 
 /** ช่องรายรับฝั่งพนักงาน (บวกเข้ายอดรวม) — ชื่อคีย์ตรงกับคอลัมน์ใน survey_pay */
 export const PAY_MONEY_FIELDS = [
@@ -254,6 +255,8 @@ export interface PayLocationOverride {
   province?: string | null; district?: string | null; subdistrict?: string | null; claim_type?: string | null;
   /** ชุดที่ส่งมาคือ 'survey' (สถานที่ออกตรวจสอบ) หรือ 'accident' (สถานที่เกิดเหตุ) — ใช้บอกในบรรทัดเรทเท่านั้น */
   location?: string | null;
+  /** ผลคดีที่กำลังเลือกบนหน้า (ยังไม่บันทึก · ครั้งที่ 2+ เป็นของครั้งที่ 1) — "ไปถึงแล้วไม่พบ" = ไม่เติมเรท */
+  acc_fault?: string | null;
 }
 
 export type RateLocation = 'survey' | 'accident';
@@ -288,14 +291,14 @@ export async function getCasePay(caseId: number, override: PayLocationOverride =
   const r = (await db.query(
     `SELECT sr.acc_province, sr.acc_district, sr.acc_subdistrict,
             sr.survey_province, sr.survey_district, sr.survey_subdistrict,
-            sr.acc_surveyor, sr.claim_type, sr.survey_job_no, c.source,
+            sr.acc_surveyor, sr.claim_type, sr.survey_job_no, sr.acc_fault, c.source,
             (SELECT count(*) FROM survey_photos sp WHERE sp.report_id = sr.id) AS photo_count
        FROM survey_reports sr
        JOIN cases c ON c.id = sr.case_id
       WHERE sr.case_id = $1`, [caseId])).rows[0] as
     | { acc_province?: string; acc_district?: string; acc_subdistrict?: string;
         survey_province?: string; survey_district?: string; survey_subdistrict?: string; acc_surveyor?: string;
-        claim_type?: string; survey_job_no?: string; photo_count?: string; source?: string }
+        claim_type?: string; survey_job_no?: string; acc_fault?: string; photo_count?: string; source?: string }
     | undefined;
 
   if (!r) return { saved, suggest: null, area: null };
@@ -373,18 +376,40 @@ export async function getCasePay(caseId: number, override: PayLocationOverride =
    * ค่าบริการ = เรทรายอำเภอตามปกติ (ในตารางเป็นยอดเหมาอยู่แล้ว) · ค่าเดินทาง = ไม่มี · ค่ารูป = ไม่มี (case.service ส่งป้ายให้กติกาค่ารูป)
    */
   const amphurLumpRule = lump ? null : amphurLump(await loadAmphurLumpRules(), province, pay.insInvest);
+  const suggest = {
+    service_fee: pay.surInvest === null ? null : (typeof baseRate === 'number' ? baseRate : null),
+    ins_service_fee: fromIsurveyFile ? null : (lump ? lump.fee : pay.insInvest),
+    ins_travel_fee: fromIsurveyFile ? null : (lump || amphurLumpRule ? null : pay.insTrans),
+    // ที่มาของยอดฝั่งเรียกเก็บ (เฉพาะจังหวัดเหมา) — หน้าตรวจโชว์ใต้ตาราง
+    ins_note: fromIsurveyFile ? null : (lump?.note ?? amphurLumpRule?.note ?? null),
+    /** ผลคดี "ไปถึงแล้วไม่พบ" — ระบบไม่เติมเรท (ดูข้างล่าง) */
+    not_found: false,
+    /** เรทเต็มของพื้นที่นี้ ส่งไว้ให้หน้าตรวจ "โชว์ประกอบ" เฉพาะงานไปถึงแล้วไม่พบ — ไม่เติมลงช่อง */
+    full_rate: null as { ins_service: number | null; ins_travel: number | null; staff: number | null } | null,
+    snapshot: (lump ? { ...pay.snapshot, lump_sum: { label: lump.label, seq: lump.seq, fee: lump.fee } }
+      : amphurLumpRule ? { ...pay.snapshot, lump_sum: { label: amphurLumpRule.label, seq: null, fee: pay.insInvest } }
+      : pay.snapshot) as Record<string, unknown>,
+  };
+  /**
+   * ── ผลคดี "ไปถึงแล้วไม่พบ" → ไม่เติมเรทเลยทั้ง 2 ฝั่ง ให้หัวหน้ากรอกเอง (user เคาะ 02/10/69) ──
+   * งานจริง 2567–69 (99 งาน) มี 2 แบบที่ผลคดีแยกไม่ออก:
+   *   ไม่ได้ออกตรวจ = จ่ายลด (เบิกแค่ค่าพาหนะ · ช่างได้ลดลง เช่น กทม. 300/100)
+   *   ได้ไปตรวจที่อื่น เช่น ที่อู่ (เคลม 2026013115959) = จ่ายเต็มตามเรทปกติ
+   * หัวหน้าต้องอ่านรายงานช่างก่อนตัดสินอยู่แล้ว → ระบบไม่เดา (เดิมเติมเรทเต็มเงียบ ๆ ลืมแก้ = เบิกเกิน)
+   * ส่งเรทเต็มไปให้ดูประกอบใน full_rate · ค่ารูปไม่เติมอยู่แล้ว (photoFee ข้อ 2) · รอผู้ตรวจสอบสรุปค่าเริ่มต้นรายโซนค่อยเปลี่ยน
+   */
+  if (isNotFoundFault(pick(override.acc_fault, r.acc_fault))) {
+    suggest.full_rate = { ins_service: suggest.ins_service_fee, ins_travel: suggest.ins_travel_fee, staff: suggest.service_fee };
+    suggest.service_fee = null;
+    suggest.ins_service_fee = null;
+    suggest.ins_travel_fee = null;
+    suggest.ins_note = null;
+    suggest.not_found = true;
+    suggest.snapshot = { ...suggest.snapshot, not_found: true };
+  }
   return {
     saved,
-    suggest: {
-      service_fee: pay.surInvest === null ? null : (typeof baseRate === 'number' ? baseRate : null),
-      ins_service_fee: fromIsurveyFile ? null : (lump ? lump.fee : pay.insInvest),
-      ins_travel_fee: fromIsurveyFile ? null : (lump || amphurLumpRule ? null : pay.insTrans),
-      // ที่มาของยอดฝั่งเรียกเก็บ (เฉพาะจังหวัดเหมา) — หน้าตรวจโชว์ใต้ตาราง
-      ins_note: fromIsurveyFile ? null : (lump?.note ?? amphurLumpRule?.note ?? null),
-      snapshot: lump ? { ...pay.snapshot, lump_sum: { label: lump.label, seq: lump.seq, fee: lump.fee } }
-        : amphurLumpRule ? { ...pay.snapshot, lump_sum: { label: amphurLumpRule.label, seq: null, fee: pay.insInvest } }
-        : pay.snapshot,
-    },
+    suggest,
     area: {
       province_code: province, amphur_code: amphur, tumbon_code: tumbon, team,
       province_name: rateProvince ?? null, district_name: rateDistrict ?? null,

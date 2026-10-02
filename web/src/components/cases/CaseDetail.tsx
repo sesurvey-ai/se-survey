@@ -26,6 +26,9 @@ interface PayData {
     ins_travel_fee?: number | null;
     /** ที่มาของยอดฝั่งเรียกเก็บ — มีเฉพาะจังหวัดเรทเหมาตามลำดับเรื่อง (ราชบุรี) */
     ins_note?: string | null;
+    /** ผลคดี "ไปถึงแล้วไม่พบ" — ระบบไม่เติมเรททั้ง 2 ฝั่ง (02/10/69) · full_rate = เรทเต็มของพื้นที่ไว้โชว์ประกอบ */
+    not_found?: boolean;
+    full_rate?: { ins_service: number | null; ins_travel: number | null; staff: number | null } | null;
     snapshot: Record<string, unknown>;
   } | null;
   area: {
@@ -225,6 +228,8 @@ const OUT_OF_HOURS_AMT = 100;
  * ⛔ เติมตอน "เลือก" เท่านั้น ไม่เติมตอนเปิดหน้า — เคสที่หัวหน้าแก้ยอดเองไว้
  *    จะได้ไม่ถูกเขียนทับทุกครั้งที่เปิดดู
  */
+/** ผลคดี "ไปถึงแล้วไม่พบ" (เก็บได้ 2 แบบ มี/ไม่มีเว้นวรรค — ชุดเดียวกับ backend photoFee.isNotFoundFault) */
+const isNotFoundFault = (v: unknown) => String(v ?? '').replace(/\s/g, '') === 'ไปถึงแล้วไม่พบ';
 const DAILY_FEE_PAY = 50;
 const DAILY_FEE_INS: Record<string, number> = { 'ถูก': 100, 'ผิด': 50, 'รอผล': 50 };
 /** ค่าเสียหายประมาณของคู่กรณี/ทรัพย์สิน — 0 ที่ติดมากับข้อมูลคือ "ไม่ได้กรอก" ล้างตอนโหลด
@@ -639,6 +644,12 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
   const [survProv, setSurvProv] = useState<string>(report.survey_province || '-- ระบุ --');
   const [survDist, setSurvDist] = useState<string>(report.survey_district || '-- เขต --');
   const [survTumbon, setSurvTumbon] = useState<string>(report.survey_subdistrict || '');
+  /**
+   * ผลคดีที่กำลังเลือกบนหน้า (ปุ่มเลือก acc_fault ไม่ได้คุมด้วย state — ฟังจาก change ของฟอร์ม)
+   * "ไปถึงแล้วไม่พบ" → ระบบไม่เติมเรททั้ง 2 ฝั่ง + ไม่เติมค่ารูป ให้หัวหน้ากรอกเองหลังอ่านรายงานช่าง (user เคาะ 02/10/69)
+   */
+  const [faultNow, setFaultNow] = useState<string>(String(report.acc_fault ?? ''));
+  const notFoundNow = isNotFoundFault(faultNow);
 
   /**
    * เลขบัตรผู้ขับขี่รถประกัน — เตือนสดเหมือนช่องคู่กรณี/ผู้บาดเจ็บ (RecordEditors)
@@ -954,7 +965,8 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
    * ⛔ ดูครั้งอื่นอยู่ (previewing) = อ่านอย่างเดียว ไม่เติมอะไรทั้งนั้น
    */
   const photoFeeUnset = !exV.photo_fee_count && !Number(exV.photo_fee_price ?? 0);
-  const photoFee = (!previewing && photoFeeSuggest && photoFeeUnset) ? photoFeeSuggest : null;
+  // ผลคดี "ไปถึงแล้วไม่พบ" ที่เลือกบนหน้า (ยังไม่บันทึก) ก็ไม่เติมค่ารูป — ค่าแนะนำจาก server คิดจากผลคดีที่บันทึกไว้ (02/10/69)
+  const photoFee = (!previewing && photoFeeSuggest && photoFeeUnset && !notFoundNow) ? photoFeeSuggest : null;
   // ค่ารูป: ที่บันทึก = "ราคาต่อรูป" (photo_fee_price) แต่ช่องที่เห็นในคอลัมน์ "ราคาประกัน" = ยอดรวม (user 07/09/69)
   const photoUnitDefault = zeroBlank(exV.photo_fee_price) || (photoFee?.price ? String(photoFee.price) : '');
   const photoCountDefault = Number(exV.photo_fee_count || photoFee?.count || 0) || 1;
@@ -1671,9 +1683,12 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
       // ทำให้กรอบแดงค่าบริการหายทั้งที่ยังไม่ได้กรอก เพราะเดิมนับ "มีเงินช่องไหนก็ได้"
       const liveService = Number(val('input[name=pay_service_fee]').replace(/,/g, '')) > 0;
       const payMissing = payRequired && Boolean(pay) && !(Number(pay?.saved?.service_fee ?? 0) > 0) && !liveService;
-      const insMissing = payRequired && !val('input[name="service_fee_price"]');
+      // ผลคดี "ไปถึงแล้วไม่พบ" แบบจ่ายลด = เบิกแค่ค่าพาหนะ ค่าบริการว่างได้ (ใบ EMCS จริง เคลม 2026013032772 · 02/10/69)
+      const nfNow = isNotFoundFault(form.querySelector<HTMLInputElement>('input[name="acc_fault"]:checked')?.value);
+      const travelOnly = nfNow && Number(val('input[name="travel_fee_price"]').replace(/,/g, '')) > 0;
+      const insMissing = payRequired && !val('input[name="service_fee_price"]') && !travelOnly;
       if (payMissing) mm.push('ยังไม่ได้กรอก "ราคาพนักงาน" (ค่าบริการ)');
-      if (insMissing) mm.push('ยังไม่ได้กรอก "ราคาประกัน" (ค่าบริการ)');
+      if (insMissing) mm.push(nfNow ? 'ยังไม่ได้กรอก "ราคาประกัน" (ค่าบริการ หรือค่าพาหนะ)' : 'ยังไม่ได้กรอก "ราคาประกัน" (ค่าบริการ)');
       /**
        * ทาแดงที่ช่องจริง — user ทัก 09/09/69: ป้ายบอก "ยังอนุมัติไม่ได้ 2 ข้อ" แต่ไม่มีช่องไหนแดง
        * คนหาไม่เจอว่าอยู่ตรงไหน · ช่องเงินมีขอบสีของตัวเอง (ฟ้า) ต้องถอดออกตอนทาแดง ไม่งั้นสีตีกัน
@@ -1776,7 +1791,8 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
 
   useEffect(() => {
     let alive = true;
-    api.get(`/api/cases/${caseData.id}/pay`)
+    // ผลคดีของหน้า (ครั้งที่ 2+ = ของครั้งที่ 1 ที่หน้าโชว์) — ใบครั้งที่ 2+ ในฐานไม่มีช่องหลัก backend ดูเองไม่เจอ
+    api.get(`/api/cases/${caseData.id}/pay`, { params: { acc_fault: String(report.acc_fault ?? '') } })
       .then((r) => { if (alive && r.data?.success) setPay(r.data.data as PayData); })
       .catch(() => {});   // ยังไม่มีสิทธิ์/ยังไม่มีข้อมูล → ซ่อนบล็อกไปเลย ไม่ต้องรบกวนผู้ตรวจ
     return () => { alive = false; };
@@ -1804,6 +1820,7 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
       params.district = isDist(dd) ? dd : '';
       params.subdistrict = tb;
       params.location = useSurvey ? 'survey' : 'accident';
+      params.acc_fault = faultNow;
       api.get(`/api/cases/${caseData.id}/pay`, { params })
         .then((r) => {
           if (id !== suggestReqRef.current || !r.data?.success) return;
@@ -1813,7 +1830,7 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
         .catch(() => {});
     }, 350);
     return () => clearTimeout(t);
-  }, [accProv, accDist, accTumbon, survProv, survDist, survTumbon, caseData.id, previewing]);
+  }, [accProv, accDist, accTumbon, survProv, survDist, survTumbon, faultNow, caseData.id, previewing]);
 
   /**
    * เรทแนะนำเปลี่ยน → เติมช่องให้ทันที เฉพาะช่องที่ "ว่าง" หรือ "ยังเป็นค่าที่ระบบเติมไว้" (จำใน data-auto /
@@ -1825,13 +1842,14 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
     const sg = pay?.suggest;
     const form = formRef.current;
     if (!sg || !form || previewing) return;
-    const map: Array<[string, number | null | undefined]> = [
-      ['service_fee_price', sg.ins_service_fee],
-      ['travel_fee_price', sg.ins_travel_fee],
-      ['pay_service_fee', sg.service_fee],
+    // ช่อง · เรทแนะนำ · ยอดที่บันทึกไว้แล้ว (มียอดบันทึก = ไม่ใช่เลขของระบบ ห้ามล้าง)
+    const map: Array<[string, number | null | undefined, unknown]> = [
+      ['service_fee_price', sg.ins_service_fee, exV.service_fee_price],
+      ['travel_fee_price', sg.ins_travel_fee, exV.travel_fee_price],
+      ['pay_service_fee', sg.service_fee, payV?.saved?.service_fee],
     ];
     let touched = false;
-    for (const [nm, v] of map) {
+    for (const [nm, v, savedVal] of map) {
       const el = form.querySelector(`input[name="${nm}"]`) as HTMLInputElement | null;
       if (!el || el.disabled) { lastSuggestRef.current[nm] = typeof v === 'number' ? v : null; continue; }
       const cur = el.value.trim();
@@ -1841,6 +1859,14 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
         || (prev != null && curNum === prev);
       if (typeof v === 'number' && v > 0 && mine && curNum !== v) {
         el.value = String(v); el.dataset.auto = String(v); touched = true;
+      } else if (!(typeof v === 'number' && v > 0) && cur !== '' && !(Number(String(savedVal ?? '').replace(/,/g, '')) > 0)
+        && (el.dataset.auto !== undefined ? cur === el.dataset.auto : (prev != null && curNum === prev))) {
+        /**
+         * เรทแนะนำหายไป (เช่น เปลี่ยนผลคดีเป็น "ไปถึงแล้วไม่พบ" — ระบบไม่เติมเรท 02/10/69) → ล้างเลขที่ระบบเติมไว้ออก
+         * เฉพาะช่องที่ยังเป็นเลขของระบบ (data-auto หรือเท่ากับเรทแนะนำรอบก่อนตอนเติมผ่าน defaultValue) และยังไม่ได้บันทึก
+         * เลขที่หัวหน้าพิมพ์เอง/บันทึกไว้แล้วไม่แตะ · ไม่งั้นเรทเต็มค้างในช่องเงียบ ๆ ทั้งที่หน้าจอบอกว่าระบบไม่เติม
+         */
+        el.value = ''; delete el.dataset.auto; touched = true;
       }
       lastSuggestRef.current[nm] = typeof v === 'number' ? v : null;
     }
@@ -1849,6 +1875,26 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
       repaintRef.current();   // กรอบแดงของช่องที่เพิ่งเติมต้องหายทันที (paint วิ่งไปก่อนแล้วในรอบนี้)
     }
   }, [pay?.suggest, previewing, recalcSums]);
+
+  /**
+   * ค่ารูปตามผลคดีที่เลือกบนหน้า (02/10/69) — ช่องค่ารูปเติมผ่าน defaultValue ครั้งเดียวตอนเปิดหน้า
+   * เปลี่ยนเป็น "ไปถึงแล้วไม่พบ" → ล้างค่ารูปเหมาที่ระบบเติมไว้ (ยังเป็นเลขเดิมเป๊ะ + ยังไม่บันทึก) · เปลี่ยนกลับ → เติมคืน
+   * ไม่แตะค่าที่หัวหน้าพิมพ์เองหรือบันทึกไว้แล้ว
+   */
+  const photoNfRef = useRef(notFoundNow);
+  useEffect(() => {
+    if (photoNfRef.current === notFoundNow) return;
+    photoNfRef.current = notFoundNow;
+    const form = formRef.current;
+    if (!form || previewing || !photoFeeSuggest || !photoFeeUnset || !(photoFeeSuggest.count > 0)) return;
+    const c = form.querySelector('input[name="photo_fee_count"]') as HTMLInputElement | null;
+    const t = form.querySelector('input[name="photo_fee_total"]') as HTMLInputElement | null;
+    if (!c || !t) return;
+    const sugCount = String(photoFeeSuggest.count);
+    const sugTotal = (Math.round(photoFeeSuggest.count * photoFeeSuggest.price * 100) / 100).toFixed(2);
+    if (notFoundNow && c.value.trim() === sugCount && t.value.trim() === sugTotal) { c.value = ''; t.value = ''; recalcSums(); }
+    else if (!notFoundNow && !c.value.trim() && !t.value.trim()) { c.value = sugCount; t.value = sugTotal; recalcSums(); }
+  }, [notFoundNow, previewing, photoFeeSuggest, photoFeeUnset, recalcSums]);
 
   /**
    * โหลดเคสใหม่ (onReviewSubmitted) แล้ว rev ที่ถืออยู่ต้องเดินตามด้วย
@@ -1907,12 +1953,19 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
       e.preventDefault();
       e.returnValue = '';
     };
+    // ผลคดีเปลี่ยน → เรทแนะนำต้องตาม ("ไปถึงแล้วไม่พบ" = ไม่เติมเรท 02/10/69)
+    const fault = (e: Event) => {
+      const t = e.target as HTMLInputElement | null;
+      if (t?.name === 'acc_fault' && t.checked) setFaultNow(t.value);
+    };
     form.addEventListener('input', touch);
     form.addEventListener('change', touch);
+    form.addEventListener('change', fault);
     window.addEventListener('beforeunload', warn);
     return () => {
       form.removeEventListener('input', touch);
       form.removeEventListener('change', touch);
+      form.removeEventListener('change', fault);
       window.removeEventListener('beforeunload', warn);
       setFormDirty(false);   // ออกจากหน้าแล้วธงต้องไม่ค้างไปหน้าถัดไป
     };
@@ -3893,17 +3946,26 @@ export default function CaseDetail({ caseData, report, photos, review, visitCoun
                             {pay.suggest?.ins_note && (
                               <div className="mt-1 text-blue-900">ฝั่งเรียกเก็บประกัน — {pay.suggest.ins_note}</div>
                             )}
+                            {/* ผลคดี "ไปถึงแล้วไม่พบ" (user เคาะ 02/10/69) — งานจริงมี 2 แบบที่ผลคดีแยกไม่ออก ระบบจึงไม่เติมเรท
+                                โชว์เรทเต็มของพื้นที่ไว้ประกอบ (ไม่เติมลงช่อง) · จ่ายลด = เบิกแค่ค่าพาหนะ ตามใบ EMCS จริง (เคลม 2026013032772) */}
+                            {pay.suggest?.not_found && (
+                              <div className="mt-1 text-amber-700 bg-amber-50 border border-amber-200 rounded-none px-2 py-1">
+                                {'ผลคดี "ไปถึงแล้วไม่พบ" — ระบบไม่เติมเรททั้ง 2 ฝั่ง กรอกเองหลังอ่านรายงานช่าง: '}
+                                {'ไม่ได้ออกตรวจ = จ่ายลด เบิกแค่ค่าพาหนะ (ลงช่องค่าพาหนะ) · ได้ไปตรวจที่อื่น เช่น อู่ = จ่ายเต็ม'}
+                                {pay.suggest.full_rate && ` · เรทเต็มของพื้นที่นี้: ค่าบริการ ${pay.suggest.full_rate.ins_service ?? '-'} · ค่าพาหนะ ${pay.suggest.full_rate.ins_travel ?? '-'} · ช่าง ${pay.suggest.full_rate.staff ?? '-'}`}
+                              </div>
+                            )}
                             {/* ── หาเรทฝั่งพนักงานไม่ได้ ต้องบอกสาเหตุ ── (user เจอ #267 10/09/69: ช่องค่าบริการว่างเงียบ ๆ)
                                 ศรีราชา/บ่อวิน จ่ายแยกตามทีม แต่ช่าง SEC481 ไม่มีทีมในตารางเรท → เดิมตอบ "0 บาท" แล้วไม่เติมช่อง
                                 ตอนนี้ backend ตอบ null + team_needed/team_rates ให้บอกว่าต้องไปกำหนดทีมที่หน้าแอดมิน */}
                             {/* งานบริษัทนอก/OSS (ผู้สำรวจไม่ขึ้นต้นด้วยรหัส SE/SEC — user เคาะ 02/10/69) → ระบบไม่เสนอฝั่งพนักงานทุกจังหวัด
                                 บอกตรง ๆ ว่าตั้งใจไม่เติม ไม่ใช่หาเรทไม่เจอ · ฝั่งเรียกเก็บประกันยังเติมตามปกติ */}
-                            {pay.suggest && pay.suggest.service_fee == null && pay.suggest.snapshot?.is_se === false && (
+                            {pay.suggest && pay.suggest.service_fee == null && pay.suggest.snapshot?.is_se === false && !pay.suggest.not_found && (
                               <div className="mt-1 text-amber-700 bg-amber-50 border border-amber-200 rounded-none px-2 py-1">
                                 งานบริษัทนอก/OSS (ผู้สำรวจไม่ได้ขึ้นต้นด้วยรหัส SE/SEC) — ระบบไม่เติมค่าบริการฝั่งพนักงาน กรอกเองตามที่ตกลงกับบริษัท · ฝั่งเรียกเก็บประกันเติมค่าบริการ/ค่าเดินทางให้ตามปกติ (ค่ารูปกรอกเอง)
                               </div>
                             )}
-                            {pay.suggest && pay.suggest.service_fee == null && pay.suggest.snapshot?.is_se !== false && pay.suggest.snapshot?.rate_from === 'ไม่พบเรท' && (
+                            {pay.suggest && pay.suggest.service_fee == null && pay.suggest.snapshot?.is_se !== false && !pay.suggest.not_found && pay.suggest.snapshot?.rate_from === 'ไม่พบเรท' && (
                               <div className="mt-1 text-amber-700 bg-amber-50 border border-amber-200 rounded-none px-2 py-1">
                                 {pay.suggest.snapshot?.team_needed
                                   ? (pay.area.surveyor_code
