@@ -3,6 +3,7 @@ import { getDispatchLog } from '../services/dispatchLog.service';
 import { provinceOf } from '../services/geoProvince';
 import { nearestDistrict } from '../services/geoDistrict';
 import { caseService } from '../services/case.service';
+import { reviewList } from '../services/reviewList';
 import * as payService from '../services/pay.service';
 import { buildPayWorkbook } from '../services/payExport.service';
 import { sendSuccess } from '../utils/response';
@@ -83,9 +84,32 @@ export const caseController = {
     sendSuccess(res, result);
   }),
 
+  /**
+   * หน้า "รายการงาน" ของหัวหน้า (03/10/69): view=active = งานที่ยังต้องทำ + ตัวเลขแท็บอื่น
+   * ไม่ส่ง view = ทุกสถานะในก้อนเดียวแบบเดิม — เหลือไว้ให้เว็บรุ่นเก่าที่ยังเปิดค้างระหว่าง deploy
+   */
   getForReview: asyncHandler(async (req: Request, res: Response) => {
-    const cases = await caseService.getForReview(req.user ? { id: req.user.id, role: req.user.role } : undefined);
-    sendSuccess(res, cases);
+    const user = req.user ? { id: req.user.id, role: req.user.role } : undefined;
+    if (req.query.view === 'active') {
+      sendSuccess(res, await reviewList.active(user));
+      return;
+    }
+    sendSuccess(res, await caseService.getForReview(user));
+  }),
+
+  /**
+   * แท็บอนุมัติแล้ว/ส่งประกันแล้วทีละหน้า · ค้นหาทุกสถานะ — POST เพราะคำค้น (ทะเบียน/ชื่อผู้เอาประกัน) และชื่อช่าง
+   * ห้ามไปอยู่ใน URL (log ของเซิร์ฟเวอร์จด URL ทุกบรรทัด)
+   */
+  queryReview: asyncHandler(async (req: Request, res: Response) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const view = b.view === 'approved' || b.view === 'sent' || b.view === 'search' ? b.view : null;
+    if (!view) throw new AppError(400, 'view ต้องเป็น approved / sent / search');
+    const text = (v: unknown, max: number) => String(v ?? '').trim().slice(0, max);
+    const user = req.user ? { id: req.user.id, role: req.user.role } : undefined;
+    sendSuccess(res, await reviewList.query(user, {
+      view, page: Number(b.page) || 1, q: text(b.q, 100), src: text(b.src, 40), who: text(b.who, 200),
+    }));
   }),
 
   /** ผู้ตรวจสอบเพิ่มรูปเองจากหน้าเคส (เพิ่มอย่างเดียว ไม่ลบของเดิม) */

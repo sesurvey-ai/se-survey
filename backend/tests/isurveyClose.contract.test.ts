@@ -73,7 +73,12 @@ const read = (p: string) => fs.readFileSync(path.join(__dirname, '..', p), 'utf8
   const adminSvc = read('src/services/admin.service.ts');
   check('มีตัวตัดคอลัมน์หนัก และรู้จัก isurvey_close_payload', /export function omitHeavy/.test(listRows) && listRows.includes("'isurvey_close_payload'"));
   const fn = (src: string, name: string) => { const i = src.indexOf(`  async ${name}(`); return i < 0 ? '' : src.slice(i, i + 4000); };
-  check('รายการงานหัวหน้า (getForReview) ตัดก่อนทุกทางออก', /omitHeavy\(result\.rows\);[\s\S]{0,160}if \(!user\) return result\.rows;/.test(fn(caseSvc, 'getForReview')));
+  // 03/10/69 รายการงานหัวหน้าย้ายไป reviewList.ts — ระบุคอลัมน์เอง ไม่ใช้ c.* เลย payload จึงไม่มีทางติดไป
+  const reviewList = read('src/services/reviewList.ts');
+  const rowSelect = reviewList.slice(reviewList.indexOf('const ROW_SELECT = `'), reviewList.indexOf('ej ON TRUE`;'));
+  check('รายการงานหัวหน้า (reviewList) ไม่ดึง c.* และไม่แตะ isurvey_close_payload',
+    rowSelect.length > 500 && !/\bc\.\*/.test(rowSelect) && !rowSelect.includes('isurvey_close_payload')
+    && /async getForReview\(user\?: ReviewUser\) \{\s*return reviewList\.all\(user\);/.test(fn(caseSvc, 'getForReview')));
   check('รายการงานบนแอป (getMyCases) ตัด', fn(caseSvc, 'getMyCases').includes('return omitHeavy(result.rows)'));
   check('แดชบอร์ด + รายการเคสคอลเซ็นเตอร์ ตัด', fn(caseSvc, 'getStats').includes('recent: omitHeavy(recentResult.rows)') && /cases: omitHeavy\(\w+\.rows\)/.test(fn(caseSvc, 'list')));
   check('รายการเคสแอดมิน ตัด', fn(adminSvc, 'getCases').includes('cases: omitHeavy(dataResult.rows)'));

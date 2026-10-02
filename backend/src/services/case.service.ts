@@ -4,7 +4,8 @@ import { env } from '../config/env';
 import { AppError, NotFoundError, ForbiddenError } from '../middleware/errorHandler';
 import { pushNewSurvey, pushNewSurveyById, pushSurveyWithdrawn } from './surveyPush.service';
 import { logDispatch, LAST_RECALL_SELECT, LAST_RECALL_JOIN } from './dispatchLog.service';
-import { omitHeavy } from './listRows';
+import { omitHeavy, thStamp } from './listRows';
+import { reviewList, type ReviewUser } from './reviewList';
 import { generateSurveyXml, emcsNameWarnings, sanitizeReportDates } from './xmlExport.service';
 import { invalidateCaseOwner } from '../middleware/uploadsAuth';
 import { storage, normalizeKey, contentTypeOf } from '../config/storage';
@@ -25,21 +26,9 @@ import { provinceCode } from './areaCode.service';
 import { tumbonOptions } from './billingRates.service';
 import { districtCentroid } from './geoDistrict';
 import { recordMoneyChanges, damageSnapshot } from './moneyAudit';
-import { staffGroupService } from './staffGroup.service';
 
 // คอลัมน์ JSONB บน survey_reports (ข้อมูล 1:N) — node-pg ไม่ serialize array ให้เอง
 // ต้อง JSON.stringify ก่อน bind ไม่งั้นถูกตีความเป็น Postgres array literal แล้ว error
-/**
- * timestamptz → 'DD/MM/พ.ศ. HH:MM' เวลาไทย — ใช้แสดง "ส่งงาน" / "ตรวจรายงาน" (10/09/69)
- * ส่ง expression ที่เป็น timestamptz เข้ามา (คอลัมน์ timestamp ไม่มีโซน เช่น reviews.reviewed_at เก็บเป็น UTC
- * ต้องห่อ `AT TIME ZONE 'UTC'` ก่อน) · null = ยังไม่มีเหตุการณ์นั้น
- */
-const thStamp = (expr: string) =>
-  `CASE WHEN ${expr} IS NULL THEN NULL ELSE ` +
-  `to_char((${expr}) AT TIME ZONE 'Asia/Bangkok', 'DD/MM/') || ` +
-  `(EXTRACT(YEAR FROM (${expr}) AT TIME ZONE 'Asia/Bangkok')::int + 543) || ' ' || ` +
-  `to_char((${expr}) AT TIME ZONE 'Asia/Bangkok', 'HH24:MI') END`;
-
 const JSONB_FIELDS = new Set([
   'opposing_parties', 'injured_persons', 'damaged_property', 'insured_damage',
   'policy_info',   // ข้อมูลกรมธรรม์ทั้งชุดจาก ISURVEY แท็บ 7 (migration 053) — แสดงอย่างเดียว
@@ -1174,71 +1163,12 @@ export const caseService = {
   },
 
   /**
-   * รายการงานของหน้า "ตรวจสอบ"
-   *
-   * คืนของที่หน้าลิสต์ต้องใช้ **คัดงานได้โดยไม่ต้องเปิดทีละเคส**:
-   *  - `import_warnings` เรื่องที่ต้องเติมก่อนอนุมัติ (เก็บตอนนำเข้า — migration 040)
-   *  - `photo_count` รูปน้อยผิดปกติ = ต้องไปตามรูปก่อน (งานจากระบบเก่าทยอยอัปรูป)
-   *  - `pay_total` / `has_insurer_bill` ยอด 2 ฝั่งกรอกครบหรือยัง
-   *  - `review_status` / `approved_by` / `unlocked_count` แยก "รอตรวจ" กับ "อนุมัติแล้ว"
-   *    ออกจากกันได้จริง (เดิม 2 สถานะปนกันมาในลิสต์เดียว) และเห็นเคสที่ถูกปลดล็อกซ้ำ ๆ
-   *
-   * ⛔ นับรูปด้วย subquery ไม่ใช่ JOIN — join แล้วแถวเคสจะซ้ำตามจำนวนรูป
+   * รายการงานของหน้า "ตรวจสอบ" ทุกสถานะในก้อนเดียว (แบบเดิม) — ตัวจริงอยู่ที่ reviewList.ts
+   * ⛔ หน้ารายการงานรุ่นใหม่ (03/10/69) ไม่เรียกทางนี้แล้ว: โหลด view=active + แท็บงานเก่าทีละหน้า
+   *    คงไว้ให้เว็บรุ่นเก่าที่ยังเปิดค้างอยู่ระหว่าง deploy เท่านั้น (คัดทีมในฐานข้อมูลแล้วเหมือนกัน)
    */
-  async getForReview(user?: { id: number; role: string }) {
-    const result = await db.query(
-      `SELECT c.*, u.first_name AS surveyor_first_name, u.last_name AS surveyor_last_name,
-              u.code AS surveyor_code,
-              -- ชื่อช่าง/บริษัทตามรายงาน — งาน OSS (บริษัทนอก) จาก ISURVEY ไม่มีบัญชีในระบบเรา (assigned_to ว่าง)
-              -- เดิมหน้ารายการโชว์ "ยังไม่ได้มอบหมาย" ทั้งที่รู้ว่าใคร/บริษัทไหนออกสำรวจ (user แจ้ง 22/09/69)
-              sr.surveyor_name AS report_surveyor_name,
-              sr.claim_no, sr.survey_job_no, sr.claim_ref_no, sr.license_plate,
-              rv.status AS review_status, rv.unlocked_count,
-              to_char(rv.reviewed_at, 'YYYY-MM-DD HH24:MI') AS approved_at,
-              -- คอลัมน์ "ส่งงาน / ตรวจรายงาน" ในรายการ (10/09/69) เวลาไทย พ.ศ. — รอตรวจโชว์ส่งงาน อนุมัติแล้วโชว์ตรวจรายงาน
-              ${thStamp("(rv.reviewed_at AT TIME ZONE 'UTC')")} AS reviewed_at_th,
-              ${thStamp('c.submitted_at')} AS submitted_at_th,
-              COALESCE(NULLIF(rv.inspector_name, ''), ck.first_name || ' ' || ck.last_name) AS approved_by,
-              (SELECT COUNT(*) FROM survey_photos sp WHERE sp.report_id = sr.id) AS photo_count,
-              (SELECT sp2.total FROM survey_pay sp2 WHERE sp2.case_id = c.id) AS pay_total,
-              (SELECT se.service_fee_price IS NOT NULL
-                 FROM survey_expenses se WHERE se.report_id = sr.id) AS has_insurer_bill,
-              -- ครั้งที่: ใช้เลขที่ตัวดึงงานเก็บไว้ (visit_no, migration 060) ก่อน ไม่มีค่อยนับจากลำดับสร้าง
-              COALESCE(c.visit_no, ROW_NUMBER() OVER (PARTITION BY sr.claim_no ORDER BY c.created_at))::int AS visit_count,
-              -- คิวนำเข้า EMCS (สถานีนำเข้า, migration 052): งานล่าสุดของเคส + ลำดับถ้ายังรอ
-              ej.id AS emcs_job_id, ej.status AS emcs_job_status, ej.dry_run AS emcs_job_dry_run,
-              ej.station AS emcs_job_station, ej.error AS emcs_job_error, ej.screenshot_path AS emcs_job_screenshot,
-              to_char(ej.requested_at, 'HH24:MI') AS emcs_job_requested_at,
-              CASE WHEN ej.status = 'queued'
-                   THEN (SELECT COUNT(*) FROM emcs_import_jobs q2 WHERE q2.status = 'queued' AND q2.id <= ej.id)
-              END AS emcs_job_position
-       FROM cases c
-       LEFT JOIN users u ON c.assigned_to = u.id
-       LEFT JOIN survey_reports sr ON sr.case_id = c.id
-       LEFT JOIN reviews rv ON rv.case_id = c.id
-       LEFT JOIN users ck ON ck.id = rv.checker_id
-       LEFT JOIN LATERAL (
-         SELECT j.* FROM emcs_import_jobs j WHERE j.case_id = c.id ORDER BY j.id DESC LIMIT 1
-       ) ej ON TRUE
-       -- เคสที่ตีกลับไปแล้วสถานะเป็น 'assigned' — ต้องยังอยู่ในลิสต์นี้
-       -- ไม่งั้นหัวหน้าตีกลับแล้วตามงานตัวเองต่อไม่ได้ และ "หัวหน้ายังแก้เองได้" ก็ทำไม่ได้จริง
-       WHERE c.status IN ('surveyed', 'reviewed')
-          OR (c.status = 'assigned' AND c.sent_back_at IS NOT NULL)
-          -- เสร็จงานหน้างานแล้ว ยังไม่ส่งรายงาน (07/09/69) — หัวหน้าต้องเห็นว่างานภาคสนามจบแล้ว เหลือแค่รายงาน
-          OR c.status = 'finished'
-       ORDER BY c.created_at DESC`
-    );
-    // กรองตามทีมของหัวหน้า (staff_groups) ให้เห็นชุดเดียวกับหน้า "งานรอตรวจ (ISURVEY)" — user 07/09/69
-    // admin / หัวหน้าที่ยังไม่ผูกทีม = เห็นทั้งหมด · งานที่ตัวเองดึง/สร้าง เห็นเสมอ (แม้ช่างอยู่นอกทีม)
-    omitHeavy(result.rows);   // ตัดคอลัมน์หนักก่อนทุกทางออก (ดู listRows.ts)
-    if (!user) return result.rows;
-    const team = await staffGroupService.filterFor(user.id, user.role);
-    if (!team) return result.rows;
-    const memberIds = new Set((team.group.members ?? []).map((m) => m.surveyor_id).filter((x): x is number => Boolean(x)));
-    return result.rows.filter((r) =>
-      r.created_by === user.id
-      || (r.assigned_to && memberIds.has(r.assigned_to))
-      || team.match(`${r.surveyor_code ?? ''} ${r.surveyor_first_name ?? ''} ${r.surveyor_last_name ?? ''}`.trim()));
+  async getForReview(user?: ReviewUser) {
+    return reviewList.all(user);
   },
 
   /**

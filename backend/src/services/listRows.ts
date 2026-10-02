@@ -15,3 +15,15 @@ export function omitHeavy<T extends object>(rows: T[]): T[] {
   }
   return rows;
 }
+
+/**
+ * timestamptz → 'DD/MM/พ.ศ. HH:MM' เวลาไทย — ใช้แสดง "ส่งงาน" / "ตรวจรายงาน" (10/09/69)
+ * ส่ง expression ที่เป็น timestamptz เข้ามา (คอลัมน์ timestamp ไม่มีโซน เช่น reviews.reviewed_at เก็บเป็น UTC
+ * ต้องห่อ `AT TIME ZONE 'UTC'` ก่อน) · null = ยังไม่มีเหตุการณ์นั้น
+ * (ย้ายมาจาก case.service.ts 03/10/69 — รายการงานหัวหน้าแยกไปอยู่ reviewList.ts ใช้ร่วมกัน)
+ */
+export const thStamp = (expr: string) =>
+  `CASE WHEN ${expr} IS NULL THEN NULL ELSE ` +
+  `to_char((${expr}) AT TIME ZONE 'Asia/Bangkok', 'DD/MM/') || ` +
+  `(EXTRACT(YEAR FROM (${expr}) AT TIME ZONE 'Asia/Bangkok')::int + 543) || ' ' || ` +
+  `to_char((${expr}) AT TIME ZONE 'Asia/Bangkok', 'HH24:MI') END`;

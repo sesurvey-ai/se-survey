@@ -222,7 +222,7 @@ check('รายการเคสสำหรับบอทส่ง opponent_
   // 22/09/69 user: หน้างานรอตรวจไม่กรองตามทีม (งานตกหล่น เคลม 2026013150636) — กรองด้วยจังหวัดแทน · หน้ารายการงานยังกรองตามทีม
   check('backend: หน้างานรอตรวจไม่กรองตามทีมแล้ว (ยังกรองที่ getForReview เท่านั้น)',
     !/rows = rows\.filter\(\(r\) => team\.match/.test(pullSvc) && pullSvc.includes('applied: false')
-    && read('src', 'services', 'case.service.ts').includes('staffGroupService.filterFor(user.id, user.role)'));
+    && read('src', 'services', 'reviewList.ts').includes('staffGroupService.filterFor(user.id, user.role)'));
   check('เว็บ: ตัวกรองจังหวัดติ๊กได้หลายค่า จากจังหวัดในรายการ · ตัวกรองสถานะยังอยู่',
     pull.includes('provinceCounts') && pull.includes('toggleProvince') && pull.includes('ไม่ติ๊กเลย = ทุกจังหวัด') && pull.includes('toggleStatus'));
   // 22/09/69 (รอบ 2) user: checkbox "ทีมพนักงาน" — server ติดธง in_team ทุกแถว (ไม่ตัดแถว) · เว็บกรองเองเมื่อติ๊ก · บัญชีไม่ผูกทีมติ๊กไม่ได้

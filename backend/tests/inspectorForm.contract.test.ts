@@ -294,8 +294,10 @@ check('อนุมัติแล้วตีกลับไม่ได้ (�
 check('เคสที่ไม่มีผู้สำรวจตีกลับไม่ได้ (ไม่งั้นเคสหายเงียบ)', /if \(!assigned_to\)/.test(sbSvc));
 check('เปลี่ยนสถานะแบบมี guard กันชนกับการอนุมัติ/ส่งซ้ำ',
       /WHERE id = \$1 AND status = 'surveyed'/.test(sbSvc));
+// รายการงานหัวหน้าย้ายไป reviewList.ts (03/10/69) — ตีกลับแล้วอยู่ในรายการหลัก (view=active) ที่โหลดเต็ม
 check('หน้าตรวจสอบยังเห็นเคสที่ตีกลับแล้ว (หัวหน้าแก้เองได้)',
-      /OR \(c\.status = 'assigned' AND c\.sent_back_at IS NOT NULL\)/.test(svc));
+      /active: `[^`]*OR \(c\.status = 'assigned' AND c\.sent_back_at IS NOT NULL\)/.test(fs.readFileSync(
+        path.join(__dirname, '..', 'src', 'services', 'reviewList.ts'), 'utf8')));
 check('ส่งงานใหม่แล้วหมวดรูปที่ผู้ตรวจตั้งไว้ไม่หาย', /prevCats\.get\(/.test(svc));
 
 /**

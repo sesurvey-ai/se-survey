@@ -57,7 +57,8 @@ const page = read('..', 'web', 'src', 'app', 'inspector', 'page.tsx');
 check('ฟังสัญญาณ case_changed', /socket\.on\('case_changed'/.test(page));
 check('เลิกฟังตอนออกจากหน้า (กันฟังซ้อนกันหลายชั้น)', /socket\.off\('case_changed'/.test(page));
 /** หลายสัญญาณมาติด ๆ กัน (บันทึกแล้วอนุมัติ) ต้องโหลดครั้งเดียว ไม่ใช่ยิงรัว */
-check('รวบสัญญาณที่มาติดกันเป็นครั้งเดียว', /setTimeout\(\(\) => load\(true\), 400\)/.test(page));
+// 03/10/69 รีเฟรชทั้งรายการหลักและหน้า/ผลค้นที่เปิดอยู่ (refreshRef) — แท็บงานเก่าโหลดทีละหน้าแล้ว
+check('รวบสัญญาณที่มาติดกันเป็นครั้งเดียว', /setTimeout\(\(\) => refreshRef\.current\(\), 400\)/.test(page));
 /** socket หลุดเงียบได้ — ไม่มีตาข่ายรองแล้วจอจะค้างตลอดไปโดยไม่มีใครรู้ */
 check('มีตาข่ายรองโหลดตามเวลา', /setInterval\(/.test(page) && page.includes('60_000'));
 check('ไม่ยิงจากแท็บที่ถูกพับไว้', /document\.visibilityState === 'visible'/.test(page));

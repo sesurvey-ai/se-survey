@@ -65,7 +65,8 @@ async function main() {
 
   // ── 3) หน้ารายการงาน ──
   const page = fs.readFileSync(path.join(__dirname, '..', '..', 'web', 'src', 'app', 'inspector', 'page.tsx'), 'utf8');
-  check('หน้ารายการงานรอนานกว่าค่าปกติ', /api\.get\('\/api\/cases\/review', \{ timeout: 45_000 \}\)/.test(page));
+  // 03/10/69 รายการหลักเหลือแค่งานที่ยังต้องทำ (view=active — tests/reviewList.contract.test.ts) แต่ยังรอนานเท่าเดิม
+  check('หน้ารายการงานรอนานกว่าค่าปกติ', page.includes("api.get('/api/cases/review', { params: { view: 'active' }, timeout: 45_000 })"));
 
   if (failed) {
     console.error(`\n${failed} ข้อไม่ผ่าน`);
