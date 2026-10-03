@@ -15,7 +15,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import api from '@/lib/api';
 import ResetPasswordDialog from './ResetPasswordDialog';
-import { fmtPhone, phoneDigits, phoneError } from '@/lib/phone';
+import { fmtPhone } from '@/lib/phone';
 
 interface User {
   id: number;
@@ -72,12 +72,6 @@ export default function AdminUsersPage() {
   const [pwUser, setPwUser] = useState<User | null>(null);
   const reqSeq = useRef(0); // กัน response เก่าทับใหม่ (พิมพ์เร็ว → คำขอเก่ามาช้า)
 
-  // แก้เบอร์ทีละคนในตาราง (ย้ายมาจากหน้าทะเบียน — เบอร์คือต้นทางของ "โทรศัพท์ผู้สำรวจภัย" ที่ระบบเติมให้เคส)
-  const [editId, setEditId] = useState<number | null>(null);
-  const [editVal, setEditVal] = useState('');
-  const [savingId, setSavingId] = useState<number | null>(null);
-  const [msg, setMsg] = useState('');
-
   // debounce ช่องค้นหา → search (ลดจำนวนคำขอ)
   useEffect(() => {
     const t = setTimeout(() => { setSearch(searchInput.trim()); setPage(1); }, 350);
@@ -120,26 +114,6 @@ export default function AdminUsersPage() {
     }
   };
 
-  const startEdit = (u: User) => { setEditId(u.id); setEditVal(phoneDigits(u.phone)); setMsg(''); };
-  const savePhone = async (u: User) => {
-    const digits = phoneDigits(editVal);
-    const bad = phoneError(editVal);
-    if (bad) {
-      setMsg('ไม่สำเร็จ: ' + bad);
-      return;
-    }
-    setSavingId(u.id);
-    try {
-      const res = await api.put(`/api/admin/users/${u.id}`, { phone: digits || null });
-      const saved = (res.data?.data?.phone ?? digits ?? null) as string | null;
-      setUsers((prev) => prev.map((x) => (x.id === u.id ? { ...x, phone: saved } : x)));
-      setMsg(digits ? `บันทึกเบอร์ของ ${u.code || ''} ${u.first_name} แล้ว (${fmtPhone(digits)})` : `ลบเบอร์ของ ${u.code || ''} ${u.first_name} แล้ว`);
-      setEditId(null);
-    } catch (e) {
-      setMsg('ไม่สำเร็จ: ' + ((e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'บันทึกเบอร์ไม่ได้'));
-    } finally { setSavingId(null); }
-  };
-
   const teamOf = (u: User) => u.staff_group_name || u.supervisor_name || '';
 
   return (
@@ -179,11 +153,6 @@ export default function AdminUsersPage() {
         </select>
       </div>
 
-      {msg && (
-        <div className={`rounded px-4 py-2 text-sm mb-4 ${msg.startsWith('ไม่สำเร็จ')
-          ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'}`}>{msg}</div>
-      )}
-
       {/* Table */}
       <div className="bg-white rounded-lg shadow-sm overflow-x-auto border border-gray-200">
         {loading ? (
@@ -219,27 +188,9 @@ export default function AdminUsersPage() {
                       {ROLE_LABELS[u.role] || u.role}
                     </span>
                   </td>
-                  {/* เบอร์: ช่างที่ยังไม่มีเบอร์ขึ้นแดง (EMCS บังคับช่องโทรศัพท์ผู้สำรวจภัย) */}
+                  {/* เบอร์: ช่างที่ยังไม่มีเบอร์ขึ้นแดง (EMCS บังคับช่องโทรศัพท์ผู้สำรวจภัย) · แก้เบอร์ที่หน้า "แก้ไขผู้ใช้" (ปุ่ม "แก้" ในตารางเอาออก 03/10/69 ตาม user) */}
                   <td className={`px-3 py-3 text-sm whitespace-nowrap ${(u.phone || '').trim() ? 'text-gray-800' : (u.role === 'surveyor' ? 'text-red-600' : 'text-gray-400')}`}>
-                    {editId === u.id ? (
-                      <span className="inline-flex items-center gap-1">
-                        <input type="tel" value={editVal} autoFocus disabled={savingId === u.id}
-                          onChange={(e) => setEditVal(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void savePhone(u); } if (e.key === 'Escape') setEditId(null); }}
-                          placeholder="0812345678"
-                          className="w-32 border border-blue-400 rounded px-2 py-0.5 text-sm text-gray-800 bg-white" />
-                        <button type="button" onClick={() => void savePhone(u)} disabled={savingId === u.id}
-                          className="px-2 py-0.5 text-xs bg-blue-600 text-white rounded disabled:opacity-50">บันทึก</button>
-                        <button type="button" onClick={() => setEditId(null)} disabled={savingId === u.id}
-                          className="px-2 py-0.5 text-xs border border-gray-300 rounded text-gray-600">ยกเลิก</button>
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-2">
-                        <span>{fmtPhone(u.phone)}</span>
-                        <button type="button" onClick={() => startEdit(u)} title="แก้เบอร์"
-                          className="px-1.5 py-0.5 text-xs border border-gray-300 rounded text-gray-600 hover:bg-gray-100">แก้</button>
-                      </span>
-                    )}
+                    {fmtPhone(u.phone)}
                   </td>
                   {/* หัวหน้า/ทีม: ทีมผู้ตรวจที่สังกัด — ช่างที่ยังไม่มีทีมขึ้นเหลือง (งานจะไม่โผล่ให้หัวหน้าคนไหน) */}
                   <td className="px-3 py-3 text-sm whitespace-nowrap">
