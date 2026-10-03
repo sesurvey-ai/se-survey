@@ -5,7 +5,6 @@ import { billingRatesController } from '../controllers/billingRates.controller';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/role';
 import { validate } from '../middleware/validate';
-import { uploadXlsx } from '../config/multer';
 
 const router = Router();
 
@@ -48,8 +47,9 @@ router.get('/users/:id', adminController.getUserById);
 router.post('/users', validate(createUserSchema), adminController.createUser);
 router.put('/users/:id', validate(updateUserSchema), adminController.updateUser);
 router.delete('/users/:id', adminController.deleteUser);
-// นำเข้าทะเบียนพนักงานจาก Excel — ไม่ส่ง apply=1 = แค่ดูแผน ไม่แก้ข้อมูล
-router.post('/staff/import', uploadXlsx, adminController.importStaff);
+// ⛔ นำเข้าทะเบียนพนักงานจากไฟล์ Excel (POST /staff/import) ปิดแล้ว — user สั่ง 03/10/69:
+//    สร้างช่างได้ทางเดียวคือ POST /users ซึ่งบังคับเลือกทีม (ทางไฟล์สร้างช่างไม่มีทีม = งานไม่ขึ้นหน้ารายการงานของหัวหน้า)
+//    แก้เบอร์/ชื่อ/ทีม/ปิดใช้งาน ทำรายคนที่หน้าจัดการผู้ใช้ · อย่าเอากลับมา (tests/surveyorTeamRequired.contract.test.ts)
 
 // Cases CRUD
 const updateCaseSchema = z.object({

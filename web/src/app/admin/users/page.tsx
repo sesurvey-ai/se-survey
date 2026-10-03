@@ -4,14 +4,23 @@
  * จัดการผู้ใช้ — บัญชีทุกบทบาท + ทะเบียนพนักงานสำรวจในหน้าเดียว
  *
  * 14/09/69 ยุบหน้า "ทะเบียนพนักงานสำรวจ" (/admin/staff) เข้ามาที่นี่ (user เคาะว่าซ้ำกัน):
- * เพิ่มคอลัมน์ รหัส · เบอร์โทร (แก้ในตารางได้) · หัวหน้า/ทีม และย้ายปุ่มนำเข้าไฟล์ Excel ของฝ่ายบุคคลมาไว้ด้านบน
+ * เพิ่มคอลัมน์ รหัส · เบอร์โทร (แก้ในตารางได้) · หัวหน้า/ทีม
  * ?role=surveyor = เปิดมาพร้อมกรองช่างสำรวจ (ลิงก์เก่าของหน้าทะเบียนเด้งมาแบบนี้)
+ *
+ * ⛔ ปุ่มนำเข้าทะเบียนจากไฟล์ Excel ของฝ่ายบุคคล เอาออกแล้ว (user สั่ง 03/10/69) — สร้างช่างได้ทางเดียวคือ
+ *    "เพิ่มผู้ใช้ใหม่" ซึ่งบังคับเลือกทีม (ทางไฟล์สร้างช่างไม่มีทีม → งานไม่ขึ้นหน้ารายการงานของหัวหน้า)
+ *    เบอร์/ชื่อ/ทีม/ปิดใช้งาน แก้รายคนในตารางนี้
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import api from '@/lib/api';
 import ResetPasswordDialog from './ResetPasswordDialog';
-import StaffImportPanel, { fmtPhone } from '@/components/admin/StaffImportPanel';
+
+/** เบอร์ 10 หลัก → 0xx-xxx-xxxx · อย่างอื่นโชว์ตามที่เก็บ */
+const fmtPhone = (p?: string | null) => {
+  const d = (p || '').replace(/\D/g, '');
+  return d.length === 10 ? `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}` : (p || '—');
+};
 
 interface User {
   id: number;
@@ -151,16 +160,6 @@ export default function AdminUsersPage() {
           + เพิ่มผู้ใช้ใหม่
         </Link>
       </div>
-
-      {/* นำเข้าจาก Excel ของฝ่ายบุคคล — พับไว้ ใช้ไม่บ่อย */}
-      <details className="bg-white rounded-lg shadow-sm border border-gray-200 mb-4">
-        <summary className="px-4 py-3 text-sm font-medium text-gray-700 cursor-pointer select-none">
-          นำเข้าทะเบียนพนักงานสำรวจจากไฟล์ Excel ของฝ่ายบุคคล (เติมเบอร์ · แก้ชื่อ · ย้ายเข้าทีมหัวหน้า · สร้างบัญชี · ปิดคนที่ออก)
-        </summary>
-        <div className="px-4 pb-4">
-          <StaffImportPanel onApplied={fetchUsers} />
-        </div>
-      </details>
 
       {/* Filters */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-4 flex flex-wrap gap-4">

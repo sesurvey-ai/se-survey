@@ -2,8 +2,6 @@ import { Request, Response } from 'express';
 import { adminService } from '../services/admin.service';
 import { sendSuccess } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
-import { planImport, applyImport } from '../services/staffImport.service';
-import { AppError } from '../middleware/errorHandler';
 
 export const adminController = {
   getDashboardStats: asyncHandler(async (_req: Request, res: Response) => {
@@ -106,24 +104,5 @@ export const adminController = {
   deleteReview: asyncHandler(async (req: Request, res: Response) => {
     await adminService.deleteReview(Number(req.params.id));
     sendSuccess(res, { message: 'Review deleted' });
-  }),
-
-  // ── นำเข้าทะเบียนพนักงานจากไฟล์ Excel ของฝ่ายบุคคล ──
-  // ค่าเริ่มต้นคือ "ดูแผนก่อน" เสมอ — ต้องส่ง apply=1 มาถึงจะแก้ข้อมูลจริง
-  importStaff: asyncHandler(async (req: Request, res: Response) => {
-    const file = (req.file as Express.Multer.File | undefined);
-    if (!file) throw new AppError(400, 'กรุณาแนบไฟล์ Excel (.xlsx)');
-    const on = (k: string) => String(req.body?.[k] ?? '') === '1';
-    if (String(req.body?.apply ?? '') !== '1') {
-      sendSuccess(res, { mode: 'plan', ...(await planImport(file.buffer)) });
-      return;
-    }
-    const result = await applyImport(file.buffer, {
-      passwordMode: String(req.body?.password_mode ?? '') === 'code3' ? 'code3' as const : 'fixed' as const,
-      newPassword: String(req.body?.new_password ?? ''),
-      doCreate: on('do_create'), doPhone: on('do_phone'), doName: on('do_name'),
-      doSupervisor: on('do_supervisor'), doDeactivate: on('do_deactivate'),
-    });
-    sendSuccess(res, { mode: 'apply', ...result });
   }),
 };

@@ -93,7 +93,7 @@ export default function NewUserPage() {
 
           {form.role === 'surveyor' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">หัวหน้า/ทีมที่สังกัด <span className="text-red-500">*</span> <span className="text-gray-400 font-normal">— หน้างานรอตรวจของหัวหน้าจะเห็นงานของช่างคนนี้</span></label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">หัวหน้า/ทีมที่สังกัด <span className="text-red-500">*</span> <span className="text-gray-400 font-normal">— หน้ารายการงานของหัวหน้าทีมนี้จะเห็นงานของช่างคนนี้</span></label>
               <select value={form.staff_group_id} onChange={(e) => setForm({ ...form, staff_group_id: e.target.value })} required
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900">
                 <option value="">— เลือกหัวหน้า —</option>
