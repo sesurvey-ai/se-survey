@@ -4,6 +4,7 @@ import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import api from '@/lib/api';
+import { phoneDigits, phoneError } from '@/lib/phone';
 
 export default function NewUserPage() {
   const router = useRouter();
@@ -13,6 +14,7 @@ export default function NewUserPage() {
     password: '',
     first_name: '',
     last_name: '',
+    phone: '',
     role: 'surveyor',
     staff_group_id: '',
   });
@@ -27,9 +29,15 @@ export default function NewUserPage() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
+    const badPhone = phoneError(form.phone);
+    if (badPhone) { setError(badPhone); return; }
     setSubmitting(true);
     try {
-      const payload: Record<string, unknown> = { ...form, staff_group_id: form.role === 'surveyor' && form.staff_group_id ? Number(form.staff_group_id) : undefined };
+      const payload: Record<string, unknown> = {
+        ...form,
+        phone: phoneDigits(form.phone) || undefined,   // เก็บตัวเลขล้วน ('096-9829655' → '0969829655') · ว่าง = ไม่ส่ง
+        staff_group_id: form.role === 'surveyor' && form.staff_group_id ? Number(form.staff_group_id) : undefined,
+      };
       const res = await api.post('/api/admin/users', payload);
       if (res.data.success) {
         router.push('/admin/users');
@@ -57,7 +65,8 @@ export default function NewUserPage() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
-            <input type="text" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900" required />
+            {/* autoComplete: กันเบราว์เซอร์เติม username/รหัสผ่านที่จำไว้ของคนที่ล็อกอินอยู่ (เช่น admin01) ลงบัญชีใหม่ — เจอ 03/10/69 */}
+            <input type="text" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} autoComplete="off" className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900" required />
           </div>
 
           <div>
@@ -67,7 +76,7 @@ export default function NewUserPage() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">รหัสผ่าน</label>
-            <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900" minLength={8} required />
+            <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} autoComplete="new-password" className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900" minLength={8} required />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -79,6 +88,13 @@ export default function NewUserPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">นามสกุล</label>
               <input type="text" value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900" required />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">เบอร์โทร <span className="text-gray-400 font-normal">— ใส่ขีดได้ · แอปมือถือเติมช่อง &quot;โทรศัพท์สำรวจ&quot; ให้จากเบอร์นี้</span></label>
+            <input type="tel" inputMode="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="เช่น 081-234-5678" autoComplete="off" maxLength={20}
+              className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 ${form.role === 'surveyor' && !phoneDigits(form.phone) ? 'border-amber-400 bg-amber-50' : 'border-gray-300'}`} />
+            {form.role === 'surveyor' && !phoneDigits(form.phone) && <p className="text-xs text-amber-700 mt-1">ช่างที่ไม่มีเบอร์ต้องพิมพ์เบอร์เองทุกงานในแอป (EMCS บังคับช่องนี้)</p>}
           </div>
 
           <div>

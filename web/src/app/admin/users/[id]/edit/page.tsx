@@ -4,6 +4,7 @@ import { useState, useEffect, FormEvent } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import api from '@/lib/api';
+import { phoneDigits, phoneError } from '@/lib/phone';
 
 export default function EditUserPage() {
   const router = useRouter();
@@ -14,6 +15,7 @@ export default function EditUserPage() {
     first_name: '',
     last_name: '',
     code: '',
+    phone: '',
     role: '',
     is_active: true,
     password: '',
@@ -35,6 +37,7 @@ export default function EditUserPage() {
             first_name: u.first_name,
             last_name: u.last_name,
             code: u.code || '',
+            phone: u.phone || '',
             role: u.role,
             is_active: u.is_active,
             password: '',
@@ -50,12 +53,15 @@ export default function EditUserPage() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
+    const badPhone = phoneError(form.phone);
+    if (badPhone) { setError(badPhone); return; }
     setSubmitting(true);
     try {
       const payload: Record<string, unknown> = {
         first_name: form.first_name,
         last_name: form.last_name,
         code: form.code.trim() || null,
+        phone: phoneDigits(form.phone) || null,   // ตัวเลขล้วน · ลบช่องให้ว่าง = ลบเบอร์
         role: form.role,
         is_active: form.is_active,
       };
@@ -108,6 +114,13 @@ export default function EditUserPage() {
           </div>
 
           <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">เบอร์โทร <span className="text-gray-400 font-normal">— ใส่ขีดได้ · แอปมือถือเติมช่อง &quot;โทรศัพท์สำรวจ&quot; ให้จากเบอร์นี้</span></label>
+            <input type="tel" inputMode="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="เช่น 081-234-5678" autoComplete="off" maxLength={20}
+              className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 ${form.role === 'surveyor' && !phoneDigits(form.phone) ? 'border-amber-400 bg-amber-50' : 'border-gray-300'}`} />
+            {form.role === 'surveyor' && !phoneDigits(form.phone) && <p className="text-xs text-amber-700 mt-1">ช่างที่ไม่มีเบอร์ต้องพิมพ์เบอร์เองทุกงานในแอป (EMCS บังคับช่องนี้)</p>}
+          </div>
+
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">บทบาท</label>
             <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900">
               <option value="admin">ผู้ดูแลระบบ</option>
@@ -130,7 +143,8 @@ export default function EditUserPage() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">รหัสผ่านใหม่ (เว้นว่างถ้าไม่ต้องการเปลี่ยน)</label>
-            <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900" minLength={8} />
+            {/* new-password: กันเบราว์เซอร์เติมรหัสที่จำไว้ของคนที่ล็อกอินอยู่ แล้วกดบันทึกเปลี่ยนรหัสช่างโดยไม่รู้ตัว */}
+            <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} autoComplete="new-password" className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900" minLength={8} />
           </div>
 
           <div className="flex items-center gap-2">

@@ -15,12 +15,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import api from '@/lib/api';
 import ResetPasswordDialog from './ResetPasswordDialog';
-
-/** เบอร์ 10 หลัก → 0xx-xxx-xxxx · อย่างอื่นโชว์ตามที่เก็บ */
-const fmtPhone = (p?: string | null) => {
-  const d = (p || '').replace(/\D/g, '');
-  return d.length === 10 ? `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}` : (p || '—');
-};
+import { fmtPhone, phoneDigits, phoneError } from '@/lib/phone';
 
 interface User {
   id: number;
@@ -125,11 +120,12 @@ export default function AdminUsersPage() {
     }
   };
 
-  const startEdit = (u: User) => { setEditId(u.id); setEditVal((u.phone || '').replace(/\D/g, '')); setMsg(''); };
+  const startEdit = (u: User) => { setEditId(u.id); setEditVal(phoneDigits(u.phone)); setMsg(''); };
   const savePhone = async (u: User) => {
-    const digits = editVal.replace(/\D/g, '');
-    if (digits && (digits.length < 9 || digits.length > 10)) {
-      setMsg('ไม่สำเร็จ: เบอร์ต้องเป็นตัวเลข 9–10 หลัก (เช่น 0812345678)');
+    const digits = phoneDigits(editVal);
+    const bad = phoneError(editVal);
+    if (bad) {
+      setMsg('ไม่สำเร็จ: ' + bad);
       return;
     }
     setSavingId(u.id);
