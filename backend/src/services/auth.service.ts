@@ -8,8 +8,9 @@ import { assertStrongPassword } from './password';
 
 export const authService = {
   async login(username: string, password: string) {
+    // phone = เบอร์ของตัวเอง → แอปเติมช่อง "โทรศัพท์สำรวจ" (ช่องบังคับ EMCS) ให้ช่างไม่ต้องพิมพ์ทุกงาน (03/10/69)
     const result = await db.query(
-      'SELECT id, username, password_hash, first_name, last_name, role, code, is_active FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1',
+      'SELECT id, username, password_hash, first_name, last_name, role, code, phone, is_active FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1',
       [username]
     );
 

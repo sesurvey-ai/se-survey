@@ -20,7 +20,7 @@ import '../data/survey_master.dart'
          kTitles, kRelations, kCarTypeCodeToLabel, kEvCodeToLabel, kPolicyTypes;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:image_picker/image_picker.dart';
-import '../widgets/form_kit.dart' show kCidField, kPhoneFormatters;
+import '../widgets/form_kit.dart' show kCidField, kPhoneFormatters, kPhoneMaxLen;
 import 'survey/opponent_editor.dart';
 import 'survey/injured_editor.dart';
 import 'survey/property_editor.dart';
@@ -913,6 +913,15 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
           _accSurveyorCtl.text = full;
           _scheduleAutosave();
         }
+      }
+    }
+    // เติม "โทรศัพท์สำรวจ" (ช่องบังคับ EMCS) จากเบอร์ในทะเบียนพนักงานของคนที่ล็อกอิน เมื่อช่องยังว่าง (user สั่ง 03/10/69)
+    // เดิมช่างต้องพิมพ์เบอร์ตัวเองทุกงาน · ตัดให้เหลือตัวเลขไม่เกิน 10 หลักตามกติกาช่อง (kPhoneFormatters)
+    if (mounted && _accSurveyorPhoneCtl.text.trim().isEmpty) {
+      final digits = (context.read<AuthProvider>().user?.phone ?? '').replaceAll(RegExp(r'\D'), '');
+      if (digits.isNotEmpty) {
+        _accSurveyorPhoneCtl.text = digits.length > kPhoneMaxLen ? digits.substring(0, kPhoneMaxLen) : digits;
+        _scheduleAutosave();
       }
     }
   }
@@ -3121,6 +3130,12 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
       (e['8. ทรัพย์สิน'] ??= <String>[])
           .add('เกิน 30 ชิ้น (${_property.length}) — EMCS รับได้สูงสุด 30 ส่วนเกินจะไม่ถูกนำเข้า');
     }
+    // ไม่มีรูปเลย → เตือนก่อนส่ง (user สั่ง 03/10/69 หลังเทส emulator: เดิมขึ้น "ข้อมูลครบ" ทั้งที่รูป 0 ใบ)
+    // เตือนแต่ไม่บล็อก — ยังกด "ส่งทั้งที่ยังไม่ครบ" ได้ · ไม่บังคับว่าต้องเป็นรูปรถประกัน เพราะไปแล้วไม่พบรถ
+    // ก็ต้องส่งรูปสถานที่แทน · รูปถึงที่เกิดเหตุไม่นับ (อยู่นอก _photoPaths และไม่เข้า EMCS)
+    if (_photoPaths.isEmpty) {
+      e['รูปภาพ'] = ['ยังไม่มีรูปเลย — ถ้าไปแล้วไม่พบรถ ให้ถ่ายรูปสถานที่แนบไว้ (หมวด "รูปประกอบ")'];
+    }
     return e;
   }
 
@@ -3166,7 +3181,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
         _reviewMini('6. คู่กรณี', _optText(_hasOpponents, _opponents, 'คัน'), Icons.groups_2_outlined, () => _go(_SView.s6), alert: _optBad(_hasOpponents, _opponents)),
         _reviewMini('7. ผู้บาดเจ็บ', _optText(_hasInjured, _injured, 'คน'), MyFlutterApp.procedures, () => _go(_SView.injured), alert: _optBad(_hasInjured, _injured)),
         _reviewMini('8. ทรัพย์สิน', _optText(_hasProperty, _property, 'ชิ้น'), Icons.category, () => _go(_SView.property), alert: _optBad(_hasProperty, _property)),
-        _reviewMini('รูปภาพ', '${_photoPaths.length} รูป', MyFlutterApp.camera, () => _go(_SView.photos)),
+        _reviewMini('รูปภาพ', '${_photoPaths.length} รูป', MyFlutterApp.camera, () => _go(_SView.photos), alert: _photoPaths.isEmpty),
         const SizedBox(height: 10),
         const Text('กด "ส่งรายงาน" ด้านล่างเพื่อส่งเข้าระบบ', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: _muted)),
       ]),
@@ -3241,6 +3256,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> with WidgetsBinding
       '1. เคลม & กรมธรรม์': _SView.s1, '2. รถประกัน': _SView.s2, '3. ผู้ขับขี่': _SView.s3,
       '4. ความเสียหาย': _SView.s4, '5. สถานที่เกิดเหตุ': _SView.s5,
       '6. คู่กรณี': _SView.s6, '7. ผู้บาดเจ็บ': _SView.injured, '8. ทรัพย์สิน': _SView.property,
+      'รูปภาพ': _SView.photos,
     };
     showModalBottomSheet(
       context: context,

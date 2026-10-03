@@ -3,8 +3,9 @@ import { NotFoundError } from '../middleware/errorHandler';
 
 export const userService = {
   async getProfile(userId: number) {
+    // phone: แอปที่ล็อกอินค้างไว้ก่อนอัปเดตได้เบอร์จากตรงนี้ (refresh ตอนเปิดแอป) — ใช้เติมช่อง "โทรศัพท์สำรวจ"
     const result = await db.query(
-      'SELECT id, username, first_name, last_name, role, code, supervisor_id, is_active, created_at FROM users WHERE id = $1',
+      'SELECT id, username, first_name, last_name, role, code, phone, supervisor_id, is_active, created_at FROM users WHERE id = $1',
       [userId]
     );
 

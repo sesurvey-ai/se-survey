@@ -5,6 +5,8 @@ class User {
   final String lastName;
   final String role;
   final String code; // รหัสพนักงาน เช่น SE480 (ว่างได้ถ้า user ไม่มีรหัส)
+  // เบอร์ของตัวเองจากทะเบียนพนักงาน — เติมช่อง "โทรศัพท์สำรวจ" ให้ (ว่างได้: บัญชีที่ยังไม่มีเบอร์ / server เก่า)
+  final String phone;
 
   User({
     required this.id,
@@ -13,6 +15,7 @@ class User {
     required this.lastName,
     required this.role,
     this.code = '',
+    this.phone = '',
   });
 
   factory User.fromJson(Map<String, dynamic> json) => User(
@@ -22,6 +25,7 @@ class User {
         lastName: json['last_name'] ?? '',
         role: json['role'] ?? '',
         code: json['code'] ?? '',
+        phone: (json['phone'] ?? '').toString(),
       );
 
   Map<String, dynamic> toJson() => {
@@ -31,5 +35,6 @@ class User {
         'last_name': lastName,
         'role': role,
         'code': code,
+        'phone': phone,
       };
 }

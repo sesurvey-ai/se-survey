@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../services/api_service.dart' show AppVersion;
 
 // ── Design tokens (from "SE Survey · Login Redesign" — Style B Minimal) ──
 const Color _accent = Color(0xFF1D5BE0);
@@ -22,6 +23,17 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   String? _localError;
+  // เลขเวอร์ชันอ่านจากตัวแอปเอง (pubspec → APK) — เดิมพิมพ์ตายตัว 'เวอร์ชัน 1.0.0' ไม่ตรงกับเครื่องจริง
+  // ขยับเลขใน pubspec แล้วหน้านี้ตามเองทุกครั้ง ไม่ต้องแก้ที่นี่ (user สั่ง 03/10/69)
+  String _version = '';
+
+  @override
+  void initState() {
+    super.initState();
+    AppVersion.get().then((v) {
+      if (mounted) setState(() => _version = v.split('+').first);
+    });
+  }
 
   @override
   void dispose() {
@@ -168,7 +180,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 20),
                         Center(
-                          child: Text('เวอร์ชัน 1.0.0',
+                          child: Text(_version.isEmpty ? '' : 'เวอร์ชัน $_version',
                               style: _body(12.5, color: _muted)),
                         ),
                       ],
