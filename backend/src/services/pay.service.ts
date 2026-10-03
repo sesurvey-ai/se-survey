@@ -221,7 +221,7 @@ export function computePay(rates: ResolvedRates, input: PayInput): PayResult {
 
 import { amphurCode, provinceCode, tumbonCode } from './areaCode.service';
 import { lumpSumFee, loadLumpRules, amphurLump, loadAmphurLumpRules } from './lumpSum';
-import { isNotFoundFault } from './photoFee.service';
+import { isNotFoundFault, isThaiPaiboon } from './photoFee.service';
 
 /** ช่องรายรับฝั่งพนักงาน (บวกเข้ายอดรวม) — ชื่อคีย์ตรงกับคอลัมน์ใน survey_pay */
 export const PAY_MONEY_FIELDS = [
@@ -291,14 +291,14 @@ export async function getCasePay(caseId: number, override: PayLocationOverride =
   const r = (await db.query(
     `SELECT sr.acc_province, sr.acc_district, sr.acc_subdistrict,
             sr.survey_province, sr.survey_district, sr.survey_subdistrict,
-            sr.acc_surveyor, sr.claim_type, sr.survey_job_no, sr.acc_fault, c.source,
+            sr.acc_surveyor, sr.claim_type, sr.survey_job_no, sr.acc_fault, sr.insurance_company, c.source,
             (SELECT count(*) FROM survey_photos sp WHERE sp.report_id = sr.id) AS photo_count
        FROM survey_reports sr
        JOIN cases c ON c.id = sr.case_id
       WHERE sr.case_id = $1`, [caseId])).rows[0] as
     | { acc_province?: string; acc_district?: string; acc_subdistrict?: string;
         survey_province?: string; survey_district?: string; survey_subdistrict?: string; acc_surveyor?: string;
-        claim_type?: string; survey_job_no?: string; acc_fault?: string; photo_count?: string; source?: string }
+        claim_type?: string; survey_job_no?: string; acc_fault?: string; insurance_company?: string; photo_count?: string; source?: string }
     | undefined;
 
   if (!r) return { saved, suggest: null, area: null };
@@ -384,6 +384,8 @@ export async function getCasePay(caseId: number, override: PayLocationOverride =
     ins_note: fromIsurveyFile ? null : (lump?.note ?? amphurLumpRule?.note ?? null),
     /** ผลคดี "ไปถึงแล้วไม่พบ" — ระบบไม่เติมเรท (ดูข้างล่าง) */
     not_found: false,
+    /** งานไทยไพบูลย์ — ระบบยังไม่เติมเรท (ดูข้างล่าง) */
+    thai_paiboon: false,
     /** เรทเต็มของพื้นที่นี้ ส่งไว้ให้หน้าตรวจ "โชว์ประกอบ" เฉพาะงานไปถึงแล้วไม่พบ — ไม่เติมลงช่อง */
     full_rate: null as { ins_service: number | null; ins_travel: number | null; staff: number | null } | null,
     snapshot: (lump ? { ...pay.snapshot, lump_sum: { label: lump.label, seq: lump.seq, fee: lump.fee } }
@@ -406,6 +408,21 @@ export async function getCasePay(caseId: number, override: PayLocationOverride =
     suggest.ins_note = null;
     suggest.not_found = true;
     suggest.snapshot = { ...suggest.snapshot, not_found: true };
+  }
+  /**
+   * ── งานไทยไพบูลย์ (เลขเซอร์เวย์ SETP) → ยังไม่เติมเรทเลยทั้ง 2 ฝั่ง ให้หัวหน้ากรอกเองทั้งหมด (user เคาะ 03/10/69) ──
+   * ตารางเรทในระบบมาจากงานไอโออิ · เรทของไทยไพบูลย์ตรวจกับงานจริงแล้วแต่ user ยังไม่ให้ตั้งเข้าระบบ
+   * เดิมระบบเติมเรทไอโออิให้งานไทยไพบูลย์เงียบ ๆ (ไม่ใช่ยอดที่เบิกจริง) · ไม่ส่ง full_rate (เรทไอโออิใช้อ้างอิงไม่ได้)
+   * ค่ารูปไม่มีอยู่แล้ว (photoFee ข้อ 1) · ⛔ ตั้งเรทไทยไพบูลย์เมื่อไหร่ ให้ user สั่งก่อน แล้วค่อยเอาข้อนี้ออก
+   */
+  if (isThaiPaiboon(r as Record<string, unknown>)) {
+    suggest.service_fee = null;
+    suggest.ins_service_fee = null;
+    suggest.ins_travel_fee = null;
+    suggest.ins_note = null;
+    suggest.full_rate = null;
+    suggest.thai_paiboon = true;
+    suggest.snapshot = { ...suggest.snapshot, thai_paiboon: true };
   }
   return {
     saved,

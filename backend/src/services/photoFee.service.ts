@@ -52,8 +52,8 @@ function isBangkokSurvey(row: Record<string, unknown>): boolean | null {
   return null;   // ยังบอกไม่ได้ — ผู้เรียกต้องไม่เดาแทน
 }
 
-/** ไทยไพบูลย์ไหม — จากเลขเซอร์เวย์ก่อน ถ้าไม่มีค่อยดูชื่อบริษัท (สะกดหลายแบบ) */
-function isThaiPaiboon(row: Record<string, unknown>): boolean {
+/** ไทยไพบูลย์ไหม — จากเลขเซอร์เวย์ก่อน ถ้าไม่มีค่อยดูชื่อบริษัท (สะกดหลายแบบ) · ใช้ร่วมกับ pay.service (ไม่เติมเรท 03/10/69) */
+export function isThaiPaiboon(row: Record<string, unknown>): boolean {
   const job = String(row.survey_job_no ?? '').trim().toUpperCase();
   if (job.startsWith('SETP')) return true;
   if (job.startsWith('SEABI')) return false;
