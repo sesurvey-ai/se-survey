@@ -82,10 +82,7 @@ export default function LoginPage() {
             {isLoading ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ'}
           </button>
         </form>
-
-        <div className="mt-6 text-center text-xs text-gray-400">
-          <p>callcenter / checker — ใช้รหัสเดียวกัน</p>
-        </div>
+        {/* ⛔ อย่าใส่คำใบ้เรื่องรหัสผ่าน/ชื่อบัญชีในหน้านี้ — ใครก็เปิดได้ (เคยมี "callcenter / checker — ใช้รหัสเดียวกัน" · user สั่งลบ 03/10/69) */}
       </div>
     </div>
   );
