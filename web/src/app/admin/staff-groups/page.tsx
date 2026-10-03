@@ -10,7 +10,9 @@ import React, { useCallback, useEffect, useState } from 'react';
 import api from '@/lib/api';
 
 type Member = { id: number; staff_name: string; staff_code: string | null; surveyor_id: number | null; surveyor_name?: string | null; surveyor_active?: boolean | null };
-type Group = { id: number; name: string; checker_id: number | null; checker_name?: string | null; checker_username?: string | null; member_count?: number; members?: Member[] };
+type Group = { id: number; name: string; checker_id: number | null; checker_name?: string | null; checker_username?: string | null; member_count?: number; members?: Member[];
+  /** เห็นงานไทยไพบูลย์ทั้งหมดในหน้ารายการงาน โดยไม่ต้องย้ายช่าง (03/10/69 — ทีมสราวุธ) */
+  sees_thaipaiboon?: boolean };
 type Checker = { id: number; username: string; first_name: string; last_name: string; role: string; is_active: boolean };
 
 const errMsg = (e: unknown) =>
@@ -76,6 +78,11 @@ export default function StaffGroupsAdminPage() {
     await loadGroups(sel.id);
   }, checkerId ? 'ผูกบัญชีผู้ตรวจแล้ว' : 'ยกเลิกการผูกบัญชีแล้ว');
 
+  const setThaiPaiboon = (on: boolean) => sel && run(async () => {
+    await api.put(`/api/staff-groups/${sel.id}`, { sees_thaipaiboon: on });
+    await loadGroups(sel.id);
+  }, on ? 'ทีมนี้เห็นงานไทยไพบูลย์ทั้งหมดแล้ว' : 'เลิกให้ทีมนี้เห็นงานไทยไพบูลย์ทั้งหมดแล้ว');
+
   const addMember = () => sel && run(async () => {
     await api.post(`/api/staff-groups/${sel.id}/members`, { staff_name: newMember });
     setNewMember(''); await loadGroups(sel.id);
@@ -110,6 +117,7 @@ export default function StaffGroupsAdminPage() {
                   <div className="font-medium text-gray-800">{g.name}</div>
                   <div className="text-xs text-gray-500">
                     สมาชิก {g.member_count ?? 0} · {g.checker_username ? `บัญชี ${g.checker_username}` : <span className="text-amber-700">ยังไม่ผูกบัญชี</span>}
+                    {g.sees_thaipaiboon ? ' · เห็นงานไทยไพบูลย์ทั้งหมด' : ''}
                   </div>
                 </button>
               </li>
@@ -141,6 +149,17 @@ export default function StaffGroupsAdminPage() {
                 </label>
                 <button type="button" disabled={busy} onClick={removeGroup} className="text-xs text-red-700 hover:underline disabled:opacity-50">ลบทีม</button>
               </div>
+
+              {/* 03/10/69 user สั่ง: สราวุธตรวจเฉพาะไทยไพบูลย์ (ช่างกรุงเทพทุกคน) โดยไม่ย้ายช่าง — ช่างอยู่ได้ทีมเดียว
+                  ย้ายเข้าทีมนี้ = หัวหน้าไอโออิที่ดูแลอยู่ไม่เห็นงานแอปของช่างอีก → ติ๊กที่ทีมแทน */}
+              <label className="flex items-start gap-2 text-sm text-gray-700">
+                <input type="checkbox" checked={Boolean(sel.sees_thaipaiboon)} disabled={busy}
+                  onChange={(e) => setThaiPaiboon(e.target.checked)} className="mt-0.5" />
+                <span>
+                  เห็นงานไทยไพบูลย์ทั้งหมดในหน้า &quot;รายการงาน&quot; — ไม่ต้องย้ายช่างเข้าทีมนี้ ช่างยังอยู่ทีมเดิม
+                  <span className="block text-xs text-gray-500">หัวหน้าทีมนี้เห็นงานไทยไพบูลย์ทุกเรื่อง + งานของลูกทีม (ถ้ามี) + งานที่ดึง/สร้างเอง · หัวหน้าทีมเดิมของช่างยังเห็นงานของลูกทีมตามปกติ</span>
+                </span>
+              </label>
 
               <div className="flex gap-2">
                 <input value={newMember} onChange={(e) => setNewMember(e.target.value)}

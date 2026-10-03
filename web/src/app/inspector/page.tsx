@@ -31,11 +31,13 @@ export default function InspectorDashboard() {
   /** null = backend รุ่นก่อน 03/10/69 (คืนทุกสถานะมาในก้อนเดียว) — หน้านี้ทำงานแบบเดิมจนกว่า backend จะ deploy เสร็จ */
   const [meta, setMeta] = useState<ActiveMeta | null>(null);
   /** ทีมของหัวหน้า (staff_groups) — รายการงานถูกกรองตามทีมที่ backend แล้ว ตรงนี้แค่บอกให้รู้ว่ากรองอยู่ (07/09/69) */
-  const [team, setTeam] = useState<{ name: string; member_count?: number } | null>(null);
+  const [team, setTeam] = useState<{ name: string; member_count?: number; thaiPaiboon?: boolean } | null>(null);
   useEffect(() => {
     api.get('/api/staff-groups/mine').then((r) => {
       const g = r.data?.data;
-      setTeam(g && (g.member_count ?? (g.members?.length ?? 0)) > 0 ? { name: g.name, member_count: g.member_count ?? g.members?.length } : null);
+      const n = g ? (g.member_count ?? (g.members?.length ?? 0)) : 0;
+      // ทีมที่ตั้ง "เห็นงานไทยไพบูลย์ทั้งหมด" (ทีมสราวุธ 03/10/69) ถูกกรองแม้ยังไม่มีลูกทีม — ต้องบอกให้รู้ว่ากรองอยู่
+      setTeam(g && (n > 0 || g.sees_thaipaiboon) ? { name: g.name, member_count: n, thaiPaiboon: Boolean(g.sees_thaipaiboon) } : null);
     }).catch(() => setTeam(null));
   }, []);
   const [loading, setLoading] = useState(true);
@@ -335,7 +337,9 @@ export default function InspectorDashboard() {
             <span>งานที่รอการตรวจสอบและอนุมัติ</span>
             {team && (
               <span className="ml-2 text-xs text-blue-800" title="กรองตามรายชื่อลูกทีมที่แอดมินตั้งไว้ · งานที่คุณดึง/สร้างเองแสดงด้วยเสมอ · ดูรายชื่อที่เมนู ลูกทีมของฉัน">
-                · เฉพาะงานของทีม {team.name}{team.member_count ? ` (${team.member_count} รายชื่อ)` : ''}
+                {team.thaiPaiboon
+                  ? <>· งานไทยไพบูลย์ทั้งหมด{team.member_count ? ` + ทีม ${team.name} (${team.member_count} รายชื่อ)` : ''}</>
+                  : <>· เฉพาะงานของทีม {team.name}{team.member_count ? ` (${team.member_count} รายชื่อ)` : ''}</>}
               </span>
             )}
             {freshAt && (

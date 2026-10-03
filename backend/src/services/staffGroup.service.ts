@@ -17,6 +17,8 @@ export interface StaffMember {
 export interface StaffGroup {
   id: number; name: string; checker_id: number | null; checker_name?: string | null; checker_username?: string | null;
   member_count?: number; members?: StaffMember[];
+  /** เห็นงานไทยไพบูลย์ทั้งหมดในหน้ารายการงาน โดยไม่ต้องย้ายช่าง (migration 071 · ทีมสราวุธ 03/10/69) */
+  sees_thaipaiboon?: boolean;
 }
 
 /** รหัสช่างที่นำหน้าข้อความ ("SEC343 นาย มี …" → "SEC343") · ไม่มี = null (บริษัท OSS) */
@@ -68,7 +70,7 @@ async function surveyorIdByCode(code: string | null): Promise<number | null> {
 export const staffGroupService = {
   async list(): Promise<StaffGroup[]> {
     const r = await db.query(
-      `SELECT g.id, g.name, g.checker_id, u.username AS checker_username,
+      `SELECT g.id, g.name, g.checker_id, g.sees_thaipaiboon, u.username AS checker_username,
               CASE WHEN u.id IS NULL THEN NULL ELSE TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')) END AS checker_name,
               (SELECT COUNT(*)::int FROM staff_group_members m WHERE m.group_id = g.id) AS member_count
          FROM staff_groups g LEFT JOIN users u ON u.id = g.checker_id
@@ -78,7 +80,7 @@ export const staffGroupService = {
 
   async get(id: number): Promise<StaffGroup> {
     const r = await db.query(
-      `SELECT g.id, g.name, g.checker_id, u.username AS checker_username,
+      `SELECT g.id, g.name, g.checker_id, g.sees_thaipaiboon, u.username AS checker_username,
               CASE WHEN u.id IS NULL THEN NULL ELSE TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')) END AS checker_name
          FROM staff_groups g LEFT JOIN users u ON u.id = g.checker_id WHERE g.id = $1`, [id]);
     if (r.rows.length === 0) throw new NotFoundError('ไม่พบทีมนี้');
@@ -101,13 +103,15 @@ export const staffGroupService = {
     return this.get(r.rows[0].id);
   },
 
-  async update(id: number, patch: { name?: string; checker_id?: number | null }): Promise<StaffGroup> {
+  async update(id: number, patch: { name?: string; checker_id?: number | null; sees_thaipaiboon?: boolean }): Promise<StaffGroup> {
     if (patch.checker_id) await assertChecker(patch.checker_id);
     const r = await db.query(
       `UPDATE staff_groups SET name = COALESCE(NULLIF($2, ''), name),
-              checker_id = CASE WHEN $3::boolean THEN $4 ELSE checker_id END, updated_at = now()
+              checker_id = CASE WHEN $3::boolean THEN $4 ELSE checker_id END,
+              sees_thaipaiboon = COALESCE($5::boolean, sees_thaipaiboon), updated_at = now()
         WHERE id = $1 RETURNING id`,
-      [id, patch.name?.trim() ?? '', patch.checker_id !== undefined, patch.checker_id ?? null]);
+      [id, patch.name?.trim() ?? '', patch.checker_id !== undefined, patch.checker_id ?? null,
+       typeof patch.sees_thaipaiboon === 'boolean' ? patch.sees_thaipaiboon : null]);
     if (r.rows.length === 0) throw new NotFoundError('ไม่พบทีมนี้');
     // เปลี่ยนบัญชีผู้ตรวจของทีม → หัวหน้าในทะเบียนของลูกทีมทุกคนต้องเปลี่ยนตาม
     if (patch.checker_id !== undefined) {
@@ -171,6 +175,12 @@ export const staffGroupService = {
        ON CONFLICT (group_id, staff_name) DO UPDATE SET staff_code = EXCLUDED.staff_code, surveyor_id = EXCLUDED.surveyor_id`,
       [groupId, staffName, upperCode, userId]);
     await syncSupervisorFromTeam([userId]);
+  },
+
+  /** บัญชีผู้ตรวจนี้คุมทีมที่ "เห็นงานไทยไพบูลย์ทั้งหมด" ไหม (หน้ารายการงาน — migration 071) · แอดมินไม่เกี่ยว (เห็นทั้งหมดอยู่แล้ว) */
+  async seesThaiPaiboon(userId: number): Promise<boolean> {
+    const r = await db.query('SELECT bool_or(sees_thaipaiboon) AS v FROM staff_groups WHERE checker_id = $1', [userId]);
+    return r.rows[0]?.v === true;
   },
 
   /** ทีมปัจจุบันของช่าง (id) — null = ยังไม่มีหัวหน้ากำกับ */

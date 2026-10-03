@@ -40,7 +40,8 @@ check('ขอบเขตทีมมาจากตัวกรองทีม�
 check('กรองใน SQL: งานที่ตัวเองดึง/สร้าง หรือช่างอยู่ในทีม (ใช้ดัชนี)',
   svc.includes('c.created_by = ${$(scope.me)} OR c.assigned_to = ANY(${$(scope.userIds)}::int[])'));
 check('ไม่ดึงทุกทีมมาคัดใน JS แล้ว', !/rows\.filter\(\(r\) =>[\s\S]{0,80}team\.match/.test(svc) && !caseSvc.includes('team.match(`${r.surveyor_code'));
-check('แอดมิน/หัวหน้าที่ยังไม่ผูกทีม = ไม่กรอง (scope null)', /if \(!team\) return null;/.test(svc) && /if \(scope\) parts\.push/.test(svc));
+check('แอดมิน/หัวหน้าที่ยังไม่ผูกทีม = ไม่กรอง (scope null)',
+  svc.includes("const thaiPaiboon = user.role !== 'admin' &&") && /if \(!team && !thaiPaiboon\) return null;/.test(svc) && /if \(scope\) \{\s*parts\.push/.test(svc));
 
 // ── 2) โหลดเต็มเฉพาะงานที่ยังต้องทำ ──
 check('active = รอตรวจ/เสร็จงาน/ตีกลับ ที่ยังไม่ส่งประกัน (ไม่มีอนุมัติแล้ว)',
@@ -65,6 +66,25 @@ check('% _ \\ ที่พิมพ์ค้นเป็นตัวอักษ
 check('"ครั้งที่" ไม่พึ่ง ROW_NUMBER ทั้งก้อนแล้ว (โหลดทีละส่วน) · ไม่มีเลขเคลม = 1',
   !/ROW_NUMBER\(\)\s*OVER/.test(svc) && svc.includes("COALESCE(c.visit_no, CASE WHEN COALESCE(sr.claim_no, '') = '' THEN 1 ELSE ("));
 check('มีดัชนีเลขเคลมให้การนับ "ครั้งที่" ทีละแถว', mig.includes('CREATE INDEX IF NOT EXISTS idx_survey_reports_claim_no ON survey_reports (claim_no);'));
+
+// ── ทีมที่เห็นงานไทยไพบูลย์ทั้งหมด (ทีมสราวุธ 03/10/69) — ไม่ต้องย้ายช่าง ช่างอยู่ได้ทีมเดียว ──
+const sg = read('src', 'services', 'staffGroup.service.ts');
+const sgRoutes = read('src', 'routes', 'staffGroup.routes.ts');
+const mig071 = read('src', 'db', 'migrations', '071_staff_group_sees_thaipaiboon.sql');
+check('ธงระดับทีม sees_thaipaiboon (migration 071 · ค่าเริ่มต้นปิด = ทีมเดิมไม่เปลี่ยน)',
+  mig071.includes('ADD COLUMN IF NOT EXISTS sees_thaipaiboon BOOLEAN NOT NULL DEFAULT false'));
+check('ขอบเขตทีมได้ธงไทยไพบูลย์ — ทีมที่ยังไม่มีลูกทีมก็ถูกกรอง (ไม่หลุดไปเห็นทุกงาน)',
+  svc.includes('thaiPaiboon: boolean } | null') && svc.includes('await staffGroupService.seesThaiPaiboon(user.id)')
+  && svc.includes('if (!team && !thaiPaiboon) return null;') && svc.includes("+ (scope.thaiPaiboon ? ` OR ${THAI_PAIBOON_SQL}` : '')"));
+check('สูตรงานไทยไพบูลย์ฝั่ง SQL = photoFee.isThaiPaiboon (SETP ก่อน · SEABI ไม่ใช่ · ชื่อบริษัทตัดช่องว่าง/ฯ/จุด)',
+  svc.includes("LIKE 'SETP%'") && svc.includes("NOT LIKE 'SEABI%'") && svc.includes("regexp_replace(COALESCE(tp.insurance_company, ''), '\\\\s|ฯ|\\\\.', '', 'g') LIKE '%ไทยไพบูลย์%'"));
+check('แคชรายชื่อช่างแยกตามธง', svc.includes("${scope.thaiPaiboon ? 'tp:' : ''}"));
+check('แอดมินตั้งธงได้ (PUT /api/staff-groups/:id รับเฉพาะ true/false)',
+  sgRoutes.includes("if (typeof b.sees_thaipaiboon === 'boolean') patch.sees_thaipaiboon = b.sees_thaipaiboon;")
+  && sg.includes('sees_thaipaiboon = COALESCE($5::boolean, sees_thaipaiboon)') && /async seesThaiPaiboon\(userId: number\)/.test(sg));
+const sgPage = read('..', 'web', 'src', 'app', 'admin', 'staff-groups', 'page.tsx');
+check('เว็บ: ช่องติ๊กบนหน้าจัดการทีม + หน้ารายการงานบอกว่ากรองแบบไทยไพบูลย์',
+  sgPage.includes("api.put(`/api/staff-groups/${sel.id}`, { sees_thaipaiboon: on })") && page.includes('· งานไทยไพบูลย์ทั้งหมด'));
 
 // ── controller / route ──
 check('GET /review?view=active → reviewList.active · ไม่ส่ง view = ทุกสถานะแบบเดิม (เว็บรุ่นเก่าระหว่าง deploy)',

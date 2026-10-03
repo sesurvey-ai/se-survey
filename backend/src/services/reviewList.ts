@@ -120,8 +120,20 @@ const ROW_SELECT = `
       SELECT j.* FROM emcs_import_jobs j WHERE j.case_id = c.id ORDER BY j.id DESC LIMIT 1
     ) ej ON TRUE`;
 
-/** ขอบเขตทีม — null = ไม่กรอง (แอดมิน / หัวหน้าที่ยังไม่ผูกทีม เห็นทั้งหมดตามเดิม) */
-export type ReviewScope = { me: number; userIds: number[] } | null;
+/**
+ * ขอบเขตทีม — null = ไม่กรอง (แอดมิน / หัวหน้าที่ยังไม่ผูกทีม เห็นทั้งหมดตามเดิม)
+ * thaiPaiboon = ทีมนี้เห็นงานไทยไพบูลย์ทุกเรื่องด้วย (migration 071 — ทีมสราวุธตรวจเฉพาะไทยไพบูลย์ ไม่ต้องย้ายช่าง)
+ */
+export type ReviewScope = { me: number; userIds: number[]; thaiPaiboon: boolean } | null;
+
+/**
+ * งานไทยไพบูลย์ — ⛔ สูตรเดียวกับ photoFee.isThaiPaiboon: เลขเซอร์เวย์ SETP ก่อน · SEABI = ไม่ใช่ · ยังไม่มีเลขค่อยดูชื่อบริษัท
+ * (ตัดช่องว่าง/ฯ/จุดก่อนเทียบ) · EXISTS แทน JOIN จะใช้ได้กับทุกคำสั่งที่มีแค่ cases c
+ */
+export const THAI_PAIBOON_SQL = `EXISTS (SELECT 1 FROM survey_reports tp WHERE tp.case_id = c.id AND (
+  UPPER(BTRIM(COALESCE(tp.survey_job_no, ''))) LIKE 'SETP%'
+  OR (UPPER(BTRIM(COALESCE(tp.survey_job_no, ''))) NOT LIKE 'SEABI%'
+      AND regexp_replace(COALESCE(tp.insurance_company, ''), '\\s|ฯ|\\.', '', 'g') LIKE '%ไทยไพบูลย์%')))`;
 
 /**
  * แปลงทีมของหัวหน้า → รายการ id ผู้ใช้ที่ถือเป็นลูกทีม (คัดทีมในฐานข้อมูลได้ ไม่ต้องดึงทุกทีมมาคัดใน JS)
@@ -134,14 +146,18 @@ export type ReviewScope = { me: number; userIds: number[] } | null;
 export async function reviewScope(user?: ReviewUser): Promise<ReviewScope> {
   if (!user) return null;
   const team = await staffGroupService.filterFor(user.id, user.role);
-  if (!team) return null;
+  // ทีมที่ตั้ง "เห็นงานไทยไพบูลย์ทั้งหมด" ได้ขอบเขตแม้ยังไม่มีลูกทีม (ทีมสราวุธ 0 รายชื่อ — เดิมเลยเห็นทุกงานทุกทีม)
+  const thaiPaiboon = user.role !== 'admin' && await staffGroupService.seesThaiPaiboon(user.id);
+  if (!team && !thaiPaiboon) return null;
   const ids = new Set<number>();
-  for (const m of team.group.members ?? []) if (m.surveyor_id) ids.add(m.surveyor_id);
-  const users = await db.query('SELECT id, code, first_name, last_name FROM users');
-  for (const u of users.rows as Array<{ id: number; code: string | null; first_name: string | null; last_name: string | null }>) {
-    if (team.match(`${u.code ?? ''} ${u.first_name ?? ''} ${u.last_name ?? ''}`.trim())) ids.add(u.id);
+  if (team) {
+    for (const m of team.group.members ?? []) if (m.surveyor_id) ids.add(m.surveyor_id);
+    const users = await db.query('SELECT id, code, first_name, last_name FROM users');
+    for (const u of users.rows as Array<{ id: number; code: string | null; first_name: string | null; last_name: string | null }>) {
+      if (team.match(`${u.code ?? ''} ${u.first_name ?? ''} ${u.last_name ?? ''}`.trim())) ids.add(u.id);
+    }
   }
-  return { me: user.id, userIds: [...ids] };
+  return { me: user.id, userIds: [...ids], thaiPaiboon };
 }
 
 /** คำค้นแบบ "มีคำนี้อยู่ตรงไหนก็ได้" สำหรับ ILIKE — % _ \ ที่พิมพ์มาเป็นตัวอักษรธรรมดา ไม่ใช่ wildcard */
@@ -152,7 +168,10 @@ function whereOf(base: string, scope: ReviewScope, f: { q?: string; src?: string
   const values: unknown[] = [];
   const $ = (v: unknown) => { values.push(v); return `$${values.length}`; };
   const parts = [base];
-  if (scope) parts.push(`c.created_by = ${$(scope.me)} OR c.assigned_to = ANY(${$(scope.userIds)}::int[])`);
+  if (scope) {
+    parts.push(`c.created_by = ${$(scope.me)} OR c.assigned_to = ANY(${$(scope.userIds)}::int[])`
+      + (scope.thaiPaiboon ? ` OR ${THAI_PAIBOON_SQL}` : ''));
+  }
   if (f.src) parts.push(`COALESCE(c.source, 'mobile') = ${$(f.src)}`);
   if (f.who) parts.push(`${SURVEYOR_LABEL_SQL} = ${$(f.who)}`);
   const q = (f.q ?? '').trim();
@@ -180,7 +199,7 @@ const idsOf = (rows: Array<{ id: number }>) => rows.map((r) => Number(r.id));
 const SURVEYOR_TTL_MS = 120_000;
 const surveyorCache = new Map<string, { at: number; list: string[] }>();
 async function surveyorLabels(scope: ReviewScope): Promise<string[]> {
-  const key = scope ? `${scope.me}:${scope.userIds.join(',')}` : '*';
+  const key = scope ? `${scope.me}:${scope.thaiPaiboon ? 'tp:' : ''}${scope.userIds.join(',')}` : '*';
   const now = Date.now();
   const hit = surveyorCache.get(key);
   if (hit && now - hit.at < SURVEYOR_TTL_MS) return hit.list;

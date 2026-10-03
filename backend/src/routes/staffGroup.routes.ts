@@ -58,10 +58,12 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
   sendSuccess(res, await staffGroupService.get(num(req.params.id)));
 }));
 router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const b = (req.body ?? {}) as { name?: string; checker_id?: number | null };
-  const patch: { name?: string; checker_id?: number | null } = {};
+  const b = (req.body ?? {}) as { name?: string; checker_id?: number | null; sees_thaipaiboon?: unknown };
+  const patch: { name?: string; checker_id?: number | null; sees_thaipaiboon?: boolean } = {};
   if (b.name !== undefined) patch.name = String(b.name);
   if (b.checker_id !== undefined) patch.checker_id = b.checker_id === null || b.checker_id === 0 ? null : num(b.checker_id);
+  // ทีมที่เห็นงานไทยไพบูลย์ทั้งหมดในหน้ารายการงาน (migration 071 · ทีมสราวุธ 03/10/69)
+  if (typeof b.sees_thaipaiboon === 'boolean') patch.sees_thaipaiboon = b.sees_thaipaiboon;
   sendSuccess(res, await staffGroupService.update(num(req.params.id), patch));
 }));
 router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
